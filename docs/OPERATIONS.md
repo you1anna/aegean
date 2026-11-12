@@ -54,6 +54,14 @@ is disabled in both provider accounts and set `billingConfirmed` to true in
 from an agent answer. API keys, alternate-provider variables and paid fallbacks
 are rejected. Authentication checks make no model calls.
 
+After that confirmation, `mise exec -- node scripts/smoke-subscriptions.mjs`
+tests the currently installed release using one small call per provider. Each
+call is capped at 90 seconds. Codex must create an exact synthetic file using
+its restricted tools; Claude must return valid JSON with tools disabled. The
+script refuses unconfirmed billing or missing subscription authentication,
+cleans its temporary workspace and keeps private receipts under
+`~/.local/state/aegean/acceptance-evidence/`. It never enables full readiness.
+
 `aegean.json` is a reviewed project contract: schema version, standard version,
 GitHub owner/repository, public check argv arrays and a digest-pinned CLI verifier.
 Run `aegean enrol --config /path/to/reviewed-config.json`, inspect its diff and
