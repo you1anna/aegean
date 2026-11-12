@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.aegean/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.tgz
