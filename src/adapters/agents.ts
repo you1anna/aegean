@@ -49,6 +49,7 @@ export async function codexPolicy(workspace: string, toolRoot: string): Promise<
 export async function codexRole(binary: string, prompt: string, workspace: string, toolRoot: string, timeoutMs: number, signal?: AbortSignal): Promise<Result> {
   const env = subscriptionEnvironment(process.env);
   const policy = await codexPolicy(workspace, toolRoot);
+  env.TMPDIR = join(await realpath(workspace), '.aegean-tmp');
   return command(binary, ['exec', '--ignore-user-config', '--strict-config', '--ephemeral', '--skip-git-repo-check', '--json', ...policy, '-C', workspace, '-'], { cwd: workspace, env, input: prompt, timeoutMs, maxBytes: 4_000_000, ...(signal ? { signal } : {}) });
 }
 export async function assertVersion(binary: string, version: string): Promise<void> {

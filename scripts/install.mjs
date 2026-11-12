@@ -1,9 +1,10 @@
-import { mkdir, readFile, writeFile, cp, realpath, readlink, symlink, rename, lstat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, cp, realpath, readlink, symlink, rename, lstat, mkdtemp, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { sourceProvenance } from './source-provenance.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -59,29 +60,39 @@ if (args.includes('--rollback')) {
   if (!release.startsWith(releases + '/')) throw new Error('Rollback target outside managed releases');
   await activate(release);
 } else {
+  const provenance = sourceProvenance(repo);
   const pins = JSON.parse(await readFile(join(repo, 'toolchain.json'), 'utf8'));
   if (process.version !== 'v' + pins.node) throw new Error(`Expected Node ${pins.node}; use scripts/bootstrap.sh`);
   const claude = execFileSync('/bin/sh', ['-c', 'command -v claude'], { encoding: 'utf8' }).trim();
   const version = execFileSync(claude, ['--version'], { encoding: 'utf8' });
   if (!version.startsWith(pins.claude + ' ')) throw new Error(`Claude ${pins.claude} required; use the official native version installer before continuing`);
-  const hash = createHash('sha256');
-  const names = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: repo, encoding: 'utf8' }).split('\0').filter(Boolean).sort();
-  for (const name of names) {
-    const path = join(repo, name); const info = await lstat(path);
-    hash.update(name).update('\0').update(info.isSymbolicLink() ? `symlink:${await readlink(path)}` : await readFile(path));
-  }
-  const fingerprint = hash.digest('hex');
-  const release = join(releases, `0.1.0-${fingerprint.slice(0, 12)}`);
+  const appVersion = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')).version;
+  const release = join(releases, `${appVersion}-${provenance.sourceHash.slice(0, 12)}`);
   if (!(await exists(release))) {
+    const build = await mkdtemp(join(tmpdir(), 'aegean-release-build-'));
     const staging = `${release}.staging-${randomUUID()}`; await mkdir(staging);
-    for (const name of ['dist', 'docs', 'skills', 'policy', 'scripts', 'toolchain.json', 'package.json', 'package-lock.json']) await cp(join(repo, name), join(staging, name), { recursive: true });
+    try {
+    // Build only the recorded commit in an empty directory. Ignored/stale dist
+    // files in the caller's checkout cannot become installed executables.
+    const archive = join(build, 'source.tar');
+    execFileSync('git', ['archive', '--format=tar', '--output', archive, provenance.sourceCommit], { cwd: repo });
+    execFileSync('tar', ['-xf', archive, '-C', build]); await rm(archive);
+    execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: build, stdio: 'inherit' });
+    execFileSync('npm', ['run', 'build'], { cwd: build, stdio: 'inherit' });
+    const { treeDigest } = await import(pathToFileURL(join(build, 'dist/src/adapters/files.js')).href);
+    const { releaseArtifacts, fileHash } = await import(pathToFileURL(join(build, 'dist/src/adapters/release-artifacts.js')).href);
+    for (const name of ['dist', 'docs', 'skills', 'policy', 'scripts', 'toolchain.json', 'package.json', 'package-lock.json']) await cp(join(build, name), join(staging, name), { recursive: true });
     await mkdir(join(staging, 'tools'));
-    for (const name of ['package.json', 'package-lock.json']) await cp(join(repo, 'tools', name), join(staging, 'tools', name));
-    execFileSync('npm', ['ci', '--prefix', staging, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { stdio: 'inherit' });
-    execFileSync('npm', ['ci', '--prefix', join(staging, 'tools'), '--ignore-scripts', '--no-audit', '--no-fund'], { stdio: 'inherit' });
+    for (const name of ['package.json', 'package-lock.json']) await cp(join(build, 'tools', name), join(staging, 'tools', name));
+    execFileSync('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: staging, stdio: 'inherit' });
+    execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: join(staging, 'tools'), stdio: 'inherit' });
     await mkdir(join(staging, 'bin')); await cp(await realpath(claude), join(staging, 'bin/claude'));
-    await writeFile(join(staging, 'installation.json'), JSON.stringify({ schemaVersion: 1, sourceHash: fingerprint, node: await realpath(process.execPath), pins }, null, 2) + '\n');
+    const artifacts = await releaseArtifacts(staging);
+    await writeFile(join(staging, 'artifact-manifest.json'), JSON.stringify(artifacts) + '\n');
+    const artifactHash = createHash('sha256').update(JSON.stringify(artifacts)).digest('hex');
+    await writeFile(join(staging, 'installation.json'), JSON.stringify({ schemaVersion: 2, ...provenance, buildHash: await treeDigest(join(staging, 'dist')), artifactHash, nodeHash: await fileHash(process.execPath), node: await realpath(process.execPath), pins }, null, 2) + '\n');
     await rename(staging, release);
+    } finally { await rm(build, { recursive: true, force: true }); await rm(staging, { recursive: true, force: true }); }
   }
   await activate(release);
 }

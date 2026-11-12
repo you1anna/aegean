@@ -1,7 +1,7 @@
 name: Aegean checks
 on:
   push:
-    branches: [main, bootstrap-v1]
+    branches: [main]
   pull_request:
 permissions:
   contents: read

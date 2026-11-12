@@ -10,13 +10,17 @@ live subscription role loop and real-project pilot have not passed acceptance.
 `aegean doctor --json` reports these gates; installation alone does not enable
 implementation runs.
 
+PR remediation also confirmed a detached-child sandbox containment gap. Ordinary
+use remains blocked until that control passes native acceptance on both Macs;
+see the [acceptance contract](docs/ACCEPTANCE.md).
+
 Aegean is the default route for significant engineering changes. Simple,
 low-risk operations retain a lightweight path. Specifications, protected tests,
 implementation, verification and human decisions have distinct owners.
 
 The intended loop is:
 
-`request → spec → human approval → protected tests → build → verify/review → human merge`
+`request → spec → human approval → protected tests → build → verify/review → human publication approval → human merge`
 
 One Builder, two repair attempts, subscription authentication only. Either Mac
 can own a run; the secondary host is not a required server. Public developer tests remain

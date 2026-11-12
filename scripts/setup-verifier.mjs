@@ -9,7 +9,7 @@ if (process.platform !== 'darwin') throw new Error('This verifier bootstrap targ
 for (const [tool, version] of [['colima', v.colima], ['docker', v.dockerClient]]) {
   let actual;
   try { actual = execFileSync(tool, ['--version'], { encoding: 'utf8' }); }
-  catch { execFileSync('brew', ['install', tool], { stdio: 'inherit', env: { ...process.env, HOMEBREW_NO_AUTO_UPDATE: '1' } }); actual = execFileSync(tool, ['--version'], { encoding: 'utf8' }); }
+  catch { throw new Error(`${tool} ${version} is required; install the reviewed pinned version before rerunning setup. No unpinned Homebrew package was installed.`); }
   if (!actual.includes(version)) throw new Error(`${tool} version drift; expected ${version}. Review and update the manifest rather than silently changing tool versions.`);
 }
 await mkdir(v.candidateRoot, { recursive: true, mode: 0o700 });

@@ -29,7 +29,13 @@ export class GitLedger {
       const parent = await checked('git', ['rev-parse', 'HEAD'], { cwd: dir });
       const sha = await checked('git', ['-c', 'user.name=Aegean', '-c', 'user.email=aegean@localhost', 'commit-tree', tree, '-p', parent], { cwd: dir, input: `control revision ${next.revision}\n` });
       const pushed = await command('git', ['-c', 'core.hooksPath=/dev/null', 'push', '--quiet', 'origin', `${sha}:refs/heads/control`], { cwd: dir });
-      if (pushed.code !== 0) throw new Conflict('control update not confirmed; read remote state before retrying (ownership conflict or network failure)');
+      if (pushed.code !== 0 || pushed.interrupted) {
+        // Confirm this exact commit reached the remote, including when a later
+        // legitimate update has already advanced it. Never replay the mutation.
+        const fetched = await command('git', ['fetch', '--quiet', 'origin', 'control'], { cwd: dir });
+        const accepted = fetched.code === 0 && (await command('git', ['merge-base', '--is-ancestor', sha, 'FETCH_HEAD'], { cwd: dir })).code === 0;
+        if (!accepted) throw new Conflict('control update not confirmed; read remote state before retrying (ownership conflict or network failure)');
+      }
       return next;
     });
   }

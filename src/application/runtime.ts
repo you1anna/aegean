@@ -7,16 +7,20 @@ import { authentication } from '../adapters/agents.js';
 import { command } from '../adapters/process.js';
 import { docker } from '../adapters/verifier.js';
 import { z } from 'zod';
+import toolchain from '../../toolchain.json' with { type: 'json' };
+import packageInfo from '../../package.json' with { type: 'json' };
+import { acceptedRelease } from '../adapters/acceptance.js';
 export const stateRoot = () => join(homedir(), '.local/state/aegean');
-export const HostSchema = z.object({ schemaVersion: z.literal(1), host: z.string().uuid(), controlRemote: z.string().regex(/^(git@github\.com:|https:\/\/github\.com\/)[\w.-]+\/[\w.-]+\.git$/), verifierCheckout: z.string().startsWith('/'), image: z.string().regex(/^[\w./:-]+@sha256:[a-f0-9]{64}$/), billingConfirmed: z.boolean() }).strict();
+export const HostSchema = z.object({ schemaVersion: z.literal(1), host: z.string().uuid(), controlRemote: z.string().regex(/^(git@github\.com:|https:\/\/github\.com\/)[\w.-]+\/[\w.-]+\.git$/), verifierCheckout: z.string().startsWith('/'), image: z.string().regex(/^[\w./:-]+@sha256:[a-f0-9]{64}$/).optional(), excludedRoots: z.array(z.string().startsWith('/')).min(1).optional(), billingConfirmed: z.boolean() }).strict();
 export type HostConfig = z.infer<typeof HostSchema>;
 export async function hostConfig(): Promise<HostConfig> {
   return HostSchema.parse(await readJson(join(stateRoot(), 'settings.json')));
 }
-export async function configure(controlRemote: string, verifierCheckout: string, image: string): Promise<HostConfig> {
+export async function configure(controlRemote: string, verifierCheckout: string, image?: string): Promise<HostConfig> {
+  if (image && image !== toolchain.verifier.image) throw new Error('verifier image is owned by the reviewed toolchain; host override is unsupported');
   const path = join(stateRoot(), 'settings.json');
   try { await access(path); throw new Error('Host configuration already exists; edit it deliberately, do not overwrite identity'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
-  const config: HostConfig = { schemaVersion: 1, host: randomUUID(), controlRemote, verifierCheckout, image, billingConfirmed: false };
+  const config: HostConfig = { schemaVersion: 1, host: randomUUID(), controlRemote, verifierCheckout, billingConfirmed: false };
   HostSchema.parse(config); await atomicJson(path, config); return config;
 }
 export function binaries(root: string) {
@@ -37,14 +41,18 @@ export async function doctor(root: string): Promise<unknown> {
   let host: HostConfig | undefined;
   try { host = await hostConfig(); checks.push({ name: 'host-config', ok: true, detail: 'configured' }); }
   catch { checks.push({ name: 'host-config', ok: false, detail: 'run aegean configure' }); }
+  checks.push({ name: 'host-exclusions', ok: Boolean(host?.excludedRoots?.length), detail: host?.excludedRoots?.length ? 'reviewed host path policy configured' : 'review excludedRoots before enrolling a repository' });
   checks.push({ name: 'subscription-overflow', ok: host?.billingConfirmed === true, detail: host?.billingConfirmed ? 'operator confirmed paid overflow is disabled' : 'operator must confirm paid overflow is disabled before model execution' });
-  let accepted = false;
+  let accepted = false; let acceptanceDetail = 'bootstrap: full workflow not accepted';
   try {
-    const gate = await readJson(join(stateRoot(), 'acceptance.json')) as { sourceHash: string; builderIsolation: boolean; protectedVerifier: boolean; liveLoop: boolean };
-    const install = JSON.parse(await readFile(join(root, 'installation.json'), 'utf8'));
-    accepted = gate.sourceHash === install.sourceHash && gate.builderIsolation === true && gate.protectedVerifier === true && gate.liveLoop === true;
-  } catch { /* pending acceptance */ }
-  checks.push({ name: 'release-acceptance', ok: accepted, detail: accepted ? 'release-specific gates accepted' : 'bootstrap: full workflow not accepted' });
-  return { version: '0.1.0', fullWorkflowReady: checks.every(c => c.ok), checks, operations: join(root, 'docs/OPERATIONS.md') };
+    await acceptedRelease(root, stateRoot(), undefined, host?.host); accepted = true;
+  } catch (error) { acceptanceDetail += `; ${(error as Error).message.slice(0, 160)}`; }
+  checks.push({ name: 'release-acceptance', ok: accepted, detail: accepted ? 'release-specific gates accepted' : acceptanceDetail });
+  return { version: packageInfo.version, fullWorkflowReady: checks.every(c => c.ok), checks, operations: join(root, 'docs/OPERATIONS.md') };
+}
+export async function acceptRelease(root: string, path: string): Promise<unknown> {
+  const gate = await acceptedRelease(root, stateRoot(), await readJson(path), (await hostConfig()).host);
+  await atomicJson(join(stateRoot(),'acceptance.json'),gate);
+  return { accepted: true, sourceCommit: gate.sourceCommit, sourceHash: gate.sourceHash, buildHash: gate.buildHash, artifactHash: gate.artifactHash, nodeHash: gate.nodeHash };
 }
 export async function prepareState(): Promise<void> { await mkdir(join(stateRoot(), 'runs'), { recursive: true, mode: 0o700 }); }

@@ -3,7 +3,67 @@
 Evidence recorded 12 November 2026. This is an installed bootstrap, not an
 accepted release of the complete workflow. No real project has been enrolled.
 
-## Completed
+## PR #1 remediation (not installed)
+
+The `bootstrap-v1` changes integrate the existing coordinator recovery work and
+the [review remediation](PR-1-REVIEW.md). The operator selected explicit approval before
+each candidate push; approval binds the commit, spec, suite and verification
+receipt. Spec approval separately binds the published spec commit and digest.
+
+- Candidate Git operations now share a fail-closed host-execution boundary:
+  hooks, executable filters/diff helpers, candidate config includes, environment
+  overrides and nested Git metadata cannot select host code for execution.
+- Repairs receive public requirement identifiers and approved public text.
+  Context is bounded, oversized reviews pause, policy is frozen per run, and
+  verifier outcomes distinguish candidate failures, cancellation and unavailable
+  infrastructure. The toolchain owns the supported verifier image.
+- Recovery reconciles uncertain pushes and retained verifier resources, fences
+  stale owners, serializes cancel/resume and retains ownership until cleanup is
+  confirmed. Already-aborted commands never spawn; verifier preparation is
+  cancellable. Same-process-group descendants are terminated before completion.
+- Installation builds from a clean recorded commit. Release acceptance validates
+  typed reports, host identities and all shipped artifacts, including the Node
+  executable; see [the acceptance contract](ACCEPTANCE.md). Synthetic fixtures
+  never write acceptance into the operator's real state.
+- Host-specific exclusions move to required host configuration. The existing
+  installation/configuration has not been migrated or modified by this work.
+
+Final combined verification on 12 November 2026:
+
+| Check | Observed result |
+| --- | --- |
+| Dependencies | `npm ci --offline --ignore-scripts --no-audit --no-fund` passed |
+| Types and scripts | `npm run check`; `node --check` for installer, source provenance and verifier setup passed |
+| Automated tests | Final `npm test`: **45 passed, 0 failed, 0 skipped**, 440.5 seconds |
+| Documentation | Relative links in all eight README/docs Markdown files and `git diff --check` passed |
+| Independent review | Reported Git, approval, evidence, recovery and cancellation gaps fixed; focused checks passed; no further blocking implementation defect found |
+| Native containment | **Failed** for detached/session-separated writers; release remains unaccepted |
+| Hosted CI | Must run against the published candidate; prior green jobs cover only the original PR head |
+
+The first combined run exposed a fixture's ten-second Builder-start deadline.
+Its setup allowance is now thirty seconds within the existing forty-second
+fixture process budget, with early-exit diagnostics and cleanup. Production
+timeouts and interruption/ownership assertions were not weakened. A subsequent
+interrupted run took 58.5 minutes and failed three timing-sensitive fixtures;
+it is not passing evidence. The final uninterrupted run used process-scoped idle
+sleep prevention and passed all 45 tests. These deterministic fixtures are not
+native or two-host acceptance. Publication requires the operator's candidate approval.
+
+**New confirmed release blocker:** a bounded native probe using the installed
+Codex sandbox profile and the revised process adapter returned parent exit 0,
+then observed a detached/session-separated descendant write after parent exit.
+This bypasses process-group cleanup. Ordinary use must remain gated until a
+supported containment adapter passes `detached-writer-contained` on both hosts.
+The exact unsatisfied check is required by acceptance validation. The npm entry
+point is also outside the current Builder sandbox allowance; general npm/build
+support is not claimed.
+
+The alleged installed-source hash mismatch was disproved: clean `cc71eeb` and
+the installed source both hash to `6a00b329342a459adb434c037fd4a6cb8ac67ea62d083b3166b3d16d2d952e08`
+when symlink inputs use the installer's representation. The broader provenance
+weakness is addressed by the new clean-build and artifact manifests.
+
+## Original installed bootstrap
 
 - Clean private repositories exist for `you1anna/aegean` and
   `OWNER/CONTROL_REPO`. The latter keeps protected suites and control
@@ -15,7 +75,7 @@ accepted release of the complete workflow. No real project has been enrolled.
   the desktop app. The dedicated Colima verifier has explicit resource limits,
   a digest-pinned image and no candidate access to the host home or Docker socket.
 
-## Acceptance evidence
+## Historical bootstrap evidence (before remediation)
 
 | Gate | Observed result | Remaining limit |
 | --- | --- | --- |
@@ -25,7 +85,7 @@ accepted release of the complete workflow. No real project has been enrolled.
 | Ownership | Concurrent local Git remotes reject a second owner and stale generation | Real two-host race and interrupted push recovery pending |
 | Approval/integrity | Exact human receipt, stale hashes, immutable suite, bounded repairs and active time checked | Live human approval/merge path pending |
 | Installation | Repeated primary host install selected the same release; rollback fixture preserves unrelated guidance | Secondary host installation pending |
-| Native Builder sandbox | Managed Node probe rejects outside/symlink reads; live model uses restricted tools successfully | Broader adversarial review pending |
+| Native Builder sandbox | Managed Node probe rejects outside/symlink reads; live model uses restricted tools successfully | Later detached-writer probe failed; see the current release blocker above |
 | Protected verifier | Manual isolation probes pass; independent Auditor's 12-case suite rejects broken fixture and accepts Builder repair unchanged | Real-project test strength and adapters remain unverified |
 | Subscription authentication | Both live subscription smoke tests passed | Full lifecycle acceptance remains separate |
 | Role loop and review | Live independent test generation, Builder repair and fresh candidate review pass | Scout/human approval/merge integration, coordinator audit and quota/interruption exercises pending |
@@ -60,23 +120,21 @@ both skill links resolve to the active release. Docker's selected context remain
 
 ## Release blockers and next acceptance work
 
-1. Completed: operator confirmation and bounded subscription smoke tests with
-   the configured production flags. Claude returned valid JSON; Codex used its
-   restricted shell tool to write the expected synthetic file. Private receipts
-   include the tested release hash, timings and provider-reported token usage.
-2. Complete Scout, exact-hash human approval and merge/archive integration, plus
-   independent coordinator review. The protected suite/Builder/candidate-review
-   handoff passed under the bootstrap exception; this does not discharge the
-   remaining lifecycle gates. Keep ordinary implementation gated and retain
-   evidence for the exact installed source hash before acceptance.
-3. Complete coordinator interruption, uncertain-push, malformed-response,
-   cancellation and quota recovery exercises. Current state-machine tests alone
-   do not establish end-to-end recovery. Inspect publication fencing before
-   enabling cross-host recovery; automatic takeover is intentionally absent.
-4. Run installation, isolation, ownership and recovery checks on the secondary host using
-   its own authentication. No credentials are to be copied between Macs.
-5. Review and merge the bootstrap PR manually, then run one compatible real pilot
-   and its human merge/archive cycle. Enrol other eligible projects as touched.
+1. Resolve native detached-writer containment. Same-group process termination,
+   model review and synthetic acceptance reports cannot satisfy this control.
+   Keep ordinary runs and real-project enrolment disabled.
+2. Review the combined bootstrap PR and explicitly approve any installation.
+   Preserve host exclusions during configuration migration. Regenerate evidence
+   for the exact new source/artifact identity; old receipts do not transfer.
+3. Complete live Scout, commit-bound spec approval, publication approval and
+   human merge/archive integration. Deterministic CLI recovery fixtures now cover
+   races, uncertain pushes, interruptions, malformed results and quota responses;
+   real two-host ownership and provider-failure exercises remain outstanding.
+4. Run installation, isolation, lifecycle and recovery acceptance on the secondary host
+   using its own authentication. No credentials are copied between Macs.
+5. After synthetic/native acceptance and manual bootstrap review, authorize one
+   compatible bounded real pilot and its human publication/merge/archive cycle.
+   Full readiness requires that evidence as described in ACCEPTANCE.md.
 
 The first adapter supports CLI stdin/stdout contracts whose dependencies are
 already in the pinned image or candidate. UI, HTTP, native macOS and infrastructure

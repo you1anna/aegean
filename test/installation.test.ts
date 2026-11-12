@@ -42,8 +42,10 @@ test('rollback switches release and preserves unrelated global instructions', as
   } finally { await rm(user, { recursive: true, force: true }); }
 });
 test('sensitive and production checkouts cannot be auto-enrolled', () => {
-  for (const path of ['/tmp/private-project-a', '/tmp/private-project-b', '/tmp/reference', '/srv/app', '/tmp/legacy-project']) assert.throws(() => eligible(path), /excluded/);
-  assert.doesNotThrow(() => eligible('/tmp/ordinary-project'));
+  const excluded = ['/tmp/private-project'];
+  for (const path of ['/tmp/private-project', '/tmp/private-project/child', '/srv/app']) assert.throws(() => eligible(path, excluded), /excluded/);
+  assert.doesNotThrow(() => eligible('/tmp/ordinary-project', excluded));
+  assert.throws(() => eligible('/tmp/ordinary-project'), /fails closed/);
 });
 test('domain modules do not depend on process, persistence or orchestration adapters', async () => {
   for (const name of await readdir('src/domain')) {

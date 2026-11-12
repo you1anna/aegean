@@ -27,5 +27,5 @@ export async function treeDigest(root: string): Promise<string> {
       else throw new Error('unsupported artifact type');
     }
   }
-  await walk(root); if (!files.length) throw new Error('empty artifact tree'); return digest(files.join('\n'));
+  await walk(root); if (!files.length) throw new Error('empty artifact tree'); return digest(files.sort().join('\n'));
 }

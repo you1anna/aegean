@@ -13,6 +13,16 @@ function staged(): Run {
   run = transition(run, event('approve', { spec, actor: 'human', approvalRef: 'https://github.com/o/r/pull/1#issuecomment-1' }));
   return transition(run, event('stage-tests', { suite, spec, activeMs: 0 }));
 }
+test('policy drift blocks effects but permits deliberate cancellation', () => {
+  for (const changed of [{ ...start(), policy: 'different' }, { ...start(), policyIdentity: '0'.repeat(64) }]) {
+    assert.throws(() => transition(changed, event('draft', { spec })), /policy differs/);
+    assert.equal(transition(changed, event('cancel')).state, 'cancelled');
+  }
+});
+test('approval is bound to the published specification commit', () => {
+  const run = transition(start(), event('draft', { spec, specCommit: commit }));
+  assert.throws(() => transition(run, event('approve', { spec, actor: 'human', approvalRef: 'receipt', specCommit: 'b'.repeat(40) })), /published commit/);
+});
 function reviewed(run: Run, passed: boolean): Run {
   run = transition(run, event('begin-build'));
   run = transition(run, event('candidate', { commit, activeMs: 10 }));
