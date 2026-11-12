@@ -2,6 +2,10 @@
 
 Approved by the operator on 12 November 2026 during specification review.
 
+The later [bounded CLI pilot specification](BOUNDED-CLI-SPEC.md) records the
+selected next-milestone direction and proposed replacement gates. It remains a
+draft for human review; the baseline plan below describes the original bootstrap.
+
 ## Decisions
 
 - Name: Aegean. Preserve the previous private repository and all local changes as

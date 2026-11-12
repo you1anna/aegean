@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "node": "26.12.1",
+  "openspec": "2.0.0",
+  "codex": "0.167.2",
+  "claude": "2.1.322",
+  "policy": "0.1.0",
+  "supportedHosts": ["darwin-arm64", "darwin-x64"],
+  "maxRepairs": 2,
+  "maxInfrastructureRetries": 1,
+  "activeTimeoutMs": 3600000,
+  "verifier": {
+    "colima": "0.10.3",
+    "dockerClient": "29.9.1",
+    "profile": "aegean",
+    "cpus": 2,
+    "memoryGiB": 2,
+    "diskGiB": 20,
+    "candidateRoot": "/private/tmp/aegean-verifier",
+    "image": "node@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797"
+  }
+}

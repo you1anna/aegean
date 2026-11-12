@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+// Synthetic integration boundary only. Never points at operator state/remotes.
+const fs = require('node:fs');
+const path = require('node:path');
+const cp = require('node:child_process');
+const home = process.env.HOME;
+const config = JSON.parse(fs.readFileSync(path.join(home, 'fixture.json')));
+const scenario = JSON.parse(fs.readFileSync(path.join(home, 'scenario.json')));
+const tool = path.basename(process.argv[1]); const args = process.argv.slice(2);
+const log = event => fs.appendFileSync(path.join(home, 'events.jsonl'), JSON.stringify(event) + '\n');
+const output = value => process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value));
+const git = (a, cwd) => cp.execFileSync(config.git, a, { cwd, encoding: 'utf8' }).trim();
+const state = () => JSON.parse(git(['--git-dir', config.control, 'show', 'control:control.json']));
+const run = () => Object.values(state().runs).at(-1);
+const once = key => { const file = path.join(home, 'fault-' + key); if (fs.existsSync(file)) return false; fs.writeFileSync(file, 'used'); return true; };
+function fail(text) { process.stderr.write(text); process.exit(1); }
+if (tool === 'git') {
+  if (args.slice(-3).join(' ') === 'remote get-url origin') { output(git(['config', '--get', 'remote.origin.url'], process.cwd())); process.exit(0); }
+  if (args.includes('push')) {
+    const kind = args.some(a => a.endsWith(':refs/heads/control')) ? 'control' : process.cwd() === fs.realpathSync(config.verifier) ? 'suite' : args.some(a => a.endsWith(':refs/heads/main')) ? 'archive' : 'candidate';
+    log({ effect: 'push', kind });
+    if (scenario.pushBefore === kind && once('before-' + kind)) fail('synthetic push rejected before delivery');
+    const result = cp.spawnSync(config.git, args, { stdio: 'inherit' });
+    if (result.status === 0 && scenario.pushAfter === kind && once('after-' + kind)) fail('synthetic response lost after delivery');
+    process.exit(result.status ?? 1);
+  }
+  const result = cp.spawnSync(config.git, args, { stdio: 'inherit' }); process.exit(result.status ?? 1);
+}
+if (args.includes('--version')) { output(tool === 'claude' ? '2.1.322 (Claude Code)' : tool === 'codex' ? 'codex-cli 0.167.2' : '2.0.0'); process.exit(0); }
+if (tool === 'claude' && args[0] === 'auth') { output({ loggedIn:true, authMethod:'claude.ai', subscriptionType:'pro' }); process.exit(0); }
+if (tool === 'codex' && args[0] === 'login') { output('Logged in using ChatGPT'); process.exit(0); }
+if (tool === 'claude' || tool === 'codex') {
+  const prompt = fs.readFileSync(0, 'utf8');
+  const role = tool === 'codex' ? 'builder' : prompt.includes('Act as Scout') ? 'scout' : prompt.includes('acceptance-test Auditor') ? 'auditor-tests' : 'auditor-review';
+  log({ role, ...(role === 'builder' ? { prompt } : {}) });
+  if (scenario.quotaRole === role) fail('synthetic subscription quota exhausted');
+  if (scenario.hangRole === role) { setInterval(() => {}, 1000); }
+  else if (role === 'builder') {
+    fs.writeFileSync('app.cjs', 'console.log("ok");\n');
+    if (scenario.builderLargeDiff) fs.writeFileSync('large.js','const publicValue = 12345;\n'.repeat(10000));
+    if (scenario.builderScratch) {fs.mkdirSync('.aegean-tmp',{recursive:true});fs.writeFileSync('.aegean-tmp/private.tmp','synthetic temporary output');}
+    if (scenario.builderChangesConfig) fs.appendFileSync('aegean.json', ' ');
+    output(JSON.stringify({ type:'turn.completed', usage:{ input_tokens:10, output_tokens:5 } }) + '\n');
+  } else {
+    const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output' } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:'pass', findings:[] };
+    output({ result: scenario.malformedRole === role ? 'malformed JSON' : JSON.stringify(data), usage:{ input_tokens:10, output_tokens:5 } });
+  }
+} else if (tool === 'gh') {
+  if (args[0] === 'pr' && args[1] === 'list') output(fs.existsSync(path.join(home,'pr.json')) ? [{number:1}] : []);
+  else if (args[0] === 'pr' && args[1] === 'edit') {
+    fs.writeFileSync(path.join(home,'pr-body.md'),fs.readFileSync(args[args.indexOf('--body-file')+1])); output('{}');
+  }
+  else if (args[0] === 'pr' && args[1] === 'create') {
+    log({ effect:'pr-create' }); fs.writeFileSync(path.join(home,'pr.json'), '{}');
+    if (scenario.prCreateAfter && once('pr-create')) fail('synthetic response lost after PR creation');
+    output('https://github.com/fixture/project/pull/1');
+  } else if (args[0] === 'api' && args[1].includes('/comments')) {
+    const current = run(); const comments=[];
+    if(scenario.hangPublication && current.state==='human-merge-review'){log({effect:'publication-approval-read'});setInterval(()=>{},1000);}
+    else {
+    const user={login:scenario.approver ?? 'fixture',type:'User'}; const created_at=new Date(current.updatedAt+2000).toISOString();
+    if (scenario.approved) comments.push({user,created_at,body:`/aegean approve-spec ${scenario.approvalSpec ?? current.spec} ${scenario.approvalCommit ?? current.specCommit}`,html_url:'https://github.com/fixture/project/pull/1#issuecomment-1'});
+    if (scenario.publishApproved) comments.push({user,created_at,body:`/aegean approve-publish ${scenario.publishCommit ?? current.commit} ${current.spec} ${current.suite} ${current.receipt}`,html_url:'https://github.com/fixture/project/pull/1#issuecomment-2'});
+    output(comments);
+    }
+  } else if (args[0] === 'api' && args[1].includes('/pulls/')) {
+    const current = run(); const head=git(['--git-dir',config.remote,'rev-parse',`refs/heads/aegean/${current.id}`]);
+    output({ merged:!!scenario.merged, head:{sha:scenario.remoteHead ?? head}, base:{ref:'main',repo:{full_name:'fixture/project'}}, merge_commit_sha:current.commit, merged_by:{login:scenario.mergeActor ?? 'fixture',type:scenario.mergeType ?? 'User'} });
+  } else fail('unexpected synthetic GitHub operation');
+} else if (tool === 'docker') {
+  if (args.includes('info')) output('29.5.2');
+  else if (args.includes('rm') && scenario.cleanupFail) fail('synthetic cleanup unavailable');
+  else if (args.includes('container') && args.includes('ls')) {if(scenario.cleanupFail)fail('synthetic daemon unavailable');else output('');}
+  else if (args.includes('run')) { log({effect:'verify'}); output(scenario.verifierFail ? 'wrong' : 'ok'); }
+  else if (!args.includes('inspect') && !args.includes('rm')) fail('unexpected synthetic Docker operation');
+} else if (tool === 'openspec') {
+  if (args[0] === 'archive') {
+    log({effect:'archive'});
+    const id=args[1]; const target=path.join('openspec/changes/archive', '2026-11-12-' + id);
+    fs.mkdirSync('openspec/specs/contract', {recursive:true});
+    fs.writeFileSync('openspec/specs/contract/spec.md', 'Synthetic accepted specification\n');
+    if (scenario.archivePartial && once('archive-partial')) fail('synthetic archive interruption');
+    fs.mkdirSync(path.dirname(target), {recursive:true}); fs.renameSync(path.join('openspec/changes',id),target);
+    output('{}');
+  } else if (args[0] === 'validate') output('{}');
+  else fail('unexpected synthetic OpenSpec operation');
+} else fail('unknown synthetic executable');

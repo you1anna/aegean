@@ -1,0 +1,53 @@
+import { mkdir, readdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { readJson } from '../adapters/files.js';
+import { GitLedger } from '../adapters/ledger.js';
+import { transition } from '../domain/workflow.js';
+import { hostConfig, stateRoot } from './runtime.js';
+import type { RoleRecord } from './role-result.js';
+import { reconcileVerifierResource } from './verifier-recovery.js';
+
+export async function recover(id: string, confirmedStopped: boolean): Promise<unknown> {
+  if (!/^run-[a-f0-9-]{36}$/.test(id) || !confirmedStopped) throw new Error('recovery requires a valid run and --confirm-stopped after inspecting its child processes');
+  const dir = join(stateRoot(), 'runs', id); const marker = join(dir, 'executing');
+  const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote);
+  const local = await readJson(join(dir, 'run.json')) as { generation: number };
+  let created = false;
+  try { await mkdir(marker); created = true; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+  try {
+    let owner: { pid: number } | undefined;
+    try { owner = await readJson(join(marker, 'owner.json')) as typeof owner; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+    if (!owner && !created) throw new Error('execution owner record missing; lock may still be initializing; do not remove it without a manual process audit');
+    if (owner) {
+      if (!Number.isSafeInteger(owner.pid) || owner.pid <= 0) throw new Error('invalid execution owner; inspect marker manually');
+      let alive = true; try { process.kill(owner.pid, 0); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ESRCH') alive = false; }
+      if (alive) throw new Error('owning coordinator is still alive; recovery refused');
+    }
+    await mkdir(join(marker, 'recovery')).catch(() => { throw new Error('recovery already in progress; inspect its owner'); });
+    try {
+      const state = await ledger.read(); const run = state.runs[id];
+      if (!run) throw new Error('unknown run');
+      if (run.host !== host.host) throw new Error('foreign run ownership; recovery refused');
+      if (!['archived','cancelled','escalated'].includes(run.state)) {
+        if (state.owner?.run !== id || state.owner.host !== host.host || (local.generation && state.owner.generation !== local.generation)) throw new Error('foreign or stale ownership; no automatic takeover');
+        await reconcileVerifierResource(dir);
+        let names: string[] = []; try { names = await readdir(join(dir,'effects')); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+        const pending: RoleRecord[] = [];
+        for (const name of names.filter(n => n.endsWith(`-${run.events.length}.json`))) {
+          const record = await readJson(join(dir,'effects',name)) as RoleRecord;
+          if (record.status === 'running') pending.push(record);
+        }
+        if (pending.length > 1) throw new Error('multiple unfinished effects; manual audit required');
+        if (pending[0]) {
+          const item = pending[0];
+          if (!Number.isFinite(item.startedAt) || !Number.isSafeInteger(item.timeoutMs) || item.timeoutMs <= 0) throw new Error('invalid effect timing');
+          await ledger.owned(id, host.host, state.owner.generation, current => transition(current, { id:randomUUID(), at:Date.now(), type:'pause', reason:'operator confirmed stopped after unknown role outcome; prior evidence retained', activeMs:Math.max(0,Math.min(Date.now()-item.startedAt,item.timeoutMs)) }));
+        }
+      }
+      else await reconcileVerifierResource(dir);
+      await rm(marker, { recursive: true });
+      return { id, recovered:true, action:'Inspect status, then resume explicitly; no model or takeover was performed' };
+    } catch (e) { await rm(join(marker,'recovery'),{recursive:true,force:true}); throw e; }
+  } catch (e) { if (created) await rm(marker,{recursive:true,force:true}); throw e; }
+}
