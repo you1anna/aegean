@@ -10,6 +10,35 @@ the [review remediation](PR-1-REVIEW.md). The operator selected explicit approva
 each candidate push; approval binds the commit, spec, suite and verification
 receipt. Spec approval separately binds the published spec commit and digest.
 
+The [later usability review](PR-1-FOLLOWUP-REVIEW.md) separately assesses global
+leases, revisions, project compatibility, activation, approvers, pilot bootstrap
+and host-specific acceptance. Its proposed policy changes are not implemented by
+the original twelve-item remediation.
+
+### Follow-up configuration fix and selected next milestone
+
+The follow-up patch adds repeatable `configure --exclude PATH` and additive
+migration of existing hosts. It preserves host identity, billing acknowledgement,
+control/verifier locations and all existing exclusions. Short atomic locking
+prevents concurrent writers losing exclusions; retained locks require inspection.
+An additional regression fixes `/` so it excludes every descendant.
+
+Final local verification: clean offline dependency installation, type checking,
+**47/47 tests passed with no skips** (454.7 seconds), relative links in ten
+README/docs Markdown files, and `git diff --check`. The new guards were first
+observed failing. Independent review found no further actionable defect after
+the root-exclusion correction. Hosted results for this new candidate require its
+separately approved publication; the earlier green run below covers `a8f3e38`.
+
+The next milestone is a bounded CLI pilot with independent host qualification.
+[BOUNDED-CLI-SPEC](BOUNDED-CLI-SPEC.md) is the concrete draft for human review.
+Its host/pilot acceptance, containment, local approval, revision, lease and routing
+changes are **not implemented by this configuration patch**. example-project support is
+a later milestone. No installation, host configuration, global instructions or
+readiness state was changed on either Mac by this follow-up.
+
+### Previous review remediation
+
 - Candidate Git operations now share a fail-closed host-execution boundary:
   hooks, executable filters/diff helpers, candidate config includes, environment
   overrides and nested Git metadata cannot select host code for execution.
@@ -28,7 +57,7 @@ receipt. Spec approval separately binds the published spec commit and digest.
 - Host-specific exclusions move to required host configuration. The existing
   installation/configuration has not been migrated or modified by this work.
 
-Final combined verification on 12 November 2026:
+Previous combined verification on 12 November 2026:
 
 | Check | Observed result |
 | --- | --- |
@@ -38,7 +67,7 @@ Final combined verification on 12 November 2026:
 | Documentation | Relative links in all eight README/docs Markdown files and `git diff --check` passed |
 | Independent review | Reported Git, approval, evidence, recovery and cancellation gaps fixed; focused checks passed; no further blocking implementation defect found |
 | Native containment | **Failed** for detached/session-separated writers; release remains unaccepted |
-| Hosted CI | `e834132`: **44 passed, 1 failed** because the direct verifier fixture tried to create macOS `/private` on Linux. Follow-up uses a disposable export root and requires a fresh hosted run; see PR #1 for its result |
+| Hosted CI | `a8f3e38`: type checking and **45 passed, 0 failed/skipped** in run 43231027305 (archived CI record), after correcting the fixture's macOS-specific export path |
 
 The first combined run exposed a fixture's ten-second Builder-start deadline.
 Its setup allowance is now thirty seconds within the existing forty-second

@@ -45,6 +45,7 @@ test('sensitive and production checkouts cannot be auto-enrolled', () => {
   const excluded = ['/tmp/private-project'];
   for (const path of ['/tmp/private-project', '/tmp/private-project/child', '/srv/app']) assert.throws(() => eligible(path, excluded), /excluded/);
   assert.doesNotThrow(() => eligible('/tmp/ordinary-project', excluded));
+  assert.throws(() => eligible('/tmp/ordinary-project', ['/']), /excluded/);
   assert.throws(() => eligible('/tmp/ordinary-project'), /fails closed/);
 });
 test('domain modules do not depend on process, persistence or orchestration adapters', async () => {

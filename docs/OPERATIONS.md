@@ -53,7 +53,7 @@ Keep the user's other Docker context selected; Aegean names its context explicit
 Clone `OWNER/CONTROL_REPO` privately outside candidate workspaces. Configure:
 
 ```sh
-aegean configure --control-remote git@github.com:OWNER/CONTROL_REPO.git --verifier-checkout /absolute/private/checkout
+aegean configure --control-remote git@github.com:OWNER/CONTROL_REPO.git --verifier-checkout /absolute/private/checkout --exclude /absolute/excluded/root
 ```
 
 `toolchain.json` owns the supported verifier image. A project's image must match;
@@ -61,11 +61,31 @@ unsupported images fail before acquiring a lease or invoking a model. The legacy
 host `image` field is accepted but no longer written or used. Verification never
 pulls images or installs application dependencies.
 
-Add a reviewed, nonempty `excludedRoots` array of absolute paths to host settings.
-It must preserve that host's existing sensitive, parked, third-party and production
-exclusions. Missing policy fails closed. Symlink aliases resolve to real paths;
+Repeat `--exclude PATH` for each reviewed excluded root. Initial setup requires
+at least one; relative paths are resolved from the current directory and duplicate
+paths are removed. Existing hosts can add or migrate exclusions after installing
+this reviewed version:
+
+```sh
+aegean configure --exclude /absolute/excluded/root --exclude /another/excluded/root
+```
+
+This adds to `excludedRoots`, preserving host identity, billing acknowledgement,
+existing exclusions, control remote and verifier checkout. Conflicting remote or
+checkout options are rejected. Removing an exclusion requires deliberate review
+of host settings; this command never removes one. Preserve the host's existing
+sensitive, parked, third-party and production exclusions. Missing policy fails
+closed. Symlink aliases resolve to real paths during eligibility checks;
 `/srv` remains excluded. Personal folder names no longer live in application
 source; this does not remove names from existing private Git history.
+
+Configuration writes use a short atomic lock at
+`~/.local/state/aegean/configuring/`. If it remains after interruption, inspect
+`owner.json` and confirm no configuring process is running. Only then remove that
+marker and retry; do not remove `settings.json` or reset the host identity. If the
+owner record is missing or its state is uncertain, stop and investigate instead
+of assuming the lock is stale. Concurrent callers fail closed and may retry once
+the active writer completes; no exclusion is silently overwritten.
 
 Before model execution, the operator must verify that paid overflow/extra usage
 is disabled in both provider accounts and set `billingConfirmed` to true in

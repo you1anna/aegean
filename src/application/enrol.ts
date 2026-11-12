@@ -11,7 +11,7 @@ export function eligible(path: string, excludedRoots?: string[]): void {
   if (!excludedRoots?.length) throw new Error('review host excludedRoots before enrolment; missing policy fails closed');
   const actual = existsSync(path) ? realpathSync(path) : resolve(path);
   const excluded = excludedRoots.map(p => existsSync(p) ? realpathSync(p) : resolve(p));
-  if (excluded.some(root => actual === root || actual.startsWith(root + '/')) || actual === '/srv' || actual.startsWith('/srv/')) throw new Error('checkout excluded from automatic Aegean enrolment');
+  if (excluded.some(root => root === '/' || actual === root || actual.startsWith(root + '/')) || actual === '/srv' || actual.startsWith('/srv/')) throw new Error('checkout excluded from automatic Aegean enrolment');
 }
 export async function enrol(repo: string, configPath: string | undefined, openspec: string, checkOnly: boolean): Promise<unknown> {
   eligible(repo, (await hostConfig()).excludedRoots);

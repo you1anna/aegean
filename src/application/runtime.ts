@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { access, readFile, mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { readFile, mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { atomicJson, readJson } from '../adapters/files.js';
 import { authentication } from '../adapters/agents.js';
@@ -10,18 +10,35 @@ import { z } from 'zod';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import packageInfo from '../../package.json' with { type: 'json' };
 import { acceptedRelease } from '../adapters/acceptance.js';
+import { executionLock } from '../adapters/run-lock.js';
 export const stateRoot = () => join(homedir(), '.local/state/aegean');
 export const HostSchema = z.object({ schemaVersion: z.literal(1), host: z.string().uuid(), controlRemote: z.string().regex(/^(git@github\.com:|https:\/\/github\.com\/)[\w.-]+\/[\w.-]+\.git$/), verifierCheckout: z.string().startsWith('/'), image: z.string().regex(/^[\w./:-]+@sha256:[a-f0-9]{64}$/).optional(), excludedRoots: z.array(z.string().startsWith('/')).min(1).optional(), billingConfirmed: z.boolean() }).strict();
 export type HostConfig = z.infer<typeof HostSchema>;
 export async function hostConfig(): Promise<HostConfig> {
   return HostSchema.parse(await readJson(join(stateRoot(), 'settings.json')));
 }
-export async function configure(controlRemote: string, verifierCheckout: string, image?: string): Promise<HostConfig> {
-  if (image && image !== toolchain.verifier.image) throw new Error('verifier image is owned by the reviewed toolchain; host override is unsupported');
+interface ConfigureOptions { controlRemote?: string | undefined; verifierCheckout?: string | undefined; image?: string | undefined; excludedRoots: readonly string[] }
+export async function configure(options: ConfigureOptions): Promise<HostConfig> {
+  if (options.image && options.image !== toolchain.verifier.image) throw new Error('verifier image is owned by the reviewed toolchain; host override is unsupported');
+  if (!options.excludedRoots.length || options.excludedRoots.some(path => !path || path.includes('\0'))) throw new Error('configure requires at least one reviewed --exclude PATH');
+  const requested = options.excludedRoots.map(path => resolve(path));
   const path = join(stateRoot(), 'settings.json');
-  try { await access(path); throw new Error('Host configuration already exists; edit it deliberately, do not overwrite identity'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
-  const config: HostConfig = { schemaVersion: 1, host: randomUUID(), controlRemote, verifierCheckout, billingConfirmed: false };
-  HostSchema.parse(config); await atomicJson(path, config); return config;
+  await mkdir(stateRoot(), { recursive: true, mode: 0o700 });
+  const release = await executionLock(stateRoot(), 'configuring').catch(() => { throw new Error('host configuration is locked; inspect configuring/owner.json and confirm the owner has stopped before manual recovery'); });
+  try {
+    let existing: HostConfig | undefined;
+    try { existing = await hostConfig(); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const verifierCheckout = options.verifierCheckout ? resolve(options.verifierCheckout) : undefined;
+    let config: HostConfig;
+    if (existing) {
+      if ((options.controlRemote && options.controlRemote !== existing.controlRemote) || (verifierCheckout && verifierCheckout !== existing.verifierCheckout)) throw new Error('configure cannot change an existing host control remote or verifier checkout');
+      config = { ...existing, excludedRoots: [...new Set([...(existing.excludedRoots ?? []), ...requested])] };
+    } else {
+      if (!options.controlRemote || !verifierCheckout) throw new Error('initial configure requires --control-remote URL and --verifier-checkout PATH');
+      config = { schemaVersion: 1, host: randomUUID(), controlRemote: options.controlRemote, verifierCheckout, excludedRoots: [...new Set(requested)], billingConfirmed: false };
+    }
+    HostSchema.parse(config); await atomicJson(path, config); return config;
+  } finally { await release(); }
 }
 export function binaries(root: string) {
   return { codex: join(root, 'tools/node_modules/.bin/codex'), claude: join(root, 'bin/claude'), openspec: join(root, 'tools/node_modules/.bin/openspec') };
