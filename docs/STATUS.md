@@ -34,11 +34,11 @@ Final combined verification on 12 November 2026:
 | --- | --- |
 | Dependencies | `npm ci --offline --ignore-scripts --no-audit --no-fund` passed |
 | Types and scripts | `npm run check`; `node --check` for installer, source provenance and verifier setup passed |
-| Automated tests | Final `npm test`: **45 passed, 0 failed, 0 skipped**, 440.5 seconds |
+| Automated tests | Mac full run at `e834132`: **45 passed, 0 failed, 0 skipped**, 440.5 seconds; subsequent fixture-only correction passed both verifier tests and type checking |
 | Documentation | Relative links in all eight README/docs Markdown files and `git diff --check` passed |
 | Independent review | Reported Git, approval, evidence, recovery and cancellation gaps fixed; focused checks passed; no further blocking implementation defect found |
 | Native containment | **Failed** for detached/session-separated writers; release remains unaccepted |
-| Hosted CI | Must run against the published candidate; prior green jobs cover only the original PR head |
+| Hosted CI | `e834132`: **44 passed, 1 failed** because the direct verifier fixture tried to create macOS `/private` on Linux. Follow-up uses a disposable export root and requires a fresh hosted run; see PR #1 for its result |
 
 The first combined run exposed a fixture's ten-second Builder-start deadline.
 Its setup allowance is now thirty seconds within the existing forty-second
@@ -48,6 +48,12 @@ interrupted run took 58.5 minutes and failed three timing-sensitive fixtures;
 it is not passing evidence. The final uninterrupted run used process-scoped idle
 sleep prevention and passed all 45 tests. These deterministic fixtures are not
 native or two-host acceptance. Publication requires the operator's candidate approval.
+
+The Linux fixture correction changes only the test's in-memory shared-directory
+setting and restores it afterwards; production configuration and verifier code
+are unchanged. It retains all outcome/cleanup assertions and adds an assertion
+that retained exports stay inside the fixture. The other 44 tests passed in the
+same hosted run, so local revalidation targets this fixture; CI reruns the suite.
 
 **New confirmed release blocker:** a bounded native probe using the installed
 Codex sandbox profile and the revised process adapter returned parent exit 0,

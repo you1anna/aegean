@@ -2,7 +2,7 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm, symlink, access, readdir, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { checked, type Result, type Options } from '../src/adapters/process.js';
 import { verify, cleanupRetained, exportCommit } from '../src/adapters/verifier.js';
 import { repairFeedback } from '../src/domain/feedback.js';
@@ -11,6 +11,10 @@ import toolchain from '../toolchain.json' with { type: 'json' };
 
 test('verifier separates candidate rejection/limits, cancellation and infrastructure, and cleans resources', async () => {
   const repo = await mkdtemp(join(tmpdir(), 'aegean-verifier-test-'));
+  // This test process uses synthetic Docker responses. Keep its exports in the
+  // disposable fixture rather than the installed macOS/Colima shared directory.
+  const originalCandidateRoot=toolchain.verifier.candidateRoot;
+  toolchain.verifier.candidateRoot=join(repo,'exports');
   const git = (args: string[]) => checked('git', args, { cwd: repo });
   const project = ProjectSchema.parse({ schemaVersion:1, standardVersion:'0.1.0', repository:'fixture/project', checks:[['node','app.js']], verifier:{kind:'cli', image:toolchain.verifier.image, command:['node','app.js']} });
   const suite = SuiteSchema.parse({schemaVersion:2,spec:'a'.repeat(64),cases:[{input:'hidden-input',stdout:'hidden-expected',exit:0,requirement:'R001'}]});
@@ -44,11 +48,12 @@ test('verifier separates candidate rejection/limits, cancellation and infrastruc
     assert.equal(rejected.outcome,'fail'); assert.equal(rejected.reason,'candidate-rejected');
     mode='cleanup'; const cleanup=await verify(repo,commit,project,suite,undefined,execute);
     assert.equal(cleanup.outcome,'inconclusive'); assert.equal(cleanup.reason,'container-cleanup-failed');
+    assert.equal(dirname(cleanup.retainedResources!.candidate),toolchain.verifier.candidateRoot);
     await access(cleanup.retainedResources!.candidate); assert.equal(await cleanupRetained(cleanup,execute),false);
     mode='pass'; assert.equal(await cleanupRetained(cleanup,execute),true); await assert.rejects(access(cleanup.retainedResources!.candidate));
     assert.throws(()=>SuiteSchema.parse({...suite,cases:[{...suite.cases[0],feedback:'hidden-expected'}]}));
     assert.deepEqual(repairFeedback('protected-requirement-failed',['R001','hidden-expected'],'### Requirement: Public output\n'),['Protected acceptance found a public requirement violation.','R001: Public output']);
-  } finally {await rm(repo,{recursive:true,force:true});}
+  } finally {toolchain.verifier.candidateRoot=originalCandidateRoot;await rm(repo,{recursive:true,force:true});}
 });
 
 test('candidate export stops when cancelled during blob preparation',async()=>{
