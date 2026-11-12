@@ -2,8 +2,13 @@
 
 Human-governed agentic software delivery, using OpenSpec, Claude Code and Codex.
 
-**Status: bootstrap in progress; not yet accepted for unattended delivery.**
+**Status: bootstrap installed on the primary Mac; full workflow acceptance pending.**
 See [current evidence and gaps](docs/STATUS.md).
+
+The reusable implementation is on `bootstrap-v1` for human review. The secondary Mac,
+live subscription role loop and real-project pilot have not passed acceptance.
+`aegean doctor --json` reports these gates; installation alone does not enable
+implementation runs.
 
 Aegean is the default route for significant engineering changes. Simple,
 low-risk operations retain a lightweight path. Specifications, protected tests,

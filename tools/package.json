@@ -1,0 +1,9 @@
+{
+  "name": "aegean-cli-toolchain",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@fission-ai/openspec": "2.0.0",
+    "@openai/codex": "0.167.2"
+  }
+}
