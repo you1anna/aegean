@@ -6,11 +6,11 @@ import { z } from 'zod';
 import { createRun, transition, digest, POLICY, assertRunPolicy, type Event, type Run } from '../domain/workflow.js';
 import { ProjectSchema, SuiteSchema, ReviewSchema, assertSupportedImage } from '../domain/config.js';
 import { publicRequirements, repairFeedback } from '../domain/feedback.js';
-import { GitLedger } from '../adapters/ledger.js';
+import { GitLedger, assertOwned as assertLedgerOwned } from '../adapters/ledger.js';
 import { checked, type Result } from '../adapters/process.js';
 import { atomicJson, readJson, treeDigest } from '../adapters/files.js';
-import { claudeRole, claudeText, parseJsonAnswer, codexRole, authentication } from '../adapters/agents.js';
-import { approval, github, commandReceipt, publicationCommand } from '../adapters/github.js';
+import { claudeRole, claudeText, parseJsonAnswer, authentication } from '../adapters/agents.js';
+import { approval, github, commandReceipt, publicationCommand, assertApprover } from '../adapters/github.js';
 import { verify, cleanupRetained, type Receipt } from '../adapters/verifier.js';
 import { hostConfig, stateRoot, binaries, doctor, prepareState } from './runtime.js';
 import { eligible } from './enrol.js';
@@ -20,8 +20,11 @@ import { executionLock } from '../adapters/run-lock.js';
 import { pushExact } from '../adapters/git-effects.js';
 import { recordVerifierResource, reconcileVerifierResource } from './verifier-recovery.js';
 import { committedSpecDigest } from '../adapters/spec-artifact.js';
+import { containedBuilder, reconcileBuilder } from './builder.js';
+import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 
-interface LocalRun { id: string; repo: string; worktree: string; generation: number; branch: string; base: string; pr?: number; sourceRequest: string }
+import { loadLocalRun, type LocalRun } from './run-record.js';
+import { frozenProject, validateLocalSpecApproval, validateLocalPublication } from './decisions.js';
 const draftSchema = z.object({ proposal: z.string().min(1), requirements: z.string().min(1), design: z.string().min(1), tasks: z.string().min(1) }).strict();
 const nowEvent = (type: Event['type'], fields: Record<string, unknown> = {}): Event => ({ id: randomUUID(), at: Date.now(), type, ...fields } as Event);
 async function context(repo: string): Promise<string> {
@@ -36,7 +39,7 @@ async function context(repo: string): Promise<string> {
   }
   return text + `\nContext limit: 60000 bytes; omitted ${omitted} files.\n`;
 }
-async function saveCandidate(worktree: string, message: string): Promise<string> {
+export async function saveCandidate(worktree: string, message: string): Promise<string> {
   await candidateGitChecked(['add', '-A', '--', '.', ':(exclude).aegean-tmp'], { cwd: worktree });
   if (await candidateGitChecked(['ls-files', '--', '.aegean-tmp'], { cwd: worktree })) throw new Error('Builder scratch directory must not be tracked');
   const changed = await candidateGit(['diff', '--cached', '--quiet'], { cwd: worktree });
@@ -61,31 +64,33 @@ export async function start(root: string, repo: string, request: string, signal:
   const base = await candidateGitChecked(['rev-parse', 'origin/main'], { cwd: repo });
   if (base !== await candidateGitChecked(['rev-parse', 'HEAD'], { cwd: repo })) throw new Error('start from the reviewed remote main revision');
   const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote); const id = `run-${randomUUID()}`;
-  const run = createRun(id, host.host, project.repository, POLICY.version, Date.now());
+  const projectPolicy = digest((await candidateGit(['show', `${base}:aegean.json`], { cwd: repo })).stdout);
+  const run = createRun(id, host.host, project.repository, POLICY.version, Date.now(), { approver: project.approver, projectPolicy });
   const branch = `aegean/${id}`;
   const localDir = join(stateRoot(), 'runs', id); await mkdir(localDir, { recursive: true, mode: 0o700 });
   const worktree = join(localDir, 'worktree');
   const local: LocalRun = { id, repo: resolve(repo), worktree, generation: 0, branch, base, sourceRequest: join(localDir, 'request.md') };
   await atomicJson(join(localDir, 'run.json'), local); await writeFile(local.sourceRequest, request, { mode: 0o600 });
-  const owned = await ledger.acquire(run); local.generation = owned.owner!.generation;
+  const owned = await ledger.acquire(run); local.generation = owned.owners[id]!.generation;
   await atomicJson(join(localDir, 'run.json'), local);
   return resume(root, id, signal);
 }
 export async function status(id?: string): Promise<unknown> {
   const host = await hostConfig(); const state = await new GitLedger(host.controlRemote).read();
-  return id ? state.runs[id] ?? { error: 'unknown run' } : { owner: state.owner, runs: Object.values(state.runs).map(r => ({ id: r.id, host: r.host, state: r.state, repairs: r.repairs, activeMs: r.activeMs })) };
+  return id ? state.runs[id] ?? { error: 'unknown run' } : { owners: state.owners, repositories: state.repositories, builder: state.builder, runs: Object.values(state.runs).map(r => ({ id: r.id, host: r.host, state: r.state, repairs: r.repairs, activeMs: r.activeMs })) };
 }
 export async function cancel(id: string): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote);
-  const dir = join(stateRoot(), 'runs', id); const local = await readJson(join(dir, 'run.json')) as LocalRun;
+  const dir = join(stateRoot(), 'runs', id); const local = await loadLocalRun(dir);
   const release = await executionLock(dir);
   try {
     const state = await ledger.read();
     if (state.runs[id]?.host !== host.host) throw new Error('foreign run ownership; cancellation refused');
-    if (!local.generation && state.owner?.run === id && state.owner.host === host.host) local.generation = state.owner.generation;
-    if (state.runs[id]?.state !== 'cancelled' && (state.owner?.run !== id || state.owner.host !== host.host || state.owner.generation !== local.generation)) throw new Error('stale or foreign run ownership');
+    if (!local.generation && state.owners[id]?.host === host.host) local.generation = state.owners[id]!.generation;
+    if (state.runs[id]?.state !== 'cancelled') await acquireRunPermit(ledger, dir, local, host.host);
     await reconcileVerifierResource(dir);
+    await reconcileBuilder(dir, local.worktree);
     if (state.runs[id]?.state === 'cancelled') return state;
     return await ledger.owned(id, host.host, local.generation, run => transition(run, nowEvent('cancel')));
   } finally { await release(); }
@@ -93,15 +98,15 @@ export async function cancel(id: string): Promise<unknown> {
 export async function resume(root: string, id: string, signal: AbortSignal): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const bins = binaries(root); const ledger = new GitLedger(host.controlRemote);
-  const dir = join(stateRoot(), 'runs', id); const local = await readJson(join(dir, 'run.json')) as LocalRun;
+  const dir = join(stateRoot(), 'runs', id); const local = await loadLocalRun(dir);
   const release = await executionLock(dir);
   let run: Run | undefined;
-  const update = async (event: Event) => { const state = await ledger.owned(id, host.host, local.generation, current => transition(current, event)); run = state.runs[id]!; return run; };
+  const update = async (event: Event) => { const state = await ledger.owned(id, host.host, local.generation, current => transition(current, event)); const updated = state.runs[id]!; assertRunPolicy(updated); run = updated; return run; };
   const assertOwned = async () => {
     if (signal.aborted) throw new Error('interrupted before external effect');
     const current = await ledger.read();
     if (signal.aborted) throw new Error('interrupted before external effect');
-    if (current.owner?.run !== id || current.owner.host !== host.host || current.owner.generation !== local.generation) throw new Error('publication/execution refused: ownership changed');
+    assertLedgerOwned(current, id, host.host, local.generation);
   };
   const model = async <T>(role: string, timeoutMs: number, invoke: () => Promise<Result>, parse: (result: Result) => T): Promise<{ value: T; durationMs: number } | undefined> => {
     await assertOwned();
@@ -117,14 +122,17 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
     return { value, durationMs: result.durationMs };
   };
   try {
-    const state = await ledger.read(); run = state.runs[id];
-    if (run && ['archived', 'cancelled', 'escalated'].includes(run.state)) return { run };
-    if (run) assertRunPolicy(run);
-    if (!local.generation && state.owner?.host === host.host && state.owner.run === id) {
-      local.generation = state.owner.generation; await atomicJson(join(dir, 'run.json'), local);
+    const state = await ledger.read(); const stored = state.runs[id];
+    if (stored && ['archived', 'cancelled', 'escalated'].includes(stored.state)) return { run: stored };
+    if (stored) assertRunPolicy(stored);
+    run = stored;
+    if (!local.generation && state.owners[id]?.host === host.host) {
+      local.generation = state.owners[id]!.generation; await atomicJson(join(dir, 'run.json'), local);
     }
-    if (!run || state.owner?.host !== host.host || state.owner.run !== id || state.owner.generation !== local.generation) throw new Error('run is not owned by this host/generation');
+    if (!run) throw new Error('unknown run');
+    await acquireRunPermit(ledger, dir, local, host.host);
     await reconcileVerifierResource(dir);
+    await reconcileBuilder(dir, local.worktree);
     try { await access(local.worktree); } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT' || run.state !== 'requested') throw e;
       const branch = await candidateGit(['show-ref', '--verify', '--quiet', `refs/heads/${local.branch}`], { cwd: local.repo });
@@ -134,8 +142,9 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
     const original = await candidateGit(['show', `${local.base}:aegean.json`], { cwd: local.repo });
     if (original.code !== 0) throw new Error('cannot read frozen project configuration');
     const originalProject = original.stdout;
+    if (digest(originalProject) !== run.projectPolicy) throw new Error('frozen project policy differs from run identity');
     if (await readFile(join(local.worktree, 'aegean.json'), 'utf8') !== originalProject) throw new Error('project configuration changed after run creation');
-    const project = ProjectSchema.parse(JSON.parse(originalProject));
+    const project = await frozenProject(local, run);
     assertSupportedImage(project);
     const specDir = join(local.worktree, 'openspec/changes', id);
     if (run.spec && !['spec-drafted', 'merged', 'archived'].includes(run.state) && await treeDigest(specDir) !== run.spec) throw new Error('approved specification changed; restore it or cancel and request a new approval');
@@ -152,12 +161,12 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
       await treeDigest(specDir);
       await candidateGitChecked(['add', '--force', '--', `openspec/changes/${id}`], { cwd: local.worktree });
       const specCommit = await saveCandidate(local.worktree, 'docs: draft Aegean change contract');
-      await update(nowEvent('draft', { spec: await treeDigest(specDir), specCommit }));
+      await update(nowEvent('draft', { spec: await treeDigest(specDir), specCommit, activeMs: result.durationMs }));
     }
     if (run.state === 'spec-drafted') {
       const specPath = `openspec/changes/${id}/`;
       const paths = [
-        ...((await candidateGit(['diff', '--name-only', '-z', local.base], { cwd: local.worktree })).stdout.split('\0')),
+        ...((await candidateGit(['diff', '--name-only', '-z', run.revisions ? run.specCommit! : local.base], { cwd: local.worktree })).stdout.split('\0')),
         ...((await candidateGit(['ls-files', '--others', '--exclude-standard', '-z'], { cwd: local.worktree })).stdout.split('\0')),
       ].filter(Boolean);
       if (paths.some(path => !path.startsWith(specPath))) throw new Error('spec revision contains changes outside its OpenSpec directory; preserve them separately');
@@ -167,6 +176,7 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
       const actual = await treeDigest(specDir);
       if (await committedSpecDigest(local.worktree, specCommit, specPath.slice(0, -1)) !== actual) throw new Error('local specification differs from its committed tree; refusing publication and approval');
       if (actual !== run.spec || specCommit !== run.specCommit) await update(nowEvent('draft', { spec: actual, specCommit }));
+      if (project.approvalMode === 'local') return { run, action: `Review the local specification with aegean approve --run ${id}`, worktree: local.worktree };
       const body = join(dir, 'pr-body.md');
       await writeFile(body, `Aegean specification review.\n\nPublished specification commit: [${specCommit}](https://github.com/${project.repository}/commit/${specCommit})\n\nSpecification digest: ${run.spec}\n\nApprove this exact published revision with:\n\n\`/aegean approve-spec ${run.spec} ${specCommit}\`\n\nImplementation starts only after approval and protected tests.\n`);
       await assertOwned(); await pushExact(local.worktree, local.branch, specCommit, signal);
@@ -184,10 +194,11 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
       await checked('gh', ['pr', 'edit', String(local.pr), '--repo', project.repository, '--body-file', body], { signal });
       const published = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as { head: { sha: string }; base: { ref: string; repo: { full_name: string } }; merged: boolean };
       if (published.head.sha !== specCommit || published.base.ref !== 'main' || published.base.repo.full_name !== project.repository || published.merged) throw new Error('published specification PR identity differs from the revision awaiting approval');
-      const receipt = await approval(project.repository, local.pr!, run.spec!, run.updatedAt, specCommit, signal);
+      const receipt = await approval(project.repository, local.pr!, run.approver, run.spec!, run.updatedAt, specCommit, signal);
       if (!receipt) return { run, pr: local.pr, action: `Human comment required: /aegean approve-spec ${run.spec} ${specCommit}` };
       await update(nowEvent('approve', { spec: run.spec, specCommit, actor: 'human', approvalRef: receipt }));
     }
+    if (project.approvalMode === 'local' && !['merged', 'archived'].includes(run.state)) await validateLocalSpecApproval(root, dir, local, run);
     const readiness = await doctor(root) as { fullWorkflowReady: boolean };
     if (!readiness.fullWorkflowReady && !['merged', 'archived'].includes(run.state)) return { run, blocked: 'Full workflow acceptance is pending; run aegean doctor --json. Approval is preserved.' };
     if (['spec-approved', 'tests-staged', 'repair', 'building', 'reviewing'].includes(run.state)) await requireSubscriptions(root);
@@ -221,7 +232,7 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
       if (signal.aborted) throw new Error('cancelled by operator');
       if (run.state === 'tests-staged' || run.state === 'repair') await update(nowEvent('begin-build'));
       if (run.state === 'building') {
-        for (const p of ['.codex/config.toml', '.codex/hooks.json', '.claude/settings.json', '.mcp.json']) { try { await access(join(local.worktree, p)); throw new Error(`Untrusted agent configuration ${p} requires a reviewed adapter before Builder can run`); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; } }
+        await ledger.claimBuilder(id, host.host, local.generation);
         let feedback = '';
         if (run.repairs > 0) {
           const lastReview = ReviewSchema.parse(await readJson(join(dir, `review-${run.repairs - 1}.json`)));
@@ -232,7 +243,8 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
         }
         const timeout = Math.max(1, POLICY.activeTimeoutMs - run.activeMs);
         const prompt = `Implement only the approved OpenSpec change ${id}. Read its proposal, design, requirements and tasks. Keep the contract, aegean.json and agent configuration unchanged. Do not access hidden tests or credentials. Public test commands: ${JSON.stringify(project.checks)}.${feedback}`;
-        const result = await model('builder', timeout, () => codexRole(bins.codex, prompt, local.worktree, root, timeout, signal), () => true);
+        const result = await model('builder', timeout, () => containedBuilder(bins.codex, prompt, local.worktree, dir, id, timeout, signal), () => true);
+        if (await quiescentResources(dir)) await ledger.releaseBuilder(id, host.host, local.generation);
         if (!result) break;
         if (await treeDigest(specDir) !== run.spec) throw new Error('Builder changed approved contract');
         if (await readFile(join(local.worktree, 'aegean.json'), 'utf8') !== originalProject) throw new Error('Builder changed project configuration');
@@ -272,21 +284,56 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
     }
     if (run.state === 'human-merge-review') {
       if (await candidateGitChecked(['rev-parse', 'HEAD'], { cwd: local.worktree }) !== run.commit || await candidateGitChecked(['status', '--porcelain', '--', '.', ':(exclude).aegean-tmp'], { cwd: local.worktree })) throw new Error('candidate changed after verification; refusing publication');
+      if (!run.publicationRef && project.approvalMode === 'local') return { run, action: `Review and publish this exact candidate with aegean publish --run ${id}`, worktree: local.worktree };
       if (!run.publicationRef) {
         const approvalCommand = publicationCommand(run.commit!, run.spec!, run.suite!, run.receipt!);
         const patch = join(dir, 'candidate-review.patch');
         await writeFile(patch, await candidateGitChecked(['diff', `${local.base}...${run.commit}`], { cwd: local.worktree, maxBytes: 200000 }));
         const reviewPath = join(dir, 'publication-review.md');
         await writeFile(reviewPath, `# Candidate publication review\n\nCommit: ${run.commit}\nSpec: ${run.spec}\nSuite: ${run.suite}\nVerification receipt: ${run.receipt}\n\nReview the local candidate at ${local.worktree} and diff at ${patch}.\nPublication can trigger repository CI, credentials, runners and deployment integrations.\nAuthorize this exact candidate only after reviewing that exposure:\n\n${approvalCommand}\n\nPost that comment on https://github.com/${project.repository}/pull/${local.pr}, then resume. This is separate from final merge approval.\n`);
-        const receipt = await commandReceipt(project.repository, local.pr!, approvalCommand, run.updatedAt, signal);
+        const receipt = await commandReceipt(project.repository, local.pr!, run.approver, approvalCommand, run.updatedAt, signal);
         if (!receipt) return { run, pr: local.pr, action: `Human publication review required: ${reviewPath}`, approvalCommand };
         await update(nowEvent('authorize-publication', { commit: run.commit, spec: run.spec, suite: run.suite, receipt: run.receipt, actor: 'human', approvalRef: receipt }));
       }
-      const beforePush = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as { head: { sha: string }; base: { ref: string; repo: { full_name: string } } };
-      if (![run.specCommit, run.commit].includes(beforePush.head.sha) || beforePush.base.ref !== 'main' || beforePush.base.repo.full_name !== project.repository) throw new Error('PR identity changed before candidate publication');
-      await assertOwned(); await pushExact(local.worktree, local.branch, run.commit!, signal);
-      const pr = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as { merged: boolean; head: { sha: string }; merge_commit_sha: string; merged_by?: { login: string; type: string } };
-      if (pr.merged && pr.head.sha === run.commit && pr.merged_by?.type === 'User' && pr.merged_by.login === project.repository.split('/')[0]) await update(nowEvent('merged', { commit: run.commit, mergeCommit: pr.merge_commit_sha, actor: 'human' }));
+      if (project.approvalMode === 'local') await validateLocalPublication(root, dir, local, run);
+      const prPath = `repos/${project.repository}/pulls/${local.pr}`;
+      type Pull = { merged: boolean; state?: string; head: { sha: string; ref: string; repo: { full_name: string } }; base: { ref: string; repo: { full_name: string } }; merge_commit_sha: string; merged_by?: unknown };
+      const checkPull = (pr: Pull) => {
+        if (pr.head.ref !== local.branch || pr.head.repo.full_name !== project.repository || pr.base.ref !== 'main' || pr.base.repo.full_name !== project.repository) throw new Error('PR identity changed; publication refused');
+      };
+      let pr: Pull | undefined;
+      if (local.pr) {
+        pr = await github(prPath, signal) as Pull; checkPull(pr);
+        if (pr.merged && pr.head.sha !== run.commit) throw new Error('PR was merged with an unverified head; inspect the merge and begin a new reviewed run');
+        if (!pr.merged && pr.state === 'closed') throw new Error('PR is closed; explicitly reopen the same PR before resuming');
+      }
+      if (!pr?.merged) {
+        const remoteHead = (await candidateGitChecked(['ls-remote', 'origin', `refs/heads/${local.branch}`], { cwd: local.worktree, signal })).split(/\s/)[0];
+        if (remoteHead && ![local.publishedCommit, project.approvalMode === 'github-comments' ? run.specCommit : undefined, run.commit].includes(remoteHead)) throw new Error('PR head changed; use aegean revise to verify the exact edited candidate before publication');
+        if (await candidateGitChecked(['ls-remote', 'origin', 'refs/heads/main'], { cwd: local.worktree, signal }).then(value => value.split(/\s/)[0]) !== local.base) throw new Error('remote base changed; preserve this candidate and start a new run from reviewed main');
+        await assertOwned(); await pushExact(local.worktree, local.branch, run.commit!, signal);
+        local.publishedCommit = run.commit!; await atomicJson(join(dir, 'run.json'), local);
+        const body = join(dir, 'pr-body.md');
+        await writeFile(body, `Aegean bounded CLI candidate.\n\nVerified and independently reviewed commit: ${run.commit}\nSpecification: ${run.spec}\nProtected suite: ${run.suite}\nVerification receipt: ${run.receipt}\n\nThe configured human approver authorized this exact publication. Review and merge manually; changed heads require aegean revise and fresh verification/publication.\n`);
+        if (!local.pr) {
+          const existing = JSON.parse(await checked('gh', ['pr', 'list', '--repo', project.repository, '--head', local.branch, '--state', 'all', '--json', 'number'], { signal }));
+          if (existing.length > 1) throw new Error('multiple PRs match the run branch; inspect their identities');
+          if (existing.length) local.pr = existing[0].number;
+          else {
+            await assertOwned();
+            const url = await checked('gh', ['pr', 'create', '--repo', project.repository, '--head', local.branch, '--base', 'main', '--draft', '--title', `Aegean ${id}`, '--body-file', body], { signal });
+            local.pr = Number(url.split('/').pop());
+          }
+          await atomicJson(join(dir, 'run.json'), local);
+        }
+        await assertOwned(); await checked('gh', ['pr', 'edit', String(local.pr), '--repo', project.repository, '--body-file', body], { signal });
+        pr = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as Pull; checkPull(pr);
+        if (pr.head.sha !== run.commit) throw new Error('PR head changed after publication; use aegean revise before any further publication');
+      }
+      if (pr?.merged && pr.head.sha === run.commit) {
+        let human = false; try { assertApprover(pr.merged_by, run.approver); human = true; } catch { /* Other accounts cannot authorize this run's merge. */ }
+        if (human) await update(nowEvent('merged', { commit: run.commit, mergeCommit: pr.merge_commit_sha, actor: 'human' }));
+      }
     }
     if (run.state === 'merged') {
       await assertOwned();
@@ -298,7 +345,7 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
     }
     return { run, pr: local.pr, action: run.state === 'human-merge-review' ? 'Review trusted local evidence and merge the PR manually' : 'Inspect status before continuing' };
   } finally {
-    await release();
+    try { await releaseQuiescentPermits(ledger, dir, local, host.host); } finally { await release(); }
   }
 }
 export async function localRuns(): Promise<string[]> { try { return await readdir(join(stateRoot(), 'runs')); } catch { return []; } }

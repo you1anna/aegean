@@ -1,15 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checked, command } from '../src/adapters/process.js';
 import { GitLedger, emptyLedger } from '../src/adapters/ledger.js';
-import { createRun } from '../src/domain/workflow.js';
-import { approvalFrom } from '../src/adapters/github.js';
+import { createRun, POLICY, digest } from '../src/domain/workflow.js';
+import { approvalFrom, assertApprover, resolveApprover, authenticatedApprover, approval, commandReceipt, publicationCommand } from '../src/adapters/github.js';
 import { subscriptionEnvironment, claudeArgs } from '../src/adapters/agents.js';
 import { containerArgs, exportCommit } from '../src/adapters/verifier.js';
 import { reportedUsage } from '../src/adapters/usage.js';
+const frozen = { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest('frozen project policy') };
 
 test('token accounting preserves unknown and reads provider-reported usage only', () => {
   assert.deepEqual(reportedUsage('no usage available'), { input: null, output: null, cachedInput: null });
@@ -28,22 +29,51 @@ test('concurrent hosts cannot both acquire ownership; stale generations cannot p
     await checked('git', ['push', remote, 'control'], { cwd: seed });
     const a = new GitLedger(remote); const b = new GitLedger(remote);
     const results = await Promise.allSettled([
-      a.acquire(createRun('run-a', 'host-a', 'o/r', '0.1.0', 0)),
-      b.acquire(createRun('run-b', 'host-b', 'o/r', '0.1.0', 0)),
+      a.acquire(createRun('run-a', 'host-a', 'o/r', POLICY.version, 0, frozen)),
+      b.acquire(createRun('run-b', 'host-b', 'o/r', POLICY.version, 0, frozen)),
     ]);
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
     const state = await a.read(); assert.equal(Object.keys(state.runs).length, 1);
-    const owner = state.owner!;
+    const owner = Object.values(state.owners)[0]!;
     await assert.rejects(a.owned(owner.run, owner.host, owner.generation + 1, r => r), /stale/);
-    await assert.rejects(b.acquire(createRun('run-c', 'host-c', 'o/r', '0.1.0', 0)), /no automatic takeover/);
+    await assert.rejects(b.acquire(createRun('run-c', 'host-c', 'o/r', POLICY.version, 0, frozen)), /no automatic takeover/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
-test('only exact, current, human-owner approval comments are accepted', () => {
-  const c = { user: { login: 'owner', type: 'User' }, body: '/aegean approve-spec abc', html_url: 'receipt', created_at: new Date(1000).toISOString() };
-  assert.equal(approvalFrom([c], 'owner', 'abc', 0), 'receipt');
-  assert.equal(approvalFrom([c], 'owner', 'changed', 0), undefined);
-  assert.equal(approvalFrom([c], 'owner', 'abc', 2000), undefined);
-  assert.equal(approvalFrom([{ ...c, user: { login: 'owner', type: 'Bot' } }], 'owner', 'abc', 0), undefined);
+test('only exact current commands from the explicit stable human approver are accepted', () => {
+  const c = { user: { id: 42, login: 'renamed-reviewer', type: 'User' }, body: '/aegean approve-spec abc', html_url: 'https://github.com/org/repo/pull/1#issuecomment-1', created_at: new Date(1000).toISOString() };
+  assert.equal(approvalFrom([c], frozen.approver, 'abc', 0), c.html_url);
+  assert.equal(approvalFrom([c], frozen.approver, 'changed', 0), undefined);
+  assert.equal(approvalFrom([c], frozen.approver, 'abc', 2000), undefined);
+  for (const user of [{ id: 42, login: 'reviewer', type: 'Bot' }, { id: 99, login: 'reviewer', type: 'User' }, { id: 42, login: 'organisation', type: 'Organization' }, { login: 'reviewer', type: 'User' }]) {
+    assert.equal(approvalFrom([{ ...c, user }], frozen.approver, 'abc', 0), undefined);
+    assert.throws(() => assertApprover(user, frozen.approver), /human|identity/);
+  }
+  assert.deepEqual(assertApprover(c.user, frozen.approver), { id: 42, login: 'renamed-reviewer' });
+  assert.equal(approvalFrom([null, {}, { ...c, created_at: 'invalid' }], frozen.approver, 'abc', 0), undefined);
+});
+
+test('GitHub resolution, authenticated identity and organisation approvals use explicit stable IDs', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'aegean-github-fixture-')); const oldPath = process.env.PATH;
+  const account = { id: 42, login: 'renamed-reviewer', type: 'User' };
+  const receipt = 'https://github.com/organisation/repo/pull/1#issuecomment-1';
+  const fixtures: Record<string, unknown> = {
+    'users/reviewer': account,
+    user: account,
+    'users/organisation': { id: 1, login: 'organisation', type: 'Organization' },
+    'repos/organisation/repo/issues/1/comments?per_page=100&page=1': [{ user: account, body: '/aegean approve-spec abc def', html_url: receipt, created_at: new Date(1000).toISOString() }],
+  };
+  try {
+    const binary = join(root, 'gh');
+    await writeFile(binary, `#!${process.execPath}\nconst fixtures=${JSON.stringify(fixtures)};if(process.argv[2]!=='api'||!(process.argv[3] in fixtures))process.exit(91);process.stdout.write(JSON.stringify(fixtures[process.argv[3]]));\n`);
+    await chmod(binary, 0o755); process.env.PATH = `${root}:${oldPath ?? ''}`;
+    assert.deepEqual(await resolveApprover('reviewer'), { id: 42, login: 'renamed-reviewer' });
+    assert.deepEqual(await authenticatedApprover(frozen.approver), { id: 42, login: 'renamed-reviewer' });
+    await assert.rejects(resolveApprover('organisation'), /human/);
+    await assert.rejects(authenticatedApprover({ id: 99, login: 'reviewer' }), /identity/);
+    assert.equal(await approval('organisation/repo', 1, frozen.approver, 'abc', 0, 'def'), receipt);
+    assert.equal(await commandReceipt('organisation/repo', 1, { id: 99, login: 'organisation' }, '/aegean approve-spec abc def', 0), undefined);
+    assert.equal(publicationCommand('head', 'spec', 'suite', 'receipt'), '/aegean approve-publish head spec suite receipt');
+  } finally { if (oldPath === undefined) delete process.env.PATH; else process.env.PATH = oldPath; await rm(root, { recursive: true, force: true }); }
 });
 test('API billing and provider overrides are rejected; child environments exclude secrets', () => {
   assert.throws(() => subscriptionEnvironment({ OPENAI_API_KEY: 'synthetic' }), /subscription-only/);

@@ -11,8 +11,8 @@ test('recovery refuses an initializing lock and cancellation retains ownership u
     await mkdir(marker);const recovery=await f.cli(['recover','--run',run.id,'--confirm-stopped']);assert.notEqual(recovery.code,0);assert.match(recovery.stderr,/owner record missing/);await access(marker);await rm(marker,{recursive:true});
     const candidate=join(f.dir,'candidates','candidate-synthetic');await mkdir(candidate,{recursive:true});
     await writeFile(join(directory,'verifier-resource.json'),JSON.stringify({container:'aegean-'+randomUUID(),candidate}));
-    await f.scenario({cleanupFail:true});const blocked=await f.cli(['cancel','--run',run.id]);assert.notEqual(blocked.code,0);assert.match(blocked.stderr,/resources remain/);assert.equal((await f.ledger()).owner.run,run.id);await access(candidate);
-    await f.scenario({});const cancelled=await f.cli(['cancel','--run',run.id]);assert.equal(cancelled.code,0,cancelled.stderr);assert.equal((await f.ledger()).owner,null);await assert.rejects(access(candidate));
+    await f.scenario({cleanupFail:true});const blocked=await f.cli(['cancel','--run',run.id]);assert.notEqual(blocked.code,0);assert.match(blocked.stderr,/resources remain/);assert.equal((await f.ledger()).owners[run.id].run,run.id);await access(candidate);
+    await f.scenario({});const cancelled=await f.cli(['cancel','--run',run.id]);assert.equal(cancelled.code,0,cancelled.stderr);assert.deepEqual((await f.ledger()).owners,{});await assert.rejects(access(candidate));
   }finally{await f.cleanup();}
 });
 
@@ -21,6 +21,7 @@ test('candidate publication requires a separate exact human approval and exclude
     await f.start(); await f.scenario({approved:true,builderScratch:true}); const built=await f.resume(); assert.equal(built.code,0,built.stderr);
     const run=await f.current();const local=await f.local();
     assert.equal(await f.realGit(['--git-dir',f.remote,'rev-parse',local.branch]),run.specCommit);
+    assert.equal((await f.ledger()).builder,null);assert.deepEqual((await f.ledger()).repositories,{});
     assert.equal((await f.realGit(['ls-tree','-r','--name-only',run.commit!],local.worktree)).includes('.aegean-tmp'),false);
     assert.ok(JSON.parse(built.stdout).approvalCommand.startsWith('/aegean approve-publish '));
     await f.scenario({approved:true,publishApproved:true,publishCommit:'b'.repeat(40)});await f.resume();
@@ -38,7 +39,7 @@ test('oversized candidate review pauses with diagnostics and never publishes a p
     const run=await f.current();const local=await f.local();assert.equal(run.state,'paused');assert.equal(run.resumeState,'reviewing');assert.match(run.reason!,/200000 bytes/);
     assert.equal((await f.events()).filter(e=>e.role==='auditor-review').length,0);
     assert.equal(await f.realGit(['--git-dir',f.remote,'rev-parse',local.branch]),run.specCommit);
-    assert.equal((await f.cli(['cancel','--run',run.id])).code,0);assert.equal((await f.ledger()).owner,null);
+    assert.equal((await f.cli(['cancel','--run',run.id])).code,0);assert.deepEqual((await f.ledger()).owners,{});
   }finally{await f.cleanup();}
 });
 
@@ -81,7 +82,7 @@ test('coordinator requires human approval, runs one suite/build, and archives on
     assert.deepEqual((await f.events()).filter(e=>e.role).map(e=>e.role),['scout']);
     await f.scenario({approved:true}); const built=await f.resume(); assert.equal(built.code,0,built.stderr); assert.equal((await f.current()).state,'human-merge-review');
     await f.scenario({approved:true,publishApproved:true,merged:true,mergeActor:'outsider'}); await f.resume(); assert.equal((await f.current()).state,'human-merge-review');
-    await f.merge(); await f.scenario({approved:true,merged:true}); const archived=await f.resume(); assert.equal(archived.code,0,archived.stderr); assert.equal((await f.current()).state,'archived'); assert.equal((await f.ledger()).owner,null);
+    await f.merge(); await f.scenario({approved:true,merged:true}); const archived=await f.resume(); assert.equal(archived.code,0,archived.stderr); assert.equal((await f.current()).state,'archived'); assert.deepEqual((await f.ledger()).owners,{});
     assert.equal((await f.events()).filter(e=>e.role==='auditor-tests').length,1);
   } finally {await f.cleanup();}
 });
@@ -132,7 +133,7 @@ test('partial archive output is never committed as a completed archive on resume
     const second=await f.resume(); assert.notEqual(second.code,0); assert.equal(await f.realGit(['--git-dir',f.remote,'rev-parse','main']),before); assert.equal((await f.current()).state,'merged');
   }finally{await f.cleanup();}
 });
-test('interrupted Builder stops, preserves approval/suite and releases only the local execution lock',async()=>{
+test('interrupted Builder stops, preserves approval/suite and releases execution permits',async()=>{
   const f=await fixture();let running:ReturnType<typeof f.interactive>|undefined;try {
     await f.start(); await f.scenario({approved:true,hangRole:'builder'});
     const id=(await f.current()).id; running=f.interactive(['resume','--run',id]);
@@ -143,8 +144,9 @@ test('interrupted Builder stops, preserves approval/suite and releases only the 
     const cancelled=await f.cli(['cancel','--run',id]); assert.notEqual(cancelled.code,0);
     const recover=await f.cli(['recover','--run',id,'--confirm-stopped']); assert.notEqual(recover.code,0); assert.match(recover.stderr,/still alive/);
     running.child.kill('SIGINT');const interrupted=await running.done;assert.equal(interrupted.code,130,interrupted.stderr);
-    const paused=await f.current(); assert.equal(paused.state,'paused'); assert.ok(paused.approvalRef&&paused.suite); assert.equal((await f.ledger()).owner.run,id);
+    const paused=await f.current(); assert.equal(paused.state,'paused'); assert.ok(paused.approvalRef&&paused.suite); assert.equal((await f.ledger()).owners[id].run,id);
     await assert.rejects(access(join(f.state,'runs',id,'executing')));
-    const stopped=await f.cli(['cancel','--run',id]);assert.equal(stopped.code,0,stopped.stderr);assert.equal((await f.ledger()).owner,null);
+    assert.equal((await f.ledger()).builder,null);assert.deepEqual((await f.ledger()).repositories,{});
+    const stopped=await f.cli(['cancel','--run',id]);assert.equal(stopped.code,0,stopped.stderr);assert.deepEqual((await f.ledger()).owners,{});
   }finally{if(running){running.child.kill('SIGINT');await running.done;}await f.cleanup();}
 });

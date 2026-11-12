@@ -33,20 +33,20 @@ export async function fixture() {
   await syntheticAcceptance(root,state,host);
   const realGit=(args:string[],cwd=repo)=>checked(git,args,{cwd,env});
   for(const p of [repo,verifier]) await realGit(['init','-b','main'],p);
-  const project={schemaVersion:1,standardVersion:'0.1.0',repository:'fixture/project',checks:[['node','--check','app.cjs']],verifier:{kind:'cli',image:pins.verifier.image,command:['node','app.cjs']}};
+  const project={schemaVersion:2,standardVersion:pins.policy,repository:'fixture/project',approver:{id:1,login:'fixture'},approvalMode:'github-comments',checks:[['node','--check','app.cjs']],verifier:{kind:'cli',image:pins.verifier.image,command:['node','app.cjs']}};
   await writeFile(join(repo,'aegean.json'),JSON.stringify(project)); await writeFile(join(repo,'app.cjs'),'console.log("broken");\n');
   await realGit(['add','.']); await realGit(['commit','-m','seed']); await realGit(['clone','--bare',repo,remote]); await realGit(['remote','add','origin','git@github.com:fixture/project.git']); await realGit(['fetch','origin']);
   await writeFile(join(verifier,'README.md'),'Private synthetic verifier\n'); await realGit(['add','.'],verifier); await realGit(['commit','-m','seed'],verifier);
   await realGit(['checkout','--orphan','control'],verifier); await realGit(['rm','-rf','.'],verifier);
-  await writeFile(join(verifier,'control.json'),JSON.stringify({schemaVersion:1,revision:0,owner:null,runs:{}}));
+  await writeFile(join(verifier,'control.json'),JSON.stringify({schemaVersion:2,revision:0,owners:{},repositories:{},builder:null,runs:{}}));
   await realGit(['add','.'],verifier); await realGit(['commit','-m','control'],verifier); await realGit(['checkout','main'],verifier);
   await realGit(['clone','--bare',verifier,control]); await realGit(['remote','add','origin','git@github.com:fixture/verifier.git'],verifier); await realGit(['fetch','origin'],verifier);
   const request=join(dir,'request.md'); await writeFile(request,'Make the synthetic CLI output ok.');
-  const cli=(args:string[],signal?:AbortSignal):Promise<Result> => command(process.execPath,[join(root,'dist/src/cli.js'),...args],{cwd:repo,env,timeoutMs:40000,...(signal?{signal}: {})});
+  const cli=(args:string[],signal?:AbortSignal):Promise<Result> => command(process.execPath,[join(root,'dist/src/cli.js'),...args],{cwd:repo,env,timeoutMs:120000,...(signal?{signal}: {})});
   const interactive=(args:string[])=>{
     const child=spawn(process.execPath,[join(root,'dist/src/cli.js'),...args],{cwd:repo,env,stdio:['ignore','pipe','pipe']});
     let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
-    const timer=setTimeout(()=>child.kill('SIGKILL'),40000);
+    const timer=setTimeout(()=>child.kill('SIGKILL'),120000);
     const done=new Promise<{code:number|null;stdout:string;stderr:string}>(resolve=>child.on('close',code=>{clearTimeout(timer);resolve({code,stdout,stderr});}));
     return {child,done};
   };

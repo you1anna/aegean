@@ -16,7 +16,7 @@ test('verifier separates candidate rejection/limits, cancellation and infrastruc
   const originalCandidateRoot=toolchain.verifier.candidateRoot;
   toolchain.verifier.candidateRoot=join(repo,'exports');
   const git = (args: string[]) => checked('git', args, { cwd: repo });
-  const project = ProjectSchema.parse({ schemaVersion:1, standardVersion:'0.1.0', repository:'fixture/project', checks:[['node','app.js']], verifier:{kind:'cli', image:toolchain.verifier.image, command:['node','app.js']} });
+  const project = ProjectSchema.parse({ schemaVersion:2, standardVersion:toolchain.policy, repository:'fixture/project', approver:{id:1,login:'fixture'}, checks:[['node','app.js']], verifier:{kind:'cli', image:toolchain.verifier.image, command:['node','app.js']} });
   const suite = SuiteSchema.parse({schemaVersion:2,spec:'a'.repeat(64),cases:[{input:'hidden-input',stdout:'hidden-expected',exit:0,requirement:'R001'}]});
   const result = (fields: Partial<Result> = {}): Result => ({code:0,stdout:'hidden-expected',stderr:'',durationMs:1,interrupted:false,...fields});
   let mode = 'pass'; let removed = 0;

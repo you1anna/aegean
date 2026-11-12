@@ -4,9 +4,10 @@
   "openspec": "2.0.0",
   "codex": "0.167.2",
   "claude": "2.1.322",
-  "policy": "0.1.0",
+  "policy": "0.2.0",
   "supportedHosts": ["darwin-arm64", "darwin-x64"],
   "maxRepairs": 2,
+  "maxRevisions": 2,
   "maxInfrastructureRetries": 1,
   "activeTimeoutMs": 3600000,
   "verifier": {

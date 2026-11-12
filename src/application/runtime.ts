@@ -9,7 +9,7 @@ import { docker } from '../adapters/verifier.js';
 import { z } from 'zod';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import packageInfo from '../../package.json' with { type: 'json' };
-import { acceptedRelease } from '../adapters/acceptance.js';
+import { acceptedRelease, acceptedPrerequisites } from '../adapters/acceptance.js';
 import { executionLock } from '../adapters/run-lock.js';
 export const stateRoot = () => join(homedir(), '.local/state/aegean');
 export const HostSchema = z.object({ schemaVersion: z.literal(1), host: z.string().uuid(), controlRemote: z.string().regex(/^(git@github\.com:|https:\/\/github\.com\/)[\w.-]+\/[\w.-]+\.git$/), verifierCheckout: z.string().startsWith('/'), image: z.string().regex(/^[\w./:-]+@sha256:[a-f0-9]{64}$/).optional(), excludedRoots: z.array(z.string().startsWith('/')).min(1).optional(), billingConfirmed: z.boolean() }).strict();
@@ -43,7 +43,8 @@ export async function configure(options: ConfigureOptions): Promise<HostConfig> 
 export function binaries(root: string) {
   return { codex: join(root, 'tools/node_modules/.bin/codex'), claude: join(root, 'bin/claude'), openspec: join(root, 'tools/node_modules/.bin/openspec') };
 }
-export async function doctor(root: string): Promise<unknown> {
+export interface Readiness { version: string; host?: string; capability: 'bounded-cli-v1'; prerequisitesReady: boolean; fullWorkflowReady: boolean; crossHostHandoff: false; checks: {name:string;ok:boolean;detail:string}[]; operations: string }
+export async function doctor(root: string): Promise<Readiness> {
   const bins = binaries(root); const pins = JSON.parse(await readFile(join(root, 'toolchain.json'), 'utf8'));
   const checks: { name: string; ok: boolean; detail: string }[] = [];
   checks.push({ name: 'node', ok: process.version === 'v' + pins.node, detail: process.version });
@@ -60,12 +61,19 @@ export async function doctor(root: string): Promise<unknown> {
   catch { checks.push({ name: 'host-config', ok: false, detail: 'run aegean configure' }); }
   checks.push({ name: 'host-exclusions', ok: Boolean(host?.excludedRoots?.length), detail: host?.excludedRoots?.length ? 'reviewed host path policy configured' : 'review excludedRoots before enrolling a repository' });
   checks.push({ name: 'subscription-overflow', ok: host?.billingConfirmed === true, detail: host?.billingConfirmed ? 'operator confirmed paid overflow is disabled' : 'operator must confirm paid overflow is disabled before model execution' });
+  let prerequisitesPassed = false; let prerequisiteDetail = 'configure this host before qualification';
+  if (host) {
+    try { await acceptedPrerequisites(root, stateRoot(), host.host); prerequisitesPassed = true; prerequisiteDetail = 'native containment and protected verifier qualified for this host/release'; }
+    catch (error) { prerequisiteDetail = (error as Error).message.slice(0, 240); }
+  }
+  checks.push({ name: 'pilot-prerequisites', ok: prerequisitesPassed, detail: prerequisiteDetail });
+  const prerequisitesReady = checks.every(check => check.ok);
   let accepted = false; let acceptanceDetail = 'bootstrap: full workflow not accepted';
   try {
     await acceptedRelease(root, stateRoot(), undefined, host?.host); accepted = true;
   } catch (error) { acceptanceDetail += `; ${(error as Error).message.slice(0, 160)}`; }
   checks.push({ name: 'release-acceptance', ok: accepted, detail: accepted ? 'release-specific gates accepted' : acceptanceDetail });
-  return { version: packageInfo.version, fullWorkflowReady: checks.every(c => c.ok), checks, operations: join(root, 'docs/OPERATIONS.md') };
+  return { version: packageInfo.version, ...(host ? {host:host.host} : {}), capability:'bounded-cli-v1', prerequisitesReady, crossHostHandoff:false, fullWorkflowReady: checks.every(c => c.ok), checks, operations: join(root, 'docs/OPERATIONS.md') };
 }
 export async function acceptRelease(root: string, path: string): Promise<unknown> {
   const gate = await acceptedRelease(root, stateRoot(), await readJson(path), (await hostConfig()).host);
