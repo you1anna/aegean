@@ -110,7 +110,10 @@ if (tool === 'claude' || tool === 'codex') {
     if(invocation.some(arg=>arg.includes('/tmp/aegean-ready')))process.exit(0);
     const input=fs.readFileSync(0);
     const result=cp.spawnSync(invocation[0]==='node'?process.execPath:invocation[0],[...invocation.slice(1),...(item.collector?[item.directory]:[])],{cwd:item.directory,input,encoding:'utf8',timeout:20000,maxBuffer:145000000});
-    process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exit(result.status??1);
+    process.stdout.write(result.stdout ?? '');
+    process.stderr.write(result.stderr ?? '');
+    // A collector snapshot can exceed a pipe buffer. Let Node drain both streams.
+    process.exitCode = result.status ?? 1;
   }
   else if (args.includes('run')) { log({effect:'verify'}); output(scenario.verifierFail ? 'wrong' : 'ok'); }
   else if (!args.includes('inspect') && !args.includes('rm')) fail('unexpected synthetic Docker operation');

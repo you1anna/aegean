@@ -35,8 +35,9 @@ test('candidate publication requires a separate exact human approval and exclude
 });
 test('oversized candidate review pauses with diagnostics and never publishes a partial review', async () => {
   const f=await fixture();try {
-    await f.start();await f.scenario({approved:true,publishApproved:true,builderLargeDiff:true});const result=await f.resume();assert.equal(result.code,0,result.stderr);
-    const run=await f.current();const local=await f.local();assert.equal(run.state,'paused');assert.equal(run.resumeState,'reviewing');assert.match(run.reason!,/200000 bytes/);
+    const started = await f.start(); assert.equal(started.code, 0, started.stderr);
+    await f.scenario({approved:true,publishApproved:true,builderLargeDiff:true});const result=await f.resume();assert.equal(result.code,0,result.stderr);
+    const run=await f.current();const local=await f.local();assert.equal(run.state,'paused');assert.equal(run.resumeState,'reviewing',run.reason ?? 'missing pause reason');assert.match(run.reason!,/200000 bytes/);
     assert.equal((await f.events()).filter(e=>e.role==='auditor-review').length,0);
     assert.equal(await f.realGit(['--git-dir',f.remote,'rev-parse',local.branch]),run.specCommit);
     assert.equal((await f.cli(['cancel','--run',run.id])).code,0);assert.deepEqual((await f.ledger()).owners,{});
@@ -81,8 +82,16 @@ test('coordinator requires human approval, runs one suite/build, and archives on
     const started=await f.start(); assert.equal(started.code,0,started.stderr); assert.equal((await f.current()).state,'spec-drafted');
     assert.deepEqual((await f.events()).filter(e=>e.role).map(e=>e.role),['scout']);
     await f.scenario({approved:true}); const built=await f.resume(); assert.equal(built.code,0,built.stderr); assert.equal((await f.current()).state,'human-merge-review');
-    await f.scenario({approved:true,publishApproved:true,merged:true,mergeActor:'outsider'}); await f.resume(); assert.equal((await f.current()).state,'human-merge-review');
-    await f.merge(); await f.scenario({approved:true,merged:true}); const archived=await f.resume(); assert.equal(archived.code,0,archived.stderr); assert.equal((await f.current()).state,'archived'); assert.deepEqual((await f.ledger()).owners,{});
+    await f.scenario({ approved: true, publishApproved: true });
+    const published = await f.resume(); assert.equal(published.code, 0, published.stderr);
+    const candidate = await f.current();
+    assert.equal(await f.realGit(['--git-dir', f.remote, 'rev-parse', (await f.local()).branch]), candidate.commit);
+    await f.merge();
+    await f.scenario({ approved: true, merged: true, mergeActor: 'outsider' });
+    const rejected = await f.resume(); assert.equal(rejected.code, 0, rejected.stderr);
+    assert.equal((await f.current()).state, 'human-merge-review');
+    assert.equal((await f.events()).filter(e => e.effect === 'archive').length, 0);
+    await f.scenario({approved:true,merged:true}); const archived=await f.resume(); assert.equal(archived.code,0,archived.stderr); assert.equal((await f.current()).state,'archived'); assert.deepEqual((await f.ledger()).owners,{});
     assert.equal((await f.events()).filter(e=>e.role==='auditor-tests').length,1);
   } finally {await f.cleanup();}
 });
@@ -103,7 +112,8 @@ test('quota failure pauses and explicit resume reuses the immutable protected su
 });
 test('lost suite-push acknowledgement is reconciled without a second Auditor or duplicate commit',async()=>{
   const f=await fixture();try {
-    await f.start(); await f.scenario({approved:true,pushAfter:'suite'}); await f.resume();
+    const started = await f.start(); assert.equal(started.code, 0, started.stderr);
+    await f.scenario({approved:true,pushAfter:'suite'}); await f.resume();
     await access(join(f.home,'fault-after-suite'));
     if((await f.current()).state!=='human-merge-review') {const resumed=await f.resume();assert.equal(resumed.code,0,resumed.stderr);}
     assert.equal((await f.current()).state,'human-merge-review'); assert.equal((await f.events()).filter(e=>e.role==='auditor-tests').length,1);

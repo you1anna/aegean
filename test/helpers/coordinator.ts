@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, cp, writeFile, readFile, symlink, rm, readdir, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, cp, writeFile, readFile, symlink, rm, readdir, realpath, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +23,13 @@ export async function fixture() {
   const pins=JSON.parse(await readFile('toolchain.json','utf8')); pins.verifier.candidateRoot=join(dir,'candidates');
   for(const file of ['toolchain.json','dist/toolchain.json']) await writeFile(join(root,file),JSON.stringify(pins));
   const fake=resolve('test/fixtures/fake-cli.cjs');
-  for(const tool of ['git','gh','docker']) await symlink(fake,join(bin,tool));
+  await mkdir(join(bin, 'faults'));
+  await mkdir(join(bin, 'real'));
+  await symlink(fake, join(bin, 'faults/git'));
+  await symlink(git, join(bin, 'real/git'));
+  await cp('test/fixtures/git-shim.sh', join(bin, 'git'));
+  await chmod(join(bin, 'git'), 0o755);
+  for(const tool of ['gh','docker']) await symlink(fake,join(bin,tool));
   await cp(fake,join(root,'bin/claude'));
   await writeFile(join(root,'bin/package.json'),JSON.stringify({type:'commonjs'}));
   for(const tool of ['codex','openspec']) await cp(fake,join(root,'tools/node_modules/.bin',tool));

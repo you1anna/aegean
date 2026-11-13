@@ -30,6 +30,7 @@ visible. Protected test source and expected results live outside Builder access.
 - [Status and release gates](docs/STATUS.md)
 - [Architecture and security](docs/ARCHITECTURE.md)
 - [Installation and recovery](docs/OPERATIONS.md)
+- [Low-cost testing](docs/TESTING.md)
 
 This repository is private pending an explicit publication decision. It contains
 no history from the former personal-capture project, which is preserved privately
