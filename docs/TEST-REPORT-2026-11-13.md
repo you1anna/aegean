@@ -22,8 +22,10 @@ Verification with an inherited synthetic Git LFS configuration:
   85.13 system).
 - Offline dependency installation, type checking and whitespace checks passed.
 
-This follow-up is prepared locally for PR #2. Hosted verification of the new
-commit and native acceptance remain pending.
+The operator approved publication of `4ea484c` to PR #2. Hosted
+CI run 43432930555 (archived CI record)
+passed installation, type checking and 141/141 tests with zero failures or skips
+in 228.92 seconds. Native acceptance remains pending.
 
 ## Previous local verification at `086e62b`
 

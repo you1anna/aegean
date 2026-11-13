@@ -1,4 +1,24 @@
-# Bounded CLI checkpoint — 12 November 2026
+# Bounded CLI checkpoint
+
+## Session close-out — 13 November 2026
+
+Published the explicitly approved commit
+`4ea484cf535fe3e3fcf203e22263f842b865608b` to
+[draft PR #2](https://github.com/you1anna/aegean/pull/2). Confirmed the PR head
+still matches that exact commit after CI completed.
+
+Hosted CI run 43432930555 (archived CI record)
+passed dependency installation, type checking and all 141 tests with zero failures
+or skips. The test runner took 228.92 seconds. The preceding local full run with
+inherited synthetic Git LFS configuration passed 141/141 in 257.78 seconds.
+Fixture isolation preserves repository-local executable-filter rejection.
+
+Next step: human review of PR #2 and completion of the bounded-CLI integration
+and native acceptance items below. The PR remains a draft. Installation, live
+pilot, merge and readiness changes require their existing approvals. This
+close-out note is a local documentation commit awaiting publication approval.
+
+## Historical checkpoint — 12 November 2026
 
 **Implementation paused. Pilot not ready.**
 PR #1 merged as `81c7eb8` (hosted CI passed on the merge commit, run 43302393459).
