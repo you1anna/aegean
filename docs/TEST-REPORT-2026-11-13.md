@@ -1,13 +1,38 @@
 # Local test findings — 13 November 2026
 
-## Follow-up verification
+## CI fixture isolation
+
+PR #2 CI at `086e62b` passed dependency installation and type checking, then
+reported 119 passing and 22 failing tests. The builder-import and routing
+fixtures inherited Git LFS configuration, causing the executable-filter guard
+to reject setup before the intended assertions. See
+CI run 43422160228 (archived CI record).
+
+The follow-up uses a shared test-only helper to exclude global and system Git
+configuration in those two serial test-file processes and their children. It
+restores the environment after testing. Repository-local configuration and
+production safety checks remain active.
+
+Verification with an inherited synthetic Git LFS configuration:
+
+- Focused builder-import, installation and Git-safety suites passed 34/34 in
+  23.84 seconds, including executable-filter and config-include rejection.
+- One full-suite run passed 141/141 with zero skips or cancellations in 257.78
+  seconds including compilation. CPU time was 238.75 seconds (153.62 user,
+  85.13 system).
+- Offline dependency installation, type checking and whitespace checks passed.
+
+This follow-up is prepared locally for PR #2. Hosted verification of the new
+commit and native acceptance remain pending.
+
+## Previous local verification at `086e62b`
 
 The final local suite on `bounded-cli` passed **141/141**, with zero failures,
 skips or cancellations. It took **262.71 seconds** including the build and used
 **244.27 CPU-seconds** (158.56 user, 85.71 system). Compared with the baseline
 below, elapsed time fell by 65% and CPU time by 67%. Both runs were serial on the
-primary Mac with local sockets enabled. Hosted CI and native acceptance remain
-pending.
+primary Mac with local sockets enabled. Subsequent hosted results are recorded
+above; native acceptance remains pending.
 
 - The fake VM now drains snapshot output before exiting. The oversized candidate
   reaches the review limit and neither invokes the Auditor nor publishes.

@@ -11,6 +11,9 @@ import { assertArchiveOnly } from '../src/application/archive.js';
 import { HostSchema } from '../src/application/runtime.js';
 import { syntheticAcceptance } from './helpers/acceptance.js';
 import toolchain from '../toolchain.json' with { type: 'json' };
+import { isolateGitConfig } from './helpers/git-config.js';
+
+isolateGitConfig();
 
 const routing = await import(pathToFileURL(resolve('scripts/routing.mjs')).href);
 type RoutingFixture = { user: string; data: string; state: string; current: string; previous: string; host: string; project: string; projects: { repository: string; path: string }[]; codex: string; claude: string };

@@ -42,6 +42,22 @@ The Git shim calls Git directly for routine operations and keeps the synthetic
 origin check and push fault injection. Compare elapsed time and CPU time with
 `/usr/bin/time -p npm test` when evaluating changes to the full suite.
 
+Builder-import and routing fixtures use `test/helpers/git-config.ts` to exclude
+machine-wide and user Git configuration for their test-file process and child
+commands. The helper restores the previous environment after the file finishes.
+Use it only in serial test files running with Node's default process isolation.
+Repository-local configuration remains visible to the production safety checks.
+Filter, hook and config-include rejection tests must continue to pass.
+
+To reproduce a CI host with Git LFS configuration, create a temporary config
+containing `[filter "lfs"]` and `clean = git-lfs clean -- %f`, then run:
+
+```sh
+GIT_CONFIG_GLOBAL=/path/to/temporary.gitconfig node --test \
+  --test-concurrency=1 --test-timeout=300000 \
+  dist/test/builder-import.test.js dist/test/installation.test.js dist/test/git-safety.test.js
+```
+
 Live Aegean runs consume subscription usage separately from deterministic tests.
 Current policy limits are owned by `toolchain.json`; they bound active time and
 retries, not token consumption. Provider usage can be unknown, and time limits

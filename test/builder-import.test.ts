@@ -7,6 +7,9 @@ import { candidateGitChecked } from '../src/adapters/candidate-git.js';
 import { checked } from '../src/adapters/process.js';
 import { importBuilderSnapshot, reconcileBuilderImport } from '../src/adapters/builder-import.js';
 import { parseSnapshot, type BuilderSnapshot } from '../src/adapters/builder-snapshot.js';
+import { isolateGitConfig } from './helpers/git-config.js';
+
+isolateGitConfig();
 
 const protectedPaths = ['aegean.json', 'openspec/changes/frozen'];
 const entry = (path: string, data: string | Buffer, mode: 420 | 493 = 0o644) => ({ path, data: Buffer.from(data).toString('base64'), mode });
