@@ -80,6 +80,11 @@ highly certain. None met that bar, and nothing was changed:
 3. Ask the operator whether to install `main`. Regenerate evidence for the exact new
    artifact identity; old receipts do not transfer.
 4. Repoint the pilot project's `aegean.json` once its first slice names an entry point.
+5. Before the first build run, decide whether to persist role diagnostics; see
+   the known limit under
+   [run records and debugging](OPERATIONS.md#run-records-and-debugging). Until
+   then, capture console output and write a [pilot note](PILOT-NOTES.md) for
+   every real run.
 
 ## PR #1 remediation (not installed)
 

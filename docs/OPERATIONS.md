@@ -156,6 +156,39 @@ Non-fast-forward pushes or server protection stop that step for review; nothing
 force-pushes or bypasses repository protection. A successful archive releases the
 lease. Archival recovery still requires a live acceptance exercise.
 
+## Run records and debugging
+
+Three records exist for a run. Each has one owner and one place.
+
+- **Coordinator records**, written by Aegean in
+  `~/.local/state/aegean/runs/<run-id>/`: `run.json`, `request.md`,
+  `pr-body.md`, per-role `usage/` and `effects/`, verification receipts,
+  reviews, the candidate patch and the worktree. Read them; never edit them.
+  `aegean status --run ID` reads the same state without a model call.
+- **Console capture**, written by whoever runs the command, in
+  `~/Library/Logs/aegean/<project>-<date>.log` (directory mode 0700). Aegean
+  prints errors only to the terminal, so capture every real `start`, `resume`,
+  `cancel` and `recover`:
+
+  ```sh
+  log=~/Library/Logs/aegean/pilot project-$(date +%F).log
+  { date -u +%FT%TZ; aegean resume --run "$RUN"; echo "exit $?"; } 2>&1 | tee -a "$log"
+  ```
+
+- **Run notes**, written by the session, in [PILOT-NOTES](PILOT-NOTES.md):
+  one short entry per real run, pointing at the two records above.
+
+Keep all three private. Raw logs, prompts and run files stay outside Git; the
+notes carry identifiers, outcomes and paths, never copied log content.
+
+Known limit, observed in source on 14 November 2026: role sessions run without
+session persistence (`--no-session-persistence`, `--ephemeral`) and no code
+writes a role's raw output to disk. A failed Scout, Auditor or Builder
+therefore leaves its role name, duration, exit code and token counts in
+`usage/`, plus whatever the console capture caught. Persisting bounded,
+private role diagnostics is an open change; it must keep protected-suite
+content outside Builder reach.
+
 ## Recovery
 
 - Authentication/quota problems: preserve the run, fix subscription access, then
