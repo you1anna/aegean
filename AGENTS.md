@@ -18,6 +18,10 @@ stale evidence, interruption and idempotence. Keep fixtures synthetic. Do not
 commit credentials, private suites, run databases, raw prompts or old project
 records. Docs must distinguish tested behaviour from outstanding release gates.
 
+For every real run, capture console output and add an entry to
+docs/PILOT-NOTES.md, as "Run records and debugging" in docs/OPERATIONS.md
+describes. Raw logs stay outside Git.
+
 Release changes are installed by the maintained installer, never hand-copied.
 Use versioned releases and preserve unrelated user configuration. Existing
 projects retain their own dependency managers and deployment boundaries.
