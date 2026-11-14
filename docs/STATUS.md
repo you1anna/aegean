@@ -1,7 +1,85 @@
 # Status
 
-Evidence recorded 12 November 2026. This is an installed bootstrap, not an
-accepted release of the complete workflow. No real project has been enrolled.
+Evidence recorded 12 November 2026, with a 14 November addendum directly below.
+This is an installed bootstrap, not an accepted release of the complete workflow.
+
+## 14 November 2026: pilot project enrolment and the path to a usable host
+
+Read-only assessment on the primary host against installed release `0.1.0-6a00b329342a`
+(source `cc71eeb`). `main` is four commits ahead (`e834132` to `81c7eb8`) and
+remains uninstalled; installing it needs the operator's explicit approval. No Aegean
+source, installation, host configuration or readiness state was changed, and
+the test suite was not rerun.
+
+### Observed
+
+- `OWNER/PROJECT` is enrolled (`aegean enrol --check`), contrary to blocker 1
+  below. It is the only enrolled real project.
+- `aegean doctor --json` reports `fullWorkflowReady: false`. Two checks fail:
+  `verifier-vm` (the Colima profile `aegean` is stopped; it passed on
+  12 November) and `release-acceptance`.
+- Specification drafting works on this host. Everything after specification
+  approval is refused while readiness is false: see the readiness guard in
+  `src/application/engine.ts` ("Full workflow acceptance is pending").
+- Run `trial-01` (a Python CLI adapter) reached
+  `spec-drafted`. Its Scout stage took 123 seconds and reported 17,191 output
+  tokens; the reported input count of 2 is not credible, so input usage is
+  unknown. Sample size is one run.
+- That run held the single global lease while waiting for approval, blocking
+  any other run on any repository or host. The operator had it cancelled and
+  pilot project PR #1 closed on 14 November; `aegean status` now shows
+  `owner: null`. The branch and the run's local worktree are retained.
+- The pilot project's `aegean.json` still names the cancelled parser
+  (`python3 -m unittest`, `python3 parse_linkedin_alert.py`) with the Node
+  image. This release accepts only the toolchain's Node image. Whether that
+  image contains `python3` was not tested.
+
+### Verifier contract as implemented
+
+Facts a project must design for (`src/domain/config.ts`,
+`src/adapters/verifier.ts`): one fixed `verifier.command` for every protected
+case; each case is stdin of at most 8,192 characters, an expected stdout of at
+most 8,192 characters and an exit code; no per-case arguments; no network; a
+read-only candidate mount; a 15-second limit per case. Output must therefore be
+deterministic, and a project with several commands needs one entry point that
+dispatches on its input. There is no route to revise an approved
+specification; the run is cancelled and restarted.
+
+### Proposed minimum for "stable" (awaiting the operator's explicit approval)
+
+Of the seven requirement groups in [BOUNDED-CLI-SPEC](BOUNDED-CLI-SPEC.md),
+three are needed before one pilot slice can run end to end on the primary host:
+
+1. **R2, contained Builder execution.** The `detached-writer-contained` check
+   cannot be waived, and the VM-backed fix is unproven.
+2. **R1, acceptance for the executing host alone.** `src/adapters/acceptance.ts`
+   requires distinct primary host and secondary host identities; the secondary host has no access route.
+3. **R3, one authorised pilot with real receipt writers.** Acceptance requires
+   evidence that only a run can create.
+
+R4 to R7 are proposed for deferral: the pilot project is the only enrolled project,
+comment approvals work, and cancel-and-restart is tolerable for small slices.
+
+The operator asked on 14 November for any of the three to be fixed where the fix was
+highly certain. None met that bar, and nothing was changed:
+
+- R2 has no established fix. Its first step is the negative-control probe in
+  step 1 of the specification's delivery sequence.
+- R1 alone unblocks nothing. Acceptance also demands at least eleven receipts
+  including a passing `detached-writer-contained`, so relaxing the host rule
+  first would weaken a gate without making any run possible.
+- R3 depends on both.
+
+### Next actions
+
+1. Obtain the operator's explicit approval of the three-item cut as the definition of
+   "stable", or an alternative scope.
+2. On a branch, prove or disprove the VM/tool boundary for R2 with bounded
+   synthetic negative controls before building R1 or R3 on top of it. A failed
+   control is a result to report, not to work around.
+3. Ask the operator whether to install `main`. Regenerate evidence for the exact new
+   artifact identity; old receipts do not transfer.
+4. Repoint the pilot project's `aegean.json` once its first slice names an entry point.
 
 ## PR #1 remediation (not installed)
 
@@ -157,7 +235,8 @@ both skill links resolve to the active release. Docker's selected context remain
 
 1. Resolve native detached-writer containment. Same-group process termination,
    model review and synthetic acceptance reports cannot satisfy this control.
-   Keep ordinary runs and real-project enrolment disabled.
+   Keep ordinary runs disabled. Pilot project was enrolled on 14 November; see
+   the addendum above. Enrol no further real project.
 2. Review the combined bootstrap PR and explicitly approve any installation.
    Preserve host exclusions during configuration migration. Regenerate evidence
    for the exact new source/artifact identity; old receipts do not transfer.
