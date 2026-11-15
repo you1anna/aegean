@@ -11,6 +11,7 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
   try {
     for(const path of [repo,user,bin,...['scripts','docs','skills','policy','tools'].map(p=>join(repo,p))]) await mkdir(path,{recursive:true});
     await cp('scripts', join(repo, 'scripts'), { recursive: true });
+    await cp('examples', join(repo, 'examples'), { recursive: true });
     const pins = { ...JSON.parse(await readFile('toolchain.json', 'utf8')), node: process.versions.node };
     await writeFile(join(repo,'toolchain.json'),JSON.stringify(pins));
     const pkg={name:'synthetic-release',version:'0.1.0',type:'module',scripts:{build:'node build.mjs'}};
@@ -58,5 +59,7 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     assert.equal(installed.sourceCommit,identity.sourceCommit);assert.equal(installed.sourceHash,identity.sourceHash);assert.match(installed.buildHash,/^[a-f0-9]{64}$/);
     assert.equal(await readFile(join(release,'dist/app.js'),'utf8'),'fresh committed build');
     await assert.rejects(readFile(join(release,'dist/obsolete.js')));
+    for(const name of ['aegean.json','pilot-limits.json']) assert.equal(await readFile(join(release,'examples',name),'utf8'),await readFile(join(repo,'examples',name),'utf8'));
+    const artifacts=JSON.parse(await readFile(join(release,'artifact-manifest.json'),'utf8'));assert.ok(artifacts.some((entry:{path:string})=>entry.path==='examples/pilot-limits.json'));
   }finally{await rm(root,{recursive:true,force:true});}
 });

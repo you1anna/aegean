@@ -190,3 +190,30 @@ test('lost push response reconciles the accepted commit beneath a later descenda
     const observed = await f.ledger.read(); assert.equal(observed.revision, 2); assert.deepEqual(Object.keys(observed.owners).sort(), ['a', 'b']);
   } finally { await f.close(); }
 });
+
+test('original bootstrap history without policy identity is inspected read-only and preserved exactly by explicit migration', async () => {
+  const {policyIdentity: firstIdentity,...first}=historical(cancelled(run('old-a')));
+  const {policyIdentity: secondIdentity,...second}=historical(cancelled(run('old-b')));
+  void firstIdentity;void secondIdentity;
+  const history={'old-a':first,'old-b':second};const f=await fixture({schemaVersion:1,revision:5,owner:null,runs:history});
+  try{
+    const head=await checked('git',['rev-parse','control'],{cwd:f.remote});const preview=await f.ledger.inspectMigration();
+    assert.equal(preview.terminalRuns,2);assert.equal(await checked('git',['rev-parse','control'],{cwd:f.remote}),head);
+    const migrated=await f.ledger.migrateQuiescent(head);assert.deepEqual(migrated.runs,history);assert.equal('policyIdentity' in migrated.runs['old-a']!,false);
+    assert.deepEqual((await f.ledger.migrateQuiescent()).runs,history);await assert.rejects(f.ledger.resumeOwned('old-a','air',1),/stale|terminal/);
+    const {assertRunPolicy}=await import('../src/domain/workflow.js');assert.throws(()=>assertRunPolicy(migrated.runs['old-a']!),/policy differs/);
+    await assert.rejects(f.ledger.migrateQuiescent(head),/source changed/);
+  }finally{await f.close();}
+});
+test('missing historical identity is restricted to terminal bootstrap records and consistent keys',async()=>{
+  const {policyIdentity,...old}=historical(cancelled(run('old')));void policyIdentity;
+  const invalid=[
+    {schemaVersion:1,revision:5,owner:null,runs:{old:{...old,state:'requested'}}},
+    {schemaVersion:1,revision:5,owner:null,runs:{old:{...old,policy:'0.2.0'}}},
+    {schemaVersion:1,revision:5,owner:null,runs:{old:{...old,policyIdentity:'invalid'}}},
+    {schemaVersion:1,revision:5,owner:{run:'old',host:'air',generation:1},runs:{old}},
+    {schemaVersion:1,revision:5,owner:null,runs:{wrong:old}},
+    {schemaVersion:2,revision:5,owners:{},repositories:{},builder:null,runs:{old:{...cancelled(run('old')),policyIdentity:undefined}}},
+  ];
+  for(const value of invalid){const f=await fixture(value);try{await assert.rejects(f.ledger.inspectMigration(),/invalid|quiescent/);await assert.rejects(f.ledger.migrateQuiescent(),/invalid|quiescent/);}finally{await f.close();}}
+});

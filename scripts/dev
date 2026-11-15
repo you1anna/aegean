@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+case "${1:-help}" in
+  help|--help|-h)
+    echo 'Usage: ./scripts/dev setup|build|check|test'
+    echo 'setup: pinned runtime and locked dependencies; build: clean compile; check: types and scripts; test: clean build and synthetic tests'
+    echo 'Requires mise. No task installs Aegean, starts a VM or calls models.'
+    exit 0 ;;
+  setup|build|check|test) ;;
+  *) echo "Unknown task: $1. Run ./scripts/dev help" >&2; exit 2 ;;
+esac
+[ "$#" -eq 1 ] || { echo 'Tasks take no extra arguments' >&2; exit 2; }
+command -v mise >/dev/null 2>&1 || { echo 'mise is required. Install it using https://mise.jdx.dev/getting-started.html' >&2; exit 1; }
+cd "$repo"
+[ ! -L .aegean ] || { echo 'Refusing symlink task state' >&2; exit 1; }
+mkdir -p .aegean
+[ ! -e .aegean/source-task ] || { echo "Source task active or interrupted; inspect .aegean/source-task/owner.json" >&2; exit 1; }
+if ! mkdir .aegean/source-launcher 2>/dev/null; then
+  echo 'Source commands locked. Inspect .aegean/source-launcher/owner before recovery.' >&2
+  exit 1
+fi
+printf '%s\n' "$$" > .aegean/source-launcher/owner
+trap 'rm -f .aegean/source-launcher/owner; rmdir .aegean/source-launcher' EXIT
+trap 'trap - EXIT; echo "Interrupted; inspect .aegean/source-launcher before recovery" >&2; exit 130' INT
+trap 'trap - EXIT; echo "Terminated; inspect .aegean/source-launcher before recovery" >&2; exit 143' TERM
+if [ "$1" = setup ]; then
+  mise trust "$repo/mise.toml"
+  mise install
+fi
+MISE_AUTO_INSTALL=0 mise exec -- node "$repo/scripts/dev-tasks.mjs" "$1"

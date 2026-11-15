@@ -1,14 +1,14 @@
 import { candidateGitChecked, candidateGit } from '../adapters/candidate-git.js';
 import { readFile, writeFile, mkdir, access, readdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { createRun, transition, digest, POLICY, assertRunPolicy, type Event, type Run } from '../domain/workflow.js';
+import { transition, digest, POLICY, assertRunPolicy, type Event, type Run } from '../domain/workflow.js';
 import { selectModel, identity, type ModelRole, type ModelProfile } from '../domain/model-policy.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { sourceContext } from './model-context.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
-import { ProjectSchema, SuiteSchema, ReviewSchema, assertSupportedImage } from '../domain/config.js';
+import { SuiteSchema, ReviewSchema, assertSupportedImage } from '../domain/config.js';
 import { publicRequirements, repairFeedback } from '../domain/feedback.js';
 import { GitLedger, assertOwned as assertLedgerOwned } from '../adapters/ledger.js';
 import { checked, type Result } from '../adapters/process.js';
@@ -16,10 +16,12 @@ import { atomicJson, readJson, treeDigest } from '../adapters/files.js';
 import { claudeRole, claudeText, parseJsonAnswer, authentication } from '../adapters/agents.js';
 import { approval, github, commandReceipt, publicationCommand, assertApprover } from '../adapters/github.js';
 import { verify, cleanupRetained, type Receipt } from '../adapters/verifier.js';
-import { hostConfig, stateRoot, binaries, doctor, prepareState } from './runtime.js';
-import { eligible } from './enrol.js';
+import { hostConfig, stateRoot, binaries, doctor } from './runtime.js';
+import { prepareRun } from './prepare.js';
+import { operatorStage } from '../adapters/operator-log.js';
+import { reserveHost } from '../adapters/host-activity.js';
 import { archiveMerged } from './archive.js';
-import { initializeBudget, budgetStatus, budgetedRole, budgetedExecution, reconcileCompletedBudget, nextArchiveAttempt } from './usage-budget.js';
+import { budgetStatus, budgetedRole, budgetedExecution, reconcileCompletedBudget, nextArchiveAttempt } from './usage-budget.js';
 import { observeRun, finalizeRunEvidence } from './run-evidence.js';
 import { executionAuthorization } from './pilot.js';
 import { executionLock } from '../adapters/run-lock.js';
@@ -29,7 +31,7 @@ import { committedSpecDigest } from '../adapters/spec-artifact.js';
 import { containedBuilder, reconcileBuilder } from './builder.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 
-import { loadLocalRun, suiteRelativePath, type LocalRun } from './run-record.js';
+import { loadLocalRun, suiteRelativePath } from './run-record.js';
 import { frozenProject, validateLocalSpecApproval, validateLocalPublication } from './decisions.js';
 const draftSchema = z.object({ proposal: z.string().min(1), requirements: z.string().min(1), design: z.string().min(1), tasks: z.string().min(1) }).strict();
 const nowEvent = (type: Event['type'], fields: Record<string, unknown> = {}): Event => ({ id: randomUUID(), at: Date.now(), type, ...fields } as Event);
@@ -51,29 +53,9 @@ async function requireSubscriptions(root: string): Promise<void> {
   if (!auth.codex || !auth.claude) throw new Error('both subscription logins must be verified');
 }
 export async function start(root: string, repo: string, request: string, signal: AbortSignal): Promise<unknown> {
-  eligible(repo, (await hostConfig()).excludedRoots); await requireSubscriptions(root); await prepareState();
-  const project = ProjectSchema.parse(await readJson(join(repo, 'aegean.json')));
-  assertSupportedImage(project);
-  if (await candidateGitChecked(['status', '--porcelain'], { cwd: repo })) throw new Error('commit or preserve current work before starting an isolated run');
-  const remote = await candidateGitChecked(['remote', 'get-url', 'origin'], { cwd: repo });
-  const identity = remote.replace(/^git@github\.com:/, '').replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '');
-  if (identity !== project.repository) throw new Error('repository identity differs from reviewed configuration');
-  await candidateGitChecked(['fetch', 'origin', 'main'], { cwd: repo });
-  const base = await candidateGitChecked(['rev-parse', 'origin/main'], { cwd: repo });
-  if (base !== await candidateGitChecked(['rev-parse', 'HEAD'], { cwd: repo })) throw new Error('start from the reviewed remote main revision');
-  const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote); const id = `run-${randomUUID()}`;
-  const projectPolicy = digest((await candidateGit(['show', `${base}:aegean.json`], { cwd: repo })).stdout);
-  const run = createRun(id, host.host, project.repository, POLICY.version, Date.now(), { approver: project.approver, projectPolicy });
-  const branch = `aegean/${id}`;
-  const localDir = join(stateRoot(), 'runs', id); await mkdir(localDir, { recursive: true, mode: 0o700 });
-  const worktree = join(localDir, 'worktree');
-  const local: LocalRun = { id, repo: resolve(repo), worktree, generation: 0, branch, base, sourceRequest: join(localDir, 'request.md') };
-  if (!project.modelExecution) throw new Error('modelExecution requires an explicit token budget and task scope before start');
-  await initializeBudget(localDir, project.modelExecution.budget);
-  await atomicJson(join(localDir, 'run.json'), local); await writeFile(local.sourceRequest, request, { mode: 0o600 });
-  const owned = await ledger.acquire(run); local.generation = owned.owners[id]!.generation;
-  await atomicJson(join(localDir, 'run.json'), local);
-  return resume(root, id, signal);
+  await requireSubscriptions(root);
+  const prepared = await prepareRun(repo, request, signal);
+  return resume(root, prepared.id, signal);
 }
 export async function status(id?: string): Promise<unknown> {
   if (id && !/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
@@ -108,6 +90,10 @@ export async function cancel(id: string, root: string): Promise<unknown> {
 
 }
 export async function resume(root: string, id: string, signal: AbortSignal): Promise<unknown> {
+  const releaseHost = await reserveHost(stateRoot(), 'execution', `resume ${id}`);
+  try { return await resumeRun(root, id, signal); } finally { await releaseHost(); }
+}
+async function resumeRun(root: string, id: string, signal: AbortSignal): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const bins = binaries(root); const ledger = new GitLedger(host.controlRemote);
   const dir = join(stateRoot(), 'runs', id); const local = await loadLocalRun(dir);
@@ -126,6 +112,7 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
     if (!['human-merge-review', 'merged', 'archived'].includes(run!.state) && (await candidateGitChecked(['ls-remote', 'origin', 'refs/heads/main'], { cwd: local.worktree, signal })).split(/\s/)[0] !== local.base) throw new Error('remote base changed before execution');
   };
   const model = async <T>(role: ModelRole, prompt: string, timeoutMs: number, invoke: (timeout: number, deadline: AbortSignal, profile: ModelProfile) => Promise<Result>, parse: (result: Result) => T): Promise<{ value: T; durationMs: number } | undefined> => {
+    operatorStage(id, role);
     await assertOwned();
     const limits = await authorization();
     const timeout = Math.min(timeoutMs, limits.remainingMs);

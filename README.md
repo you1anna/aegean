@@ -27,7 +27,8 @@ See the [workflow guide](docs/WORKFLOW.md) for the roles and review steps.
 
 Aegean currently supports specification drafting and review in controlled trials.
 Full delivery remains under evaluation and requires release acceptance or an authorised pilot.
-Start with the [guides](docs/README.md) for supported use and operating instructions.
+Use the [installation and command guide](docs/OPERATIONS.md) for a fresh installation, host checks and a controlled pilot.
+Use `./scripts/dev help` for local build commands; see [Contribute](CONTRIBUTING.md) for source checks.
 
 The initial scope is command-line changes on macOS with subscription CLI accounts.
 See [engineering details](docs/ENGINEERING.md) for architecture, decisions and evidence.

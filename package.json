@@ -10,7 +10,7 @@
     "build": "tsc",
     "check": "tsc --noEmit",
     "test:quick": "npm run build && node --test --test-concurrency=1 --test-timeout=10000 dist/test/workflow.test.js",
-    "test": "npm run build && node --test --test-concurrency=1 --test-timeout=300000 dist/test/*.test.js",
+    "test": "npm run build && node --test --test-concurrency=1 --test-timeout=300000 dist/test/*.test.js && node --test test/*.test.mjs",
     "start": "node dist/src/cli.js"
   },
   "dependencies": { "zod": "4.6.7" },

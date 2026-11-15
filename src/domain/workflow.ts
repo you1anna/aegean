@@ -23,7 +23,7 @@ export interface Run {
   revisionRef?: string; reviewCommit?: string;
   resumeState?: State; reason?: string;
 }
-export type HistoricalRun = Omit<Run, 'schemaVersion' | 'approver' | 'projectPolicy' | 'revisions' | 'revisionRef' | 'reviewCommit'> & { schemaVersion: 1 };
+export type HistoricalRun = Omit<Run, 'schemaVersion' | 'approver' | 'projectPolicy' | 'revisions' | 'revisionRef' | 'reviewCommit' | 'policyIdentity'> & { schemaVersion: 1; policyIdentity?: string };
 interface BaseEvent { id: string; at: number }
 export type Event = BaseEvent & (
   | { type: 'draft'; spec: string; specCommit?: string; activeMs?: number }

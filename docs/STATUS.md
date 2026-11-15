@@ -6,26 +6,67 @@
 
 ## At a glance
 
-Last host assessment: **14 November 2026**. Documentation review: **15 November 2026**.
-The documentation review did not repeat host acceptance or change the installation.
+Last host inspection: **15 November 2026**.
 
 | Area | Last recorded result |
 | --- | --- |
-| Source | The bootstrap and review fixes are merged into `main` through PR #1. |
-| Installed release | the primary host has `0.1.0-6a00b329342a`; later source changes remain uninstalled at the last assessment. |
-| Specification trial | One pilot project run reached specification review, then was cancelled on request. |
-| Ordinary implementation | Blocked. Native detached-process containment failed; release acceptance remains incomplete. |
-| Verifier VM | Stopped at the last primary host assessment. |
+| Source | PR #1 and PR #2 are merged. The operator commands remain on `codex/local-operator-commands` for human review. |
+| Installed release | the primary host had `0.1.0-3676d6ce572a` before the authorised uninstall. See the current record below. |
+| Control history | Two cancelled bootstrap runs lack a later policy field. Read-only inspection accepts these records without changing them. |
+| Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
-| PR #2 source | Local decisions, pilot controls and model-use accounting are implemented in source; final checks and live qualification are recorded in bounded CLI progress. |
 
-For the source in PR #2, read [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
-It records implementation and approval evidence separately from the installed-host
-assessment below. A source change does not update the installed release.
-Do not enrol further real projects or treat local test success as release acceptance.
+## 15 November 2026: Local operator commands
 
-For live installed readiness, run `aegean doctor --json`. Its result can differ
-from these dated records.
+The operator approved the manual source-work exception used for PR #2, tests, independent review and removal of the current installation.
+Installation and live qualification remain separate operator actions.
+The [review record](OPERATOR-COMMANDS-REVIEW.md) describes the implementation, findings and corrections.
+The [operations guide](OPERATIONS.md) owns the installation, configuration, recovery and pilot commands.
+
+The source adds repeatable development commands, host checks, verifier lifecycle commands and preparation without model calls.
+The uninstall command archives the installation and preserves private state, authentication and the verifier disk.
+The approved compatibility fix preserves original terminal records without an invented policy identity.
+Active legacy records and malformed records still fail validation.
+Explicit control migration remains necessary after installation.
+
+The live inspection found no owner, active execution or verifier containers.
+It did not change control commit `8b5cc8c3744568a79910e225a1cfe9e88d51c004` or its two cancelled records.
+No live model call, control migration, publication, merge or new release installation formed part of this work.
+
+### Verification and uninstall result
+
+- Locked dependencies, type checks and script syntax checks passed.
+- The final suite passed **204 tests, with no failures or skips**: 191 TypeScript tests and 13 script tests.
+- The suite durations were 623.19 seconds and 1.12 seconds, respectively.
+- Strict OpenSpec validation, local documentation links, shell examples and `git diff --check` passed.
+- Independent review found no remaining blocking source issue, including the approved compatibility fix.
+- The maintained uninstall removed the managed command, skill links and routing blocks. The dedicated verifier is stopped.
+- Post-uninstall checks confirmed the backup, unchanged host settings and unchanged control history.
+
+The maintained uninstall retained a local recovery backup.
+
+The first stop attempt rejected Homebrew Docker 29.9.3 before any VM change.
+The successful stop used the existing pinned Docker 29.9.1 binary, which now resides in the backup.
+Use this path for the primary host's next installation and later commands in the same shell:
+
+```sh
+cd ~/Projects/aegean
+export PATH="$HOME/.local/share/aegean-backups/uninstall-1794772554047-9ecb2363-9719-4caf-a2e2-ef2129fd5e17/installation/host-tools/docker-29.9.1/docker:$HOME/.local/bin:$PATH"
+sh scripts/bootstrap.sh
+aegean info --json
+aegean migrate-control --approver LOGIN
+aegean qualify
+aegean doctor --require prerequisites
+```
+
+Keep the backup while this Docker path remains in use.
+For another shell, repeat the export or add it to your shell configuration.
+The explicit migration preserves the cancelled history; uninstall did not migrate it.
+Qualification and the bounded pilot remain unverified on the new release.
+Use the [operations guide](OPERATIONS.md) for project checks, preparation, limits and authorisation before a feature run.
+
+For PR #2 source evidence, read [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
+The dated records below describe earlier installations and do not override this current record.
 
 ## Evidence and history
 

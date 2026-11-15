@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { assertNoUninstall } from './uninstall-core.mjs';
 import { sourceProvenance } from './source-provenance.mjs';
 import { assertRoutingAllowsSelection, managedRelease, routingAction, routingContext, safeParents, validateInstalledRelease, withInstallationLock } from './routing.mjs';
 
@@ -11,6 +12,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const flag = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const userRoot = await realpath(resolve(flag('--user-root') ?? homedir()));
+await assertNoUninstall(userRoot);
 const data = join(userRoot, '.local/share/aegean');
 const releases = join(data, 'releases');
 const current = join(data, 'current');
@@ -41,6 +43,7 @@ async function selectRelease(release) {
   const context = await routingContext(userRoot); release = await managedRelease(context, release);
   await validateInstalledRelease(release);
   return withInstallationLock(context, async () => {
+  await assertNoUninstall(userRoot);
   const routing = await assertRoutingAllowsSelection(context, release);
   const manifest = JSON.parse(await readFile(join(release, 'installation.json'), 'utf8'));
   if (await realpath(manifest.node) !== await realpath(process.execPath)) throw new Error('Selected release Node path differs from its verified runtime');
@@ -99,7 +102,7 @@ if (args.includes('--rollback')) {
     execFileSync('npm', ['run', 'build'], { cwd: build, stdio: 'inherit' });
     const { treeDigest } = await import(pathToFileURL(join(build, 'dist/src/adapters/files.js')).href);
     const { releaseArtifacts, fileHash } = await import(pathToFileURL(join(build, 'dist/src/adapters/release-artifacts.js')).href);
-    for (const name of ['dist', 'docs', 'skills', 'policy', 'scripts', 'toolchain.json', 'package.json', 'package-lock.json']) await cp(join(build, name), join(staging, name), { recursive: true });
+    for (const name of ['dist', 'docs', 'examples', 'skills', 'policy', 'scripts', 'toolchain.json', 'package.json', 'package-lock.json']) await cp(join(build, name), join(staging, name), { recursive: true });
     await mkdir(join(staging, 'tools'));
     for (const name of ['package.json', 'package-lock.json']) await cp(join(build, 'tools', name), join(staging, 'tools', name));
     execFileSync('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: staging, stdio: 'inherit' });
