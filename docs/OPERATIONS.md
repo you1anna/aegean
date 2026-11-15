@@ -4,8 +4,8 @@
 
 Aegean remains under trial. Read [current status](STATUS.md) before any installation
 or run. Installation, live trials and release acceptance require explicit approval.
-This guide describes the source in PR #2. It includes local decisions and monitored token allowances.
-The older installed bootstrap uses different procedures. See [source and installed versions](ENGINEERING.md#source-and-installed-versions) before use.
+This guide describes the local operator commands in this source version. Install this version before use.
+Older installed releases can have different commands. See [source and installed versions](ENGINEERING.md#source-and-installed-versions) before use.
 Use the guide path from the installed `aegean doctor --json` for live operations.
 
 [Install](#install-on-either-mac) · [Configure](#configure-and-approve-billing-policy) ·
@@ -26,9 +26,9 @@ The bootstrap implementation is on `main`. A merged change does not update the
 installed release or establish readiness. Each Mac needs its own evidence.
 
 [toolchain.json](../toolchain.json) owns the required versions. Claude Code must
-already be installed with subscription authentication. Colima and the Docker
-client must match the declared versions. Missing or different versions stop
-installation for review.
+already be installed with subscription authentication. Colima must match the declared version. Bootstrap downloads the pinned Docker client
+from [Docker](https://download.docker.com/mac/static/stable/), verifies archive and binary SHA-256 hashes, and includes it in the release.
+The installed command selects that client automatically. Homebrew Docker and shell configuration remain unchanged.
 
 ### Install the reviewed version
 
@@ -36,13 +36,18 @@ From a clean, committed checkout, run:
 
 ```sh
 sh scripts/bootstrap.sh
-~/.local/bin/aegean doctor --json
+~/.local/bin/aegean info --json
+~/.local/bin/aegean doctor --require prerequisites
 ```
 
 The bootstrap installs pinned Node through mise, installs locked packages with
 lifecycle scripts disabled, runs checks and installs a versioned release.
 It can install mise through Homebrew if mise is absent. It also configures the
 dedicated Colima verifier through `scripts/setup-verifier.mjs`.
+No backup or Docker PATH export is required. Downloads use a private staging directory and an exclusive lock.
+A checksum or network failure stops installation and permits a clean retry.
+If interruption leaves a `host-tools/docker-<version>-<arch>.lock` directory, confirm no installer remains before removing that lock.
+If a cached client fails its integrity check, inspect and remove that client, then repeat bootstrap.
 
 Codex and OpenSpec live inside the release. The installer copies the existing
 Claude binary into the release. It leaves the ordinary Claude installation and
@@ -67,14 +72,16 @@ its absolute path. Skills live in `~/.agents/skills/aegean` and
 `~/.claude/skills/aegean`. The installer adds managed guidance with backups.
 Restart existing agent sessions if they do not discover the skill.
 
-For an approved native diagnostic, use the managed runtime:
+After approval for native qualification, run:
 
 ```sh
-mise exec -- node scripts/probe-builder.mjs
+aegean qualify
+aegean doctor --require prerequisites
 ```
 
-Homebrew Node can require external libraries that the filesystem policy correctly
-rejects. Do not broaden the policy to make that runtime pass.
+Qualification records Builder containment and protected-verifier observations for the exact installed host and release.
+It does not call models or accept the full release. Failed or unknown observations block pilot execution.
+The historical host-Builder probe is retired; do not use it as an installation check.
 
 The verifier uses a dedicated Colima profile and a pinned image. Keep the user's
 other Docker context selected; Aegean names its context explicitly. Never expose
@@ -83,6 +90,69 @@ the host home or Docker socket to candidate code.
 VM resources come from [toolchain.json](../toolchain.json). Candidate limits come
 from [the verifier adapter](../src/adapters/verifier.ts): 1 CPU, 512 MiB of memory,
 64 processes and 15 seconds per case.
+
+## Host commands
+
+Inspect the installed release and authentication without model calls:
+
+```sh
+aegean info --json
+aegean auth status
+aegean verifier status
+aegean doctor --require prerequisites
+```
+
+If a subscription login is absent, authenticate in your own terminal:
+
+```sh
+aegean auth login claude
+aegean auth login codex
+```
+
+Start the existing dedicated verifier when needed:
+
+```sh
+aegean verifier start
+aegean doctor --require prerequisites
+```
+
+Start preserves the selected Docker context. It does not pull images or replace missing provisioning.
+If provisioning is absent, use the reviewed bootstrap installer. An uncertain transition retains its host reservation.
+After you confirm the owning process stopped, inspect the VM and use `aegean verifier recover --confirm-stopped`.
+This command clears stopped host reservations only; it does not clear run ownership or resources.
+
+Stop the verifier after work completes:
+
+```sh
+aegean verifier stop
+```
+
+Stop refuses active or uncertain resources and retained containers. Inspect the run records before recovery.
+`doctor --require prerequisites` exits nonzero when a prerequisite fails.
+`doctor --require full` also requires release acceptance. Default `doctor --json` reports state without a readiness exit check.
+Use `aegean COMMAND --help` to inspect command arguments. Unknown and duplicate options fail before effects.
+
+## Configuration files
+
+| File | Purpose |
+| --- | --- |
+| Repository `toolchain.json` | Runtime, provider, VM and image pins |
+| Repository `mise.toml` | Source runtime selection, checked against the Node pin |
+| Root and tools `package-lock.json` | Locked dependencies; source setup preserves these files |
+| Project `aegean.json` | Reviewed approver, task scope, verifier and token allowances |
+| Private `~/.local/state/aegean/settings.json` | Host identity, exclusions, billing acknowledgement and control locations |
+| Operator-selected `pilot-limits.json` | Reusable pilot duration and call limits; not approval |
+| Installed `installation.json` | Recorded release identity; never edit this file |
+
+Start from the [project example](../examples/aegean.json) and [pilot limits example](../examples/pilot-limits.json).
+Replace the example repository, approver ID, commands and task scope with reviewed values for your project.
+The sample token allowances are examples, not measured estimates for your task.
+Keep credentials, prompts, private suites and run records outside Git.
+
+A pilot limits file contains `schemaVersion`, `expiresInMinutes`, `maxModelCalls`, `activeMinutes`, `maxRepairs` and `maxRevisions`.
+Unknown fields and mixed file/individual flags are rejected. Expiry cannot exceed 24 hours.
+Authorisation freezes effective values and the file digest; later file edits do not expand a run.
+Token allowances remain in the project's `modelExecution.budget`. Strict token caps are unsupported.
 
 ## Configure and approve billing policy
 
@@ -130,19 +200,8 @@ An agent answer cannot supply this acknowledgement. Aegean rejects API keys,
 alternate-provider variables and paid fallbacks. Authentication checks make no
 model calls.
 
-After confirmation and approval for the exercise, run the subscription smoke check:
-
-```sh
-mise exec -- node scripts/smoke-subscriptions.mjs
-```
-
-It tests the installed release with one small call per provider, capped at
-90 seconds each. Codex must create an exact synthetic file with restricted tools.
-Claude must return valid JSON with tools disabled.
-
-The script rejects unconfirmed billing or absent subscription authentication.
-It removes its temporary workspace and keeps private receipts under
-`~/.local/state/aegean/acceptance-evidence/`. It never enables full readiness.
+Use `aegean auth status` for a check without model calls.
+The historical host-Builder smoke script is retired. Native qualification and live pilots use the VM boundary and need separate approval.
 
 ### Project eligibility
 
@@ -174,19 +233,36 @@ they do not grant permission for a trial or bypass readiness checks.
 
 ### Specification and approval
 
-Capture console output as described under [run records](#run-records-and-debugging).
-Then start the approved request from its enrolled project:
+From the prepared project's clean, reviewed main revision, check the configuration:
 
 ```sh
-aegean start --request /path/to/request.md
+aegean project check --json
 ```
 
-This creates a run and isolated worktree. Native prerequisites must pass before a model executes.
-Without full release acceptance, the human must authorise a scoped pilot before the first call.
-Use `aegean --help` to inspect the required `authorize-pilot` options.
-The command requires an expiry, active minutes, model-call limit, repair limit and revision limit.
-Its terminal confirmation binds the run, request, repository, host, project policy and exact release.
-An expired or changed pilot cannot authorise further execution.
+This reads configuration and Git identity without executing project commands or allocating a run.
+It rejects old schemas and missing budgets. Image compatibility does not prove that project executables or dependencies exist in the verifier.
+Review configuration changes through the project's own workflow before a run.
+
+Prepare the request without a model call:
+
+```sh
+aegean prepare --request /absolute/path/to/request.md
+```
+
+The result contains the run ID. Repeated preparation returns the existing unfinished run or a specific recovery conflict.
+Use that ID and your reviewed limits file:
+
+```sh
+aegean authorize-pilot --run RUN_ID --limits /absolute/path/to/pilot-limits.json
+aegean resume --run RUN_ID
+```
+
+Answer the exact authorisation prompt yourself. The prompt shows the effective limits and project token allowances.
+Native prerequisites must pass. Without full release acceptance, scoped pilot authorisation is required before the first model call.
+`prepare` and `authorize-pilot` do not call models. `resume` executes the authorised stage.
+The existing `start --request FILE` remains available; it prepares a run and immediately attempts resume.
+
+Console diagnostics are captured automatically. Read the printed run and log paths; do not add a tee pipeline around human decisions.
 
 The default approval mode is `local`. It stops after the specification draft without a GitHub push.
 Before approval, edit only `openspec/changes/RUN_ID/` in the isolated worktree.
@@ -267,30 +343,22 @@ Keep three records for every real run. Each has one owner and one location.
 | Record | Owner and location |
 | --- | --- |
 | Coordinator records | Aegean writes `~/.local/state/aegean/runs/<run-id>/`. |
-| Console capture | the operator writes `~/Library/Logs/aegean/<project>-<date>.log`. |
-| Run note | The session adds one short entry to [PILOT-NOTES.md](PILOT-NOTES.md). |
+| Operator diagnostics | Aegean writes private files under `~/Library/Logs/aegean/`. |
+| Run note | The session adds a reviewed entry to [PILOT-NOTES.md](PILOT-NOTES.md). |
 
-Coordinator records include `run.json`, `request.md`, `pr-body.md`, per-role
-`usage/` and `effects/`, verification receipts, reviews, the patch and the worktree.
-Read these files; never edit them. `aegean status --run ID` reads the same state.
+Start, prepare, resume, cancel, recover and publish create diagnostic logs automatically.
+The terminal prints the log path and a concise note summary. Add the observed result to the pilot notes through the repository workflow.
+Logs contain structured command, stage, release, run, elapsed-time and failure-category records.
+They deliberately exclude raw error text, prompts, authentication output and protected values; use private coordinator records for deeper diagnosis.
 
-Aegean prints errors to the terminal. Capture every real `start`, `resume`,
-`cancel` and `recover` command. Create the private log directory first:
+Each invocation retains at most four 5 MiB segments. Capacity exhaustion prints an omission notice.
+Log creation failure blocks execution. A log write failure stops further model calls and preserves recovery state.
+Directories use mode 0700 and files use mode 0600. Symlink destinations are rejected.
+Human confirmation retains the terminal, and interruption retains the command's failure status.
 
-```sh
-mkdir -p ~/Library/Logs/aegean
-chmod 700 ~/Library/Logs/aegean
-```
-
-For example, after you assign the intended run ID to `RUN`:
-
-```sh
-log=~/Library/Logs/aegean/project-$(date +%F).log
-{ date -u +%FT%TZ; aegean resume --run "$RUN"; echo "exit $?"; } 2>&1 | tee -a "$log"
-```
-
-Keep all three records private. Raw logs, prompts and run files stay outside Git.
-Run notes contain identifiers, outcomes and paths, never copied log content.
+Coordinator records include `run.json`, `request.md`, `pr-body.md`, per-role usage, effects, receipts, reviews, the patch and worktree.
+Read these files; never edit them. Raw logs, prompts and run files stay outside Git.
+Diagnostic logs are not acceptance evidence. Older releases still need the manual console capture described in their installed guide.
 
 Completed role output is stored in private `effects/` records. The model CLIs still disable their own session persistence.
 Usage records have stable effect identifiers. `model-budget.json` owns reservations and settlement.
@@ -354,3 +422,42 @@ Keep unrelated project records and instructions outside this checkout.
 The human can inspect and confirm legacy control migration with `aegean migrate-control --approver LOGIN`.
 Migration rejects active legacy ownership and preserves run records. Repeated migration leaves the migrated ledger unchanged.
 Policy changes do not migrate an existing run automatically. Use its compatible release or cancel it.
+
+## Uninstall and reinstall
+
+Uninstall removes the managed command and skill links, removes only Aegean's managed instruction blocks, and archives the installation.
+It preserves private state, host exclusions, run records, evidence, provider authentication, external runtimes and the Colima disk.
+It does not reset a run, enable readiness or delete unrelated configuration.
+An older ledger must have no owner and only terminal runs; uninstall checks this without migration.
+
+After you finish or recover all active work, run:
+
+```sh
+aegean uninstall --confirm
+```
+
+For an older release without this command, build the reviewed source and run:
+
+```sh
+./scripts/dev build
+mise exec -- node scripts/uninstall.mjs --confirm
+```
+
+The command prints the backup path under `~/.local/share/aegean-backups/`.
+A private journal at `~/.local/share/aegean-uninstall.json` supports interrupted retries and blocks installation while uninstall is incomplete.
+If the managed command is absent after interruption, repeat the source command above.
+Do not edit the journal or delete an owner marker to force progress.
+
+To install again from a clean, committed and reviewed source checkout:
+
+```sh
+sh scripts/bootstrap.sh
+aegean info --json
+aegean auth status
+aegean doctor --require prerequisites
+```
+
+If `aegean status` reports a legacy ledger, run `aegean migrate-control --approver YOUR_GITHUB_LOGIN` and review its terminal prompt.
+This migration is a separate human decision and preserves control history.
+The retained state does not qualify a different release. After approval, run `aegean qualify` for its native prerequisites.
+A real pilot and full acceptance remain separate steps. Preserve the uninstall backup until the new installation passes your checks.

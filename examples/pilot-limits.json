@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "expiresInMinutes": 120,
+  "maxModelCalls": 12,
+  "activeMinutes": 60,
+  "maxRepairs": 2,
+  "maxRevisions": 2
+}

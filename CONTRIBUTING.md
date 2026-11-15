@@ -6,22 +6,23 @@ Read [AGENTS.md](AGENTS.md) for repository rules and [the accepted plan](docs/PL
 
 ## Check the source
 
-Use the Node version in [mise.toml](mise.toml). From the repository root, run:
+Use the local script from the repository root:
 
 ```sh
-mise install
-mise exec -- npm ci --ignore-scripts --no-audit --no-fund
-mise exec -- npm run check
-mise exec -- npm test
+./scripts/dev setup
+./scripts/dev check
+./scripts/dev test
 ```
 
-These commands install development dependencies, check types, build the source
-and run the automated tests. They do not install an Aegean release.
-The suite uses synthetic fixtures and temporary directories.
-See [testing](docs/TESTING.md) for focused checks, resource limits and fixture requirements.
+`setup` installs the pinned runtime and locked dependencies. `check` checks types and script syntax.
+`test` removes old compiled output, builds the source and runs the synthetic suite.
+For a compile without tests, use `./scripts/dev build`. Use `./scripts/dev help` for the command list.
+The script resolves the checkout from its own location, so paths with spaces work.
+These commands do not install a release, start a VM or call models.
 
-After a branch change, move any old `dist/` output aside before these checks.
-The build does not remove obsolete compiled files.
+The existing `npm ci`, `npm run check` and `npm test` commands remain available under the pinned runtime.
+The script serialises source tasks. A retained lock under `.aegean/` requires process inspection before manual removal.
+Never remove a live owner's lock. After interruption, correct the failed step and repeat the command.
 
 Passing tests establish only the behaviour they exercise. Native containment,
 live provider calls and real pilot acceptance need separate evidence.

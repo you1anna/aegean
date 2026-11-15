@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "standardVersion": "0.4.0",
+  "repository": "example/cli-project",
+  "approver": {
+    "id": 1,
+    "login": "example"
+  },
+  "approvalMode": "local",
+  "modelExecution": {
+    "budget": {
+      "enforcement": "monitored",
+      "maxTokensPerRun": 100000,
+      "maxTokensPerCall": 20000
+    },
+    "task": {
+      "class": "unknown",
+      "paths": [],
+      "dependencies": [],
+      "concerns": []
+    }
+  },
+  "checks": [
+    [
+      "node",
+      "--check",
+      "app.cjs"
+    ]
+  ],
+  "verifier": {
+    "kind": "cli",
+    "image": "node@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797",
+    "command": [
+      "node",
+      "app.cjs"
+    ]
+  }
+}

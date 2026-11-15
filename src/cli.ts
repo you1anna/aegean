@@ -11,6 +11,14 @@ import { qualifyHost } from './application/qualification.js';
 import { decide } from './application/decision-commands.js';
 import { migrateControl } from './application/control-migration.js';
 import { recover } from './application/recovery.js';
+import { prepareRun } from './application/prepare.js';
+import { checkProject } from './application/project-check.js';
+import { releaseInfo, authCommand, verifierCommand } from './application/operator.js';
+import { parsePilotLimits } from './domain/pilot-limits.js';
+import { validateArguments } from './application/cli-arguments.js';
+import { reserveHost } from './adapters/host-activity.js';
+import { OperatorLog, setOperatorLog, failureCode } from './adapters/operator-log.js';
+import { readBoundedEvidenceFile } from './adapters/acceptance-evidence.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
@@ -24,16 +32,38 @@ const repeated = (name: string): string[] => args.flatMap((arg, index) => {
 });
 const controller = new AbortController();
 process.on('SIGINT', () => controller.abort()); process.on('SIGTERM', () => controller.abort());
+let log: OperatorLog | undefined;
+let hostRelease: (()=>Promise<void>) | undefined;
 try {
+  const help = validateArguments(args);
+  if (help) { console.log(help); process.exit(0); }
+  if (['start','prepare','resume','cancel','recover','publish'].includes(args[0] ?? '')) {
+    log = new OperatorLog(); setOperatorLog(log);
+    const installed=await releaseInfo(root).catch(()=>undefined);
+    log.event('begin', {command: args[0]!, ...(installed?.sourceCommit ? {release:installed.sourceCommit} : {})});
+    console.error(`Private diagnostic log: ${log.path}`);
+  }
+  if (['start','prepare','cancel','recover','approve','publish','authorize-pilot','revise'].includes(args[0] ?? '')) hostRelease=await reserveHost(stateRoot(),'execution',args[0]!);
   let result: unknown;
   switch (args[0]) {
-    case 'doctor': result = await doctor(root); break;
-    case 'qualify': result = await qualifyHost(root, stateRoot(), (await hostConfig()).host, controller.signal); break;
+    case 'info': result = await releaseInfo(root); break;
+    case 'auth': result = await authCommand(root,args[1] ?? '',args[2],controller.signal); break;
+    case 'verifier': result = await verifierCommand(args[1] ?? '',controller.signal,args.includes('--confirm-stopped')); break;
+    case 'project': if(args[1] !== 'check') throw new Error('Usage: aegean project check'); result = await checkProject(process.cwd(),controller.signal); break;
+    case 'prepare': result = await prepareRun(process.cwd(),(await readBoundedEvidenceFile(resolve(required('--request')),60_000)).toString('utf8'),controller.signal); break;
+    case 'doctor': {
+      const mode=optional('--require'); if(mode && !['prerequisites','full'].includes(mode)) throw new Error('--require must be prerequisites or full');
+      const report=await doctor(root); result=report;
+      if(mode && !(mode === 'full' ? report.fullWorkflowReady : report.prerequisitesReady)) process.exitCode=1;
+      break;
+    }
+    case 'qualify': { const release=await reserveHost(stateRoot(),'execution','qualify'); try { result = await qualifyHost(root, stateRoot(), (await hostConfig()).host, controller.signal); } finally { await release(); } break; }
     case 'configure': result = await configure({ controlRemote: optional('--control-remote'), verifierCheckout: optional('--verifier-checkout'), image: optional('--image'), excludedRoots: repeated('--exclude') }); break;
     case 'accept-release': result = await acceptRelease(root, required('--manifest')); break;
     case 'enrol': result = await enrol(process.cwd(), flag('--config'), binaries(root).openspec, args.includes('--check')); break;
     case 'start': result = await start(root, process.cwd(), await readFile(required('--request'), 'utf8'), controller.signal); break;
     case 'authorize-pilot':
+      if (optional('--limits')) { result=await decide(root,required('--run'),'pilot',parsePilotLimits(JSON.parse((await readBoundedEvidenceFile(resolve(required('--limits')),8192)).toString('utf8'))),controller.signal); break; }
       result = await decide(root, required('--run'), 'pilot', { expiresAt: Date.parse(required('--expires-at')), budget: { maxModelCalls: Number(required('--max-model-calls')), activeTimeoutMs: Number(required('--active-minutes')) * 60000, maxRepairs: Number(required('--max-repairs')), maxRevisions: Number(required('--max-revisions')) } }, controller.signal); break;
     case 'approve': result = await decide(root, required('--run'), 'approve', {}, controller.signal); break;
     case 'publish':
@@ -50,16 +80,22 @@ try {
     case 'recover': result = await recover(required('--run'), args.includes('--confirm-stopped'), root); break;
     case 'activate-routing': case 'deactivate-routing': case 'migrate-routing': case 'recover-routing':
       result = await checked(process.execPath, [join(root, 'scripts/install.mjs'), `--${args[0]}`, ...repeated('--project').flatMap(value => ['--project', value]), ...repeated('--project-path').flatMap(value => ['--project-path', value])], { timeoutMs: 60000, signal: controller.signal }); break;
+    case 'uninstall': if(!args.includes('--confirm')) throw new Error('Uninstall requires --confirm; preserves records and creates a recovery backup'); result=await checked(process.execPath,[join(root,'scripts/uninstall.mjs'),'--confirm'],{timeoutMs:120000,signal:controller.signal}); break;
     case 'rollback': result = await checked(process.execPath, [join(root, 'scripts/install.mjs'), '--rollback'], { timeoutMs: 30000 }); break;
     case 'upgrade':
       result = await checked('/bin/sh', [join(resolve(required('--source')), 'scripts/bootstrap.sh')], { timeoutMs: 600000 }); break;
     case '--version': result = { version: packageInfo.version }; break;
-    case undefined: case '--help': case 'help':
-      console.log(`Aegean ${packageInfo.version} — bootstrap; full workflow requires acceptance\n\nCommands:\n  doctor --json\n  qualify  (record native prerequisites for this host; does not accept release)\n  configure --control-remote URL --verifier-checkout PATH --exclude PATH [--exclude PATH ...]\n  configure --exclude PATH [--exclude PATH ...]  (add exclusions to an existing host)\n  accept-release --manifest FILE\n  enrol --check | --config FILE\n  start --request FILE\n  status [--run ID]\n  authorize-pilot --run ID --expires-at ISO --max-model-calls N --active-minutes N --max-repairs N --max-revisions N\n  approve --run ID\n  publish --run ID\n  revise --run ID --scope implementation|contract\n  migrate-control --approver LOGIN\n  resume --run ID\n  cancel --run ID\n  recover --run ID --confirm-stopped\n  upgrade --source PATH\n  rollback\n  activate-routing --project OWNER/REPO --project-path PATH [repeat pairs]\n  deactivate-routing | migrate-routing | recover-routing\n\nOperations: ${join(root, 'docs/OPERATIONS.md')}`); process.exit(0);
     default: throw new Error(`unknown command: ${args[0]}`);
   }
+  const summary=result && typeof result==='object' ? result as {id?:string;run?:{id?:string}} : undefined;
+  const runId=summary?.id ?? summary?.run?.id ?? optional('--run');
+  log?.event('complete',{command:args[0]!, ...(runId ? {run:runId} : {})});
+  if(log) console.error(`Pilot note: command=${args[0]} run=${runId??'none'} result=completed log=${log.path}`);
   console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
   if (controller.signal.aborted) process.exitCode = 130;
 } catch (error) {
+  try { log?.event(controller.signal.aborted?'interrupted':'failed',{command:args[0]!,code:controller.signal.aborted?130:1,failure:failureCode((error as Error).message)}); } catch { console.error('Private diagnostic capture failed; inspect retained run records.'); }
   console.error(JSON.stringify({ error: (error as Error).message, recovery: args[0] === 'configure' ? 'Inspect host configuration in the operations guide before retrying.' : 'Run aegean status and inspect the operations guide before retrying effects.' })); process.exitCode = controller.signal.aborted ? 130 : 1;
 }
+
+finally { setOperatorLog(undefined); log?.close(); await hostRelease?.(); }

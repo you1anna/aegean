@@ -8,12 +8,12 @@ import { ExecutionBudget, defaultBudget, remainingExecution } from '../domain/bu
 import { privateRunDirectory, type LocalRun } from './run-record.js';
 import { DecisionSchema, frozenProject } from './decisions.js';
 import { budgetStatus } from './usage-budget.js';
-const Artifact = z.object({ schemaVersion: z.literal(1), kind: z.literal('pilot'), host: z.string().uuid(), run: z.string(), repository: z.string(), request: z.string().regex(/^[a-f0-9]{64}$/), projectPolicy: z.string().regex(/^[a-f0-9]{64}$/), release: z.object(identityShape).strict(), expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), budget: ExecutionBudget }).strict();
+const Artifact = z.object({ schemaVersion: z.literal(1), kind: z.literal('pilot'), host: z.string().uuid(), run: z.string(), repository: z.string(), request: z.string().regex(/^[a-f0-9]{64}$/), projectPolicy: z.string().regex(/^[a-f0-9]{64}$/), release: z.object(identityShape).strict(), expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), budget: ExecutionBudget, limitsDigest: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 export type PilotArtifact = z.infer<typeof Artifact>;
 export const PilotRecord = z.object({ artifact: Artifact, decision: DecisionSchema }).strict();
-export async function pilotArtifact(root: string, dir: string, local: LocalRun, run: Run, expiresAt: number, budget: ExecutionBudget): Promise<PilotArtifact> {
+export async function pilotArtifact(root: string, dir: string, local: LocalRun, run: Run, expiresAt: number, budget: ExecutionBudget, limitsDigest?: string): Promise<PilotArtifact> {
   await privateRunDirectory(dir); await frozenProject(local, run, { allowMissingWorktree: true });
-  return Artifact.parse({ schemaVersion: 1, kind: 'pilot', host: run.host, run: run.id, repository: run.repository, request: digest(await readBoundedEvidenceFile(local.sourceRequest, 60_000)), projectPolicy: run.projectPolicy, release: await releaseIdentity(root), expiresAt, budget });
+  return Artifact.parse({ schemaVersion: 1, kind: 'pilot', host: run.host, run: run.id, repository: run.repository, request: digest(await readBoundedEvidenceFile(local.sourceRequest, 60_000)), projectPolicy: run.projectPolicy, release: await releaseIdentity(root), expiresAt, budget, ...(limitsDigest ? {limitsDigest} : {}) });
 }
 export async function persistPilot(dir: string, run: Run, artifact: PilotArtifact, decision: HumanDecision): Promise<void> {
   await privateRunDirectory(dir); PilotRecord.parse({ artifact, decision });
@@ -29,7 +29,7 @@ export async function executionAuthorization(root: string, dir: string, local: L
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   // A pilot's limits continue to apply even if ordinary acceptance arrives later.
   if (saved) {
-    const actual = await pilotArtifact(root, dir, local, run, saved.artifact.expiresAt, saved.artifact.budget);
+    const actual = await pilotArtifact(root, dir, local, run, saved.artifact.expiresAt, saved.artifact.budget, saved.artifact.limitsDigest);
     assertDecision(saved.decision, 'pilot', run.id, actual, run.approver);
     if (digest(JSON.stringify(actual)) !== digest(JSON.stringify(saved.artifact)) || saved.decision.decidedAt >= actual.expiresAt) throw new Error('pilot authorization scope changed');
   } else if (!ordinaryReady) throw new Error(`Pilot authorization required: aegean authorize-pilot --run ${run.id}; ordinary acceptance is pending`);

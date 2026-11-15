@@ -16,7 +16,7 @@ import { buildSpecArtifact, buildPublicationArtifact, buildRevisionArtifact, per
 import { pilotArtifact, persistPilot, executionAuthorization, type PilotArtifact } from './pilot.js';
 
 type Action = 'approve' | 'publish' | 'revise' | 'pilot';
-export interface DecisionOptions { scope?: 'implementation' | 'contract'; expiresAt?: number; budget?: ExecutionBudget }
+export interface DecisionOptions { scope?: 'implementation' | 'contract'; expiresAt?: number; budget?: ExecutionBudget; limitsDigest?: string }
 type Artifact = LocalDecisionArtifact | PilotArtifact;
 
 /** Remote reads do not trust the candidate's origin or a PR number alone. */
@@ -60,7 +60,7 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       if (action === 'pilot') {
         if (!options.budget || !options.expiresAt || options.expiresAt <= Date.now() || options.expiresAt > Date.now() + 86_400_000) throw new Error('pilot requires explicit budgets and future expiry within 24 hours');
         if (!(await doctor(root)).prerequisitesReady) throw new Error('pilot requires passing native and subscription prerequisites');
-        return pilotArtifact(root, dir, local, run, options.expiresAt, options.budget);
+        return pilotArtifact(root, dir, local, run, options.expiresAt, options.budget, options.limitsDigest);
       }
       if (action === 'approve') {
         if (run.state !== 'spec-drafted') throw new Error('specification approval requires spec-drafted state');
@@ -84,7 +84,8 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       }
       const request = (await readBoundedEvidenceFile(local.sourceRequest, 60_000)).toString('utf8');
       const patch = action === 'pilot' ? '' : await candidateGitChecked(['diff', local.base, action === 'revise' ? 'HEAD' : action === 'approve' ? run.specCommit! : run.commit!], { cwd: local.worktree, maxBytes: 200_000, signal });
-      const summary = `${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
+      const tokenPolicy = action === 'pilot' ? (await frozenProject(local,run,{allowMissingWorktree:true})).modelExecution?.budget : undefined;
+      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
       if (Buffer.byteLength(summary) > 300_000) throw new Error('decision review exceeds bounded capacity');
       return { artifact, run, summary, authorized: false };
     });

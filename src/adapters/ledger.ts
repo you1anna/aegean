@@ -39,7 +39,10 @@ const RunFields = {
   resumeState: state.optional(), reason: text.optional(),
 };
 const runHistoryValid = (run: { createdAt: number; updatedAt: number; events: string[] }) => run.updatedAt >= run.createdAt && new Set(run.events).size === run.events.length;
-const HistoricalRunSchema = z.object({ schemaVersion: z.literal(1), ...RunFields }).strict().refine(runHistoryValid);
+// Original bootstrap terminal records predate policy hashes. Preserve absence;
+// never infer an identity or permit these records to execute.
+const HistoricalRunSchema = z.object({ schemaVersion: z.literal(1), ...RunFields, policyIdentity: hash.optional() }).strict()
+  .refine(runHistoryValid).refine(run => run.policyIdentity !== undefined || (run.policy === '0.1.0' && terminal(run.state)));
 const RunSchema = z.object({ schemaVersion: z.literal(2), ...RunFields, approver: ApproverSchema, projectPolicy: hash, revisions: integer, revisionRef: text.optional(), reviewCommit: commit.optional() }).strict().refine(runHistoryValid);
 const RunsSchema = z.record(id, z.union([RunSchema, HistoricalRunSchema])).refine(runs => Object.keys(runs).length <= maxRuns);
 const OwnersSchema = z.record(id, PermitSchema).refine(owners => Object.keys(owners).length <= maxRuns);
@@ -84,7 +87,7 @@ function quiescentMigration(value: unknown): { schemaVersion: 1 | 2; ledger: Led
   if (typeof value === 'object' && value !== null && 'schemaVersion' in value && value.schemaVersion === 2) return { schemaVersion: 2, ledger: parseLedger(value) };
   const legacy = LegacySchema.safeParse(value); if (!legacy.success) return invalid();
   if (legacy.data.owner || Object.values(legacy.data.runs).some(run => !terminal(run.state))) throw new Conflict('control migration requires a quiescent legacy ledger: no owner and all runs terminal');
-  return { schemaVersion: 1, ledger: { ...emptyLedger(), revision: legacy.data.revision, runs: legacy.data.runs as Record<string, HistoricalRun> } };
+  return { schemaVersion: 1, ledger: parseLedger({ ...emptyLedger(), revision: legacy.data.revision, runs: legacy.data.runs }) };
 }
 
 /** Durable ownership always applies; effectful operations additionally need the repository permit. */
