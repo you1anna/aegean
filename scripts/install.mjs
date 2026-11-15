@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ensureDocker } from './docker-client.mjs';
 import { assertNoUninstall } from './uninstall-core.mjs';
 import { sourceProvenance } from './source-provenance.mjs';
 import { assertRoutingAllowsSelection, managedRelease, routingAction, routingContext, safeParents, validateInstalledRelease, withInstallationLock } from './routing.mjs';
@@ -68,7 +69,7 @@ async function selectRelease(release) {
   }
   for (const parent of ['.agents/skills', '.claude/skills']) await link(join(current, 'skills/aegean'), join(userRoot, parent, 'aegean'));
   const temporary = `${wrapper}.${randomUUID()}`;
-  await writeFile(temporary, `#!/bin/sh\n# managed-by-aegean\nexec ${quote(manifest.node)} ${quote(join(current, 'dist/src/cli.js'))} "$@"\n`, { mode: 0o755 }); await rename(temporary, wrapper);
+  await writeFile(temporary, `#!/bin/sh\n# managed-by-aegean\nPATH=${quote(join(current, 'bin/docker-client'))}:"$PATH"\nexport PATH\nexec ${quote(manifest.node)} ${quote(join(current, 'dist/src/cli.js'))} "$@"\n`, { mode: 0o755 }); await rename(temporary, wrapper);
   const old = await exists(current) ? await readlink(current) : null;
   if (old && old !== release) await link(old, previous);
   await link(release, current);
@@ -87,6 +88,7 @@ if (args.includes('--rollback')) {
   const claude = execFileSync('/bin/sh', ['-c', 'command -v claude'], { encoding: 'utf8' }).trim();
   const version = execFileSync(claude, ['--version'], { encoding: 'utf8' });
   if (!version.startsWith(pins.claude + ' ')) throw new Error(`Claude ${pins.claude} required; use the official native version installer before continuing`);
+  const dockerClient = await ensureDocker(userRoot, pins.verifier);
   const appVersion = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')).version;
   const release = join(releases, `${appVersion}-${provenance.sourceHash.slice(0, 12)}`);
   if (!(await exists(release))) {
@@ -108,6 +110,8 @@ if (args.includes('--rollback')) {
     execFileSync('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: staging, stdio: 'inherit' });
     execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: join(staging, 'tools'), stdio: 'inherit' });
     await mkdir(join(staging, 'bin')); await cp(await realpath(claude), join(staging, 'bin/claude'));
+    await mkdir(join(staging, 'bin/docker-client'));
+    await cp(dockerClient, join(staging, 'bin/docker-client/docker'));
     const artifacts = await releaseArtifacts(staging);
     await writeFile(join(staging, 'artifact-manifest.json'), JSON.stringify(artifacts) + '\n');
     const artifactHash = createHash('sha256').update(JSON.stringify(artifacts)).digest('hex');

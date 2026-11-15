@@ -45,3 +45,22 @@ Source-task, uninstall and provisioning fixtures also passed, including partial 
 
 Final full-suite results and the installed-host outcome are recorded in [Status](STATUS.md).
 The [operations guide](OPERATIONS.md) owns the commands and recovery procedures.
+
+## Fresh-install Docker correction
+
+The bootstrap must not depend on a Docker client inside an uninstall backup.
+Bootstrap now downloads the official archive and checks committed archive and binary hashes for each supported Mac architecture.
+The release includes the client in its artifact manifest. Its wrapper selects a Docker-only directory without a shell PATH export.
+A separate reviewer caught and confirmed the fix for accidental selection of the release's older Claude during upgrade.
+The wrapper fixture checks pinned Docker selection alongside a newer external Claude.
+
+Temporary-storage verification passed with a fresh official ARM64 download, executable version check and repeat use.
+Both official architecture archives supplied the committed hashes; native Intel execution remains untested.
+Synthetic checks cover checksum failure, network failure, cache corruption, concurrent ownership and retry.
+No real Aegean installation or VM start formed part of this correction.
+
+The follow-up full run passed 190 of 191 tests in 622.04 seconds.
+Its compiled installer fixture still expected the pre-review Docker path and failed after the Docker-only directory correction.
+After a rebuild, all 35 affected installer and script tests passed with no failures or skips in 27.02 seconds.
+Type checks, script syntax, documentation links, shell examples and strict OpenSpec validation also passed.
+The final independent review found no remaining blocking issue.

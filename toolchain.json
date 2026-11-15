@@ -22,7 +22,17 @@
     "memoryGiB": 2,
     "diskGiB": 20,
     "candidateRoot": "/private/tmp/aegean-verifier",
-    "image": "node@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797"
+    "image": "node@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797",
+    "dockerArtifacts": {
+      "arm64": {
+        "archiveSha256": "7f2c1637313578046e7dd61153e4e4cd1188d83a1e4b71825ab914776c208460",
+        "binarySha256": "8a55fc0cf28b70ebfb3d90f660fbd3a856640e657436ae6887ef53f533276025"
+      },
+      "x64": {
+        "archiveSha256": "9fc063bfae58ecf3c46e7528beaad9814968f7e624e9ba04a7f5cba5becad26c",
+        "binarySha256": "bcf0d2e07ce99c2a31601237235e87fc74a3caa15048f7f4ecfaa13a6f756298"
+      }
+    }
   },
   "models": {
     "schemaVersion": 1,

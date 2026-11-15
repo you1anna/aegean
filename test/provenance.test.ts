@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, cp, rm, readlink, symlink } from 'node:fs/promises';
@@ -13,6 +14,14 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     await cp('scripts', join(repo, 'scripts'), { recursive: true });
     await cp('examples', join(repo, 'examples'), { recursive: true });
     const pins = { ...JSON.parse(await readFile('toolchain.json', 'utf8')), node: process.versions.node };
+    const dockerBytes = '#!/bin/sh\necho synthetic-docker\n';
+    pins.verifier.dockerArtifacts[process.arch] = { archiveSha256: '0'.repeat(64), binarySha256: createHash('sha256').update(dockerBytes).digest('hex') };
+    const dockerDirectory = join(user, '.local/share/aegean/host-tools', `docker-${pins.verifier.dockerClient}-${process.arch}`);
+    await mkdir(dockerDirectory, { recursive: true });
+    await writeFile(join(dockerDirectory, 'docker'), dockerBytes, { mode: 0o755 });
+    // The synthetic release also runs on Linux CI; platform rejection has its own test.
+    const dockerScript = join(repo, 'scripts/docker-client.mjs');
+    await writeFile(dockerScript, (await readFile(dockerScript, 'utf8')).replace('options.platform ?? process.platform', "options.platform ?? 'darwin'"));
     await writeFile(join(repo,'toolchain.json'),JSON.stringify(pins));
     const pkg={name:'synthetic-release',version:'0.1.0',type:'module',scripts:{build:'node build.mjs'}};
     const { dependencies } = JSON.parse(await readFile('package.json', 'utf8'));
@@ -29,6 +38,7 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     }));
     const output:Record<string,string>={
       'app.js':'fresh committed build',
+      'src/cli.js':"import {execFileSync} from 'node:child_process'; console.log(execFileSync('docker',['--version'],{encoding:'utf8'}).trim()); console.log(execFileSync('claude',['--version'],{encoding:'utf8'}).trim());",
       'toolchain.json':JSON.stringify(pins),
     };
     await writeFile(join(repo,'build-output.json'),JSON.stringify(output));
@@ -56,6 +66,11 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     await checked(process.execPath,[join(repo,'scripts/install.mjs'),'--user-root',user],{cwd:repo,env,timeoutMs:30000});
     const release=await readlink(join(user,'.local/share/aegean/current'));
     const installed=JSON.parse(await readFile(join(release,'installation.json'),'utf8'));
+    assert.equal(await readFile(join(release,'bin/docker-client/docker'),'utf8'), dockerBytes);
+    assert.match(await readFile(join(user,'.local/bin/aegean'),'utf8'), /current\/bin/);
+    await writeFile(join(bin,'docker'),'#!/bin/sh\nexit 99\n',{mode:0o755});
+    await writeFile(join(bin,'claude'),'#!/bin/sh\necho external-new-claude\n',{mode:0o755});
+    assert.equal((await checked(join(user,'.local/bin/aegean'),[],{env})).trim(),'synthetic-docker\nexternal-new-claude');
     assert.equal(installed.sourceCommit,identity.sourceCommit);assert.equal(installed.sourceHash,identity.sourceHash);assert.match(installed.buildHash,/^[a-f0-9]{64}$/);
     assert.equal(await readFile(join(release,'dist/app.js'),'utf8'),'fresh committed build');
     await assert.rejects(readFile(join(release,'dist/obsolete.js')));

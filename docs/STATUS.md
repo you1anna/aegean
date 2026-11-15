@@ -46,21 +46,26 @@ No live model call, control migration, publication, merge or new release install
 The maintained uninstall retained a local recovery backup.
 
 The first stop attempt rejected Homebrew Docker 29.9.3 before any VM change.
-The successful stop used the existing pinned Docker 29.9.1 binary, which now resides in the backup.
-Use this path for the primary host's next installation and later commands in the same shell:
+The successful stop used the existing pinned Docker 29.9.1 binary.
+The follow-up passed 35 affected tests after correction of a stale compiled fixture in the full run.
+See the [review record](OPERATOR-COMMANDS-REVIEW.md#fresh-install-docker-correction) for exact results.
+The corrected bootstrap now downloads and verifies that client independently; the backup is only for recovery.
+Run this single install command from the checkout:
 
 ```sh
-cd ~/Projects/aegean
-export PATH="$HOME/.local/share/aegean-backups/uninstall-1794772554047-9ecb2363-9719-4caf-a2e2-ef2129fd5e17/installation/host-tools/docker-29.9.1/docker:$HOME/.local/bin:$PATH"
 sh scripts/bootstrap.sh
-aegean info --json
-aegean migrate-control --approver LOGIN
-aegean qualify
-aegean doctor --require prerequisites
 ```
 
-Keep the backup while this Docker path remains in use.
-For another shell, repeat the export or add it to your shell configuration.
+After installation, inspect authentication, migrate the historical control ledger explicitly and qualify the host:
+
+```sh
+~/.local/bin/aegean info --json
+~/.local/bin/aegean auth status
+~/.local/bin/aegean migrate-control --approver LOGIN
+~/.local/bin/aegean qualify
+~/.local/bin/aegean doctor --require prerequisites
+```
+
 The explicit migration preserves the cancelled history; uninstall did not migrate it.
 Qualification and the bounded pilot remain unverified on the new release.
 Use the [operations guide](OPERATIONS.md) for project checks, preparation, limits and authorisation before a feature run.

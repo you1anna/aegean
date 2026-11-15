@@ -26,9 +26,9 @@ The bootstrap implementation is on `main`. A merged change does not update the
 installed release or establish readiness. Each Mac needs its own evidence.
 
 [toolchain.json](../toolchain.json) owns the required versions. Claude Code must
-already be installed with subscription authentication. Colima and the Docker
-client must match the declared versions. Missing or different versions stop
-installation for review.
+already be installed with subscription authentication. Colima must match the declared version. Bootstrap downloads the pinned Docker client
+from [Docker](https://download.docker.com/mac/static/stable/), verifies archive and binary SHA-256 hashes, and includes it in the release.
+The installed command selects that client automatically. Homebrew Docker and shell configuration remain unchanged.
 
 ### Install the reviewed version
 
@@ -44,6 +44,10 @@ The bootstrap installs pinned Node through mise, installs locked packages with
 lifecycle scripts disabled, runs checks and installs a versioned release.
 It can install mise through Homebrew if mise is absent. It also configures the
 dedicated Colima verifier through `scripts/setup-verifier.mjs`.
+No backup or Docker PATH export is required. Downloads use a private staging directory and an exclusive lock.
+A checksum or network failure stops installation and permits a clean retry.
+If interruption leaves a `host-tools/docker-<version>-<arch>.lock` directory, confirm no installer remains before removing that lock.
+If a cached client fails its integrity check, inspect and remove that client, then repeat bootstrap.
 
 Codex and OpenSpec live inside the release. The installer copies the existing
 Claude binary into the release. It leaves the ordinary Claude installation and
