@@ -1,3 +1,4 @@
+import { ModelPolicySchema } from '../domain/model-policy.js';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -73,7 +74,7 @@ const jsonFile = async (path: string, maximum: number): Promise<unknown> => JSON
  */
 export async function releaseIdentity(root: string): Promise<ReleaseIdentity> {
   const install = z.object({ schemaVersion: z.literal(2), sourceHash: hash, sourceCommit: identityShape.sourceCommit, buildHash: hash, artifactHash: hash, nodeHash: hash }).passthrough().parse(await jsonFile(join(root, 'installation.json'), limits.receipt));
-  const pins = z.object({ node: z.string(), policy: z.string(), maxRepairs: z.number().int(), maxRevisions: z.number().int(), maxInfrastructureRetries: z.number().int(), activeTimeoutMs: z.number().int(), verifier: z.object({ image: z.string() }).passthrough() }).passthrough().parse(await jsonFile(join(root, 'toolchain.json'), limits.receipt));
+  const pins = z.object({ models: ModelPolicySchema, node: z.string(), policy: z.string(), maxModelCalls: z.number().int(), maxRepairs: z.number().int(), maxRevisions: z.number().int(), maxInfrastructureRetries: z.number().int(), activeTimeoutMs: z.number().int(), verifier: z.object({ image: z.string() }).passthrough() }).passthrough().parse(await jsonFile(join(root, 'toolchain.json'), limits.receipt));
   const policyIdentity = policyIdentityFor(pins);
   if (policyIdentity !== POLICY_IDENTITY) throw new Error('installed policy differs from the frozen coordinator policy');
   if (pins.verifier.image !== toolchain.verifier.image) throw new Error('installed image differs from the pinned runtime image');

@@ -32,3 +32,9 @@ export async function loadLocalRun(dir: string): Promise<LocalRun> {
   await readBoundedEvidenceFile(local.sourceRequest, 60_000);
   return local;
 }
+
+/** Each approved contract keeps its own immutable protected suite. */
+export function suiteRelativePath(run: { id: string; spec?: string }): string {
+  if (!/^run-[a-f0-9-]{36}$/.test(run.id) || !/^[a-f0-9]{64}$/.test(run.spec ?? '')) throw new Error('suite requires exact run and specification identity');
+  return `suites/${run.id}-${run.spec}.json`;
+}

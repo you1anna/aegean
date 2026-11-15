@@ -12,10 +12,21 @@ project-specific dependency managers and production access rules. Use
 `aegean start --request <file>` to begin a run and `aegean status` / `aegean resume`
 for its checkpoints. Never start a second independent Builder for the same run.
 
-Human specification approval is an exact-hash GitHub comment. Only the human
-merges the final PR. Never author an approval comment on the human's behalf,
+For local approval policy, the human uses `aegean approve --run ID`, then resumes.
+`aegean publish --run ID` separately authorizes and pushes the exact reviewed
+candidate. `aegean revise --run ID --scope implementation|contract` invalidates
+old evidence; contract changes require new approval and tests. Agents must never
+answer these terminal prompts. Explicit `github-comments` policy retains exact
+hash-bound comments; do not silently switch modes. Only the human merges the
+final PR. Never author an approval comment on the human's behalf,
 change a suite to fit implementation, or treat agent success text as test evidence.
 The coordinator owns state, budgets and credentials; agents do not edit its state.
+A pilot needs separate scoped, expiring `authorize-pilot` authorization and passing
+native prerequisites. The project must declare modelExecution with token allowances and task scope.
+Monitored allowances can overrun within a call. Strict token caps are unsupported and reject execution.
+Unknown usage blocks another model call; recovery never resets charges.
+Smaller models require task-specific qualification; both Auditors retain the baseline. Installation, live
+pilot execution, readiness acceptance and publication retain separate gates.
 
 If any required capability is unavailable, continue discovery/specification work
 and report the precise missing gate. Do not pretend visible tests establish

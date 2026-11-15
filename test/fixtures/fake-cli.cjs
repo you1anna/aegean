@@ -15,7 +15,17 @@ const run = () => Object.values(state().runs).at(-1);
 const once = key => { const file = path.join(home, 'fault-' + key); if (fs.existsSync(file)) return false; fs.writeFileSync(file, 'used'); return true; };
 function fail(text) { process.stderr.write(text); process.exit(1); }
 if (tool === 'git') {
-  if (args.slice(-3).join(' ') === 'remote get-url origin') { output(git(['config', '--get', 'remote.origin.url'], process.cwd())); process.exit(0); }
+  if (scenario.builderCheckpointAfter && args.includes('add') && args.includes('-A')) {
+    const current = run();
+    const effects = path.join(home,'.local/state/aegean/runs',current.id,'effects');
+    const complete = fs.existsSync(effects) && fs.readdirSync(effects).some(name => name.startsWith('builder-') && JSON.parse(fs.readFileSync(path.join(effects,name))).status === 'completed');
+    if (current.state === 'building' && complete && once('builder-checkpoint')) fail('synthetic candidate checkpoint interrupted');
+  }
+
+  if (args.includes('get-url') && args.at(-1) === 'origin') {
+    const push = args.includes('--push') ? cp.spawnSync(config.git, ['config', '--get-all', 'remote.origin.pushurl'], {cwd:process.cwd(),encoding:'utf8'}) : undefined;
+    output(push?.status === 0 ? push.stdout.trim() : git(['config', '--get-all', 'remote.origin.url'], process.cwd())); process.exit(0);
+  }
   if (args.includes('push')) {
     const kind = args.some(a => a.endsWith(':refs/heads/control')) ? 'control' : process.cwd() === fs.realpathSync(config.verifier) ? 'suite' : args.some(a => a.endsWith(':refs/heads/main')) ? 'archive' : 'candidate';
     log({ effect: 'push', kind });
@@ -32,8 +42,10 @@ if (tool === 'codex' && args[0] === 'login') { output('Logged in using ChatGPT')
 if (tool === 'claude' || tool === 'codex') {
   const prompt = fs.readFileSync(0, 'utf8');
   const role = tool === 'codex' ? 'builder' : prompt.includes('Act as Scout') ? 'scout' : prompt.includes('acceptance-test Auditor') ? 'auditor-tests' : 'auditor-review';
-  log({ role, ...(role === 'builder' ? { prompt } : {}) });
-  if (scenario.quotaRole === role) fail('synthetic subscription quota exhausted');
+  const model = args[args.indexOf('--model')+1];
+  const usage = { input_tokens:10, output_tokens:5, cache_read_input_tokens:0, cache_creation_input_tokens:0 };
+  log({ role, model, effort: tool === 'claude' ? args[args.indexOf('--effort')+1] : args.find(value => value.startsWith('model_reasoning_effort=')), ...(role === 'builder' ? { prompt } : {}) });
+  if (scenario.quotaRole === role) { output({ type: tool === 'claude' ? 'result' : 'turn.completed', model, usage }); fail('synthetic subscription quota exhausted'); }
   if (scenario.hangRole === role) { setInterval(() => {}, 1000); }
   else if (role === 'builder') {
     const settings = args.find(value => value.startsWith('mcp_servers='));
@@ -45,16 +57,24 @@ if (tool === 'claude' || tool === 'codex') {
     if (scenario.builderScratch) log({ effect:'builder-scratch-in-vm' });
     if (scenario.builderChangesConfig) script += 'fs.appendFileSync("aegean.json", " ");';
     const request = {jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'execute',arguments:{args:['node','-e',script],input:''}}};
+    if (scenario.builderRepeatedOutput) {
+      for (let index = 0; index < 10; index++) {
+        log({ effect:'tool-output-call', index });
+        const oversized = { ...request, params: { name:'execute', arguments: { args:['node','-e','process.stdout.write("x".repeat(70000))'], input:'' } } };
+        const response = cp.spawnSync(JSON.parse(bridge[1]),JSON.parse(bridge[2]),{input:JSON.stringify(oversized)+'\n',encoding:'utf8',timeout:25000});
+        if (response.status !== 0) fail('tool output stopped');
+      }
+    }
     const called = cp.spawnSync(JSON.parse(bridge[1]),JSON.parse(bridge[2]),{input:JSON.stringify(request)+'\n',encoding:'utf8',timeout:25000});
     if(called.status!==0) fail('fixture MCP client failed: '+called.stderr);
     const response=JSON.parse(called.stdout.trim());
     if(response.error) fail(JSON.stringify(response.error));
     const execution=JSON.parse(response.result.content[0].text);
     if(execution.code!==0||execution.interrupted) fail('fixture VM command failed: '+execution.stderr);
-    output(JSON.stringify({ type:'turn.completed', usage:{ input_tokens:10, output_tokens:5 } }) + '\n');
+    output(JSON.stringify({ type:'turn.completed', model, usage: scenario.missingUsage === role ? undefined : usage }) + '\n');
   } else {
     const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output' } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:'pass', findings:[] };
-    output({ result: scenario.malformedRole === role ? 'malformed JSON' : JSON.stringify(data), usage:{ input_tokens:10, output_tokens:5 } });
+    output({ type: 'result', model, result: scenario.malformedRole === role ? 'malformed JSON' : JSON.stringify(data), usage: scenario.missingUsage === role ? undefined : usage });
   }
 } else if (tool === 'gh') {
   if (args[0] === 'pr' && args[1] === 'list') output(fs.existsSync(path.join(home,'pr.json')) ? [{number:1}] : []);
@@ -115,7 +135,7 @@ if (tool === 'claude' || tool === 'codex') {
     // A collector snapshot can exceed a pipe buffer. Let Node drain both streams.
     process.exitCode = result.status ?? 1;
   }
-  else if (args.includes('run')) { log({effect:'verify'}); output(scenario.verifierFail ? 'wrong' : 'ok'); }
+  else if (args.includes('run')) { log({effect:'verify'}); output((scenario.verifierFail || (scenario.verifierFailOnce && !args.includes('--check') && once('verifier-failure'))) ? 'wrong' : 'ok'); }
   else if (!args.includes('inspect') && !args.includes('rm')) fail('unexpected synthetic Docker operation');
 } else if (tool === 'openspec') {
   if (args[0] === 'archive') {

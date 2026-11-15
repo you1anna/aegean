@@ -4,9 +4,8 @@
 
 Aegean remains under trial. Read [current status](STATUS.md) before any installation
 or run. Installation, live trials and release acceptance require explicit approval.
-The procedures below describe the bootstrap workflow on `main`.
-The bounded CLI source in PR #2 changes installation, ownership, approvals and
-acceptance. See [source and installed versions](ENGINEERING.md#source-and-installed-versions) before use.
+This guide describes the source in PR #2. It includes local decisions and monitored token allowances.
+The older installed bootstrap uses different procedures. See [source and installed versions](ENGINEERING.md#source-and-installed-versions) before use.
 Use the guide path from the installed `aegean doctor --json` for live operations.
 
 [Install](#install-on-either-mac) · [Configure](#configure-and-approve-billing-policy) ·
@@ -163,8 +162,8 @@ match `toolchain.json`. The legacy host `image` field is accepted but unused;
 new configuration does not write it. Unsupported images fail before a lease or
 model call. Verification never pulls images or installs dependencies.
 
-The current Builder profile cannot read npm's library directory. Public checks
-use a read-only candidate mount. In-place npm builds need a reviewed adapter.
+Candidate commands use the fixed VM image and restricted tool bridge. Public checks
+use a read-only candidate mount. Dependencies must already exist in the accepted image or candidate.
 Host Git also rejects unsafe executable configuration;
 see [execution boundaries](ARCHITECTURE.md#execution-boundaries).
 
@@ -182,23 +181,30 @@ Then start the approved request from its enrolled project:
 aegean start --request /path/to/request.md
 ```
 
-This creates a run and isolated worktree, drafts the specification and opens a
-draft pull request. It uses a model and writes to GitHub. Specification drafting
-can succeed while later implementation remains blocked by release acceptance.
+This creates a run and isolated worktree. Native prerequisites must pass before a model executes.
+Without full release acceptance, the human must authorise a scoped pilot before the first call.
+Use `aegean --help` to inspect the required `authorize-pilot` options.
+The command requires an expiry, active minutes, model-call limit, repair limit and revision limit.
+Its terminal confirmation binds the run, request, repository, host, project policy and exact release.
+An expired or changed pilot cannot authorise further execution.
 
+The default approval mode is `local`. It stops after the specification draft without a GitHub push.
 Before approval, edit only `openspec/changes/RUN_ID/` in the isolated worktree.
-Resume with `aegean resume --run ID`. Each revision is committed, pushed and
-shown in the pull request body. The committed specification must match local
-files, including files that Git would otherwise ignore.
+Run `aegean resume --run ID` to record a revised draft.
+The human then runs:
 
-The human approves the exact published revision with this comment:
-
-```text
-/aegean approve-spec SPEC_HASH SPEC_COMMIT
+```sh
+aegean approve --run ID
+aegean resume --run ID
 ```
 
-After approval, a contract change requires cancellation and a new run. Evidence
-does not transfer silently to a changed contract.
+The terminal decision binds the exact specification and configured human identity.
+Agents must not answer the confirmation prompt.
+Explicit `github-comments` policy retains exact published specification approval comments.
+Do not switch modes within a run.
+
+The reviewed project configuration also needs an explicit model budget and task scope.
+See [model use and token allowances](MODEL-USAGE.md) for fields, enforcement limits and recovery.
 
 ### Verification and publication
 
@@ -209,26 +215,36 @@ Repair feedback contains only public requirement identifiers and their approved
 text. Suite schema 2 refers to public `### Requirement:` headings. Hidden inputs,
 expected results, actual outputs and arbitrary Auditor prose stay private.
 
-Oversized Scout input is omitted with an explicit count. A diff over 200,000 bytes
-pauses the run; partial review cannot produce a pass.
+Required context that exceeds its limit pauses the run. Optional Scout source has an explicit omission record.
+A diff over 200,000 bytes pauses the run; partial review cannot produce a pass.
 
-After verification and review, inspect the private `publication-review.md` and
-`candidate-review.patch` files. Review the repository's CI, runners and deployment
-exposure. Then post the exact command shown in the review:
+For local approval, inspect the terminal summary and private candidate patch.
+Review the repository's CI, runners and deployment exposure. The human then runs:
 
-```text
-/aegean approve-publish COMMIT SPEC_HASH SUITE_HASH RECEIPT_HASH
+```sh
+aegean publish --run ID
 ```
 
-The coordinator checks the human owner's comment before the candidate push.
-Absent or stale approval leaves the remote at the specification revision.
-Publication approval is separate from the human decision to merge.
+This command confirms the exact verified and reviewed candidate, then attempts publication.
+The human still decides whether to merge.
+Explicit `github-comments` policy retains its separate publication comment.
+
+For an edited candidate at human review, use the appropriate revision command:
+
+```sh
+aegean revise --run ID --scope implementation
+aegean revise --run ID --scope contract
+```
+
+Choose one scope for the actual revision. Implementation changes require fresh verification and review.
+Contract changes also require new specification approval and a new protected suite.
+Revisions retain all consumed time, calls and tokens.
 
 ### Status, interruption and completion
 
 Use `aegean status` or `aegean status --run ID` to inspect state without a model
-call. Use Ctrl-C to stop the active child process group. The detached-process
-limit still applies; follow [recovery](#recovery) before further action.
+call. Status preserves durable run state if local accounting is unavailable.
+Use Ctrl-C to interrupt the call. Follow [recovery](#recovery) before further action.
 
 Use `aegean cancel --run ID` only when the local run is not executing.
 Cancellation must confirm resource cleanup before it releases ownership.
@@ -276,13 +292,10 @@ log=~/Library/Logs/aegean/project-$(date +%F).log
 Keep all three records private. Raw logs, prompts and run files stay outside Git.
 Run notes contain identifiers, outcomes and paths, never copied log content.
 
-**Known diagnostic limit, observed 14 November 2026:** role sessions disable
-persistence with `--no-session-persistence` and `--ephemeral`. No code saves a
-role's raw output. A failed role leaves its name, duration, exit code and token
-counts in `usage/`, plus any console capture.
-
-Persistent private role diagnostics remain proposed work. Any implementation
-must keep protected test content outside Builder access.
+Completed role output is stored in private `effects/` records. The model CLIs still disable their own session persistence.
+Usage records have stable effect identifiers. `model-budget.json` owns reservations and settlement.
+`contexts/` records supplied byte counts, hashes and source omissions. It does not claim complete provider input counts.
+All these records stay outside Git and outside Builder access.
 
 ## Recovery
 
@@ -291,7 +304,7 @@ resource records to force progress.
 
 | Problem | Action |
 | --- | --- |
-| Authentication or quota | Preserve the run. Restore subscription access, then resume explicitly. Never substitute API credentials. |
+| Authentication or quota | Restore subscription access. If usage is unknown, reconcile the effect before another call. Never substitute API credentials. |
 | Oversized review | Split the request or use a reviewed adapter. Repeated resume cannot turn an incomplete review into a pass. |
 | Uncertain push result | Read the remote revision and event IDs before a retry. A lost response does not prove the action failed. |
 | Another host owns the run | Stop. Recovery or transfer requires an operator decision; no timeout permits takeover. |
@@ -335,3 +348,9 @@ Keep raw run files private and outside Git. Delete only a named completed run
 after review of its evidence retention needs. Never automatically delete active runs.
 
 Keep unrelated project records and instructions outside this checkout.
+
+## Control migration
+
+The human can inspect and confirm legacy control migration with `aegean migrate-control --approver LOGIN`.
+Migration rejects active legacy ownership and preserves run records. Repeated migration leaves the migrated ledger unchanged.
+Policy changes do not migrate an existing run automatically. Use its compatible release or cancel it.

@@ -63,11 +63,10 @@ explicit recovery decision. See [recovery](OPERATIONS.md#recovery).
 
 Approval binds the specification revision, candidate and verification evidence.
 The source in PR #2 separates local decisions from publication. It stops for
-local specification review before the first push. Public local-decision commands
-remain incomplete at this checkpoint; see [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
+local specification review before the first push. The `approve`, `publish` and `revise` commands bind exact artifacts and human identity.
+See [bounded CLI progress](BOUNDED-CLI-PROGRESS.md) for verification and release limits.
 
-The [operations guide](OPERATIONS.md#run-lifecycle) describes the earlier bootstrap
-comment-approval workflow. Use the installed release's guide for live operations.
+The [operations guide](OPERATIONS.md#run-lifecycle) describes local decisions and explicit comment approval. Use the installed release's guide for live operations.
 
 Protected tests expose public requirement identifiers to repair feedback. The
 Builder receives the approved requirement text, not hidden cases, expected
@@ -141,3 +140,16 @@ outside Aegean. GitHub Free does not enforce private repository branch protectio
 
 Test strength and defects after merge need measurement before any claim of
 productivity gains.
+
+## Model policy and usage
+
+The workflow policy includes model identifiers, effort, context limits and qualification records from `toolchain.json`.
+The frozen project policy includes token allowances and task scope. Candidate changes cannot alter either policy.
+Pure selection and accounting rules live in `src/domain/`. CLI usage parsers remain in adapters.
+
+The coordinator reserves allowance under a short local lock before each call.
+The existing run owner and execution permit still control capacity. No provider call occurs inside the reservation lock.
+Completed effects keep their original model and context identity across recovery.
+Usage settlement is idempotent; an unknown outcome retains its reservation.
+
+See [model use](MODEL-USAGE.md) for the available controls and qualification limits.

@@ -45,9 +45,9 @@ protected suites outside Builder access and outside this repository.
 
 ## Operator acceptance
 
-Review actual observations from the required harness or coordinator. The full
-pilot and lifecycle evidence paths remain incomplete at the current checkpoint;
-see [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
+Review actual observations from the required harness or coordinator. The coordinator records pilot, lifecycle and recovery observations from actual operations.
+Missing exercises remain unknown; expired pilots cannot produce passing final receipts.
+See [bounded CLI progress](BOUNDED-CLI-PROGRESS.md) for the latest checks.
 
 Only after all required evidence exists and passes, submit a reviewed manifest:
 
@@ -64,3 +64,13 @@ Signatures and hashes protect recorded evidence against undetected changes.
 They do not protect against a compromised host or an operator who fabricates
 observations. Approval to publish source does not authorise installation, a live
 pilot or a readiness override.
+
+## Model qualification
+
+Model selection does not replace release acceptance. The shipped policy contains no qualified smaller model.
+Each task class needs paired comparison evidence before activation. The comparison includes repairs and escalation.
+The model policy validator rejects stale policy identities, unknown usage and failed quality thresholds.
+See [model use](MODEL-USAGE.md) and the [qualification candidate](../openspec/changes/task-model-selection-and-token-budgets/qualification.md).
+
+Monitored token allowances can overrun within an active CLI call. Strict token caps remain unsupported and reject execution.
+Synthetic accounting tests establish rejection and recovery behaviour; they do not establish provider usage accuracy or savings.

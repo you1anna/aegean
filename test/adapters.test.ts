@@ -13,6 +13,7 @@ import { reportedUsage } from '../src/adapters/usage.js';
 const frozen = { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest('frozen project policy') };
 
 test('token accounting preserves unknown and reads provider-reported usage only', () => {
+  assert.deepEqual(reportedUsage('null\n42\n{}'), { input: null, output: null, cachedInput: null });
   assert.deepEqual(reportedUsage('no usage available'), { input: null, output: null, cachedInput: null });
   assert.deepEqual(reportedUsage('{"usage":{"input_tokens":10,"output_tokens":2,"cache_read_input_tokens":8}}'), { input: 10, output: 2, cachedInput: 8 });
   assert.deepEqual(reportedUsage('{"type":"started"}\n{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":3,"cached_input_tokens":5}}\n'), { input: 12, output: 3, cachedInput: 5 });

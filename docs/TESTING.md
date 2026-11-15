@@ -59,8 +59,8 @@ GIT_CONFIG_GLOBAL=/path/to/temporary.gitconfig node --test \
 ```
 
 Live Aegean runs consume subscription usage separately from deterministic tests.
-Current policy limits are owned by `toolchain.json`; they bound active time and
-retries, not token consumption. Provider usage can be unknown, and time limits
+Current policy limits are owned by `toolchain.json`; they bound active time and retries. Reviewed project configuration also declares
+monitored token allowances; see [model use](MODEL-USAGE.md). Provider usage can be unknown, and time limits
 are not hard token caps. No model is needed to poll status. Use `aegean cancel`
 for an active workflow rather than killing its coordinator or deleting its lease.
 Installed releases can differ from this checkout; check `aegean doctor --json`

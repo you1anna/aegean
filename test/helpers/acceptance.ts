@@ -20,7 +20,7 @@ export function fixtureSource(kind: EvidenceKind, observations = fixtureObservat
 // Test-only simulation of trusted recorder inputs. Production always rejects
 // synthetic provenance; this helper must never write operator state or be used
 // by an acceptance harness. The fixture metadata remains part of its identity.
-export async function syntheticAcceptance(root: string, state: string, host = randomUUID(), kinds: readonly EvidenceKind[] = [...evidenceKinds, 'real-pilot']) {
+export async function syntheticAcceptance(root: string, state: string, host = randomUUID(), kinds: readonly EvidenceKind[] = [...evidenceKinds, 'real-pilot'], adapters = { recordObservedEvidence, releaseIdentity }) {
   const temporary = await realpath(tmpdir()); const release = await realpath(root); const rel = relative(temporary, release); const fixtureName = rel.split(sep)[0]!;
   if (rel.startsWith('..') || !/^aegean-[\w-]+-test-/.test(fixtureName)) throw new Error('synthetic acceptance requires a named temporary test fixture');
   const fixtureRoot = join(temporary, fixtureName); let existing = resolve(state); const missing: string[] = [];
@@ -38,8 +38,8 @@ export async function syntheticAcceptance(root: string, state: string, host = ra
   const receipts: { path: string; hash: string }[] = [];
   for (const kind of kinds) {
     const observations = fixtureObservations(kind);
-    receipts.push(await recordObservedEvidence(root, state, host, kind, observations, fixtureSource(kind, observations)));
+    receipts.push(await adapters.recordObservedEvidence(root, state, host, kind, observations, fixtureSource(kind, observations)));
   }
-  const gate = { schemaVersion: 3 as const, ...await releaseIdentity(root), host, capability: 'bounded-cli-v1' as const, receipts };
+  const gate = { schemaVersion: 3 as const, ...await adapters.releaseIdentity(root), host, capability: 'bounded-cli-v1' as const, receipts };
   await atomicJson(join(state, 'acceptance.json'), gate); return gate;
 }

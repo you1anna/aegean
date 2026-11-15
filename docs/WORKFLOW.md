@@ -26,7 +26,7 @@ specification. The Builder uses Codex to write code in an isolated worktree.
 The verifier runs the tests and records the results. The Auditor reviews the
 candidate code in a fresh context. Repair attempts have a fixed limit.
 
-This stage requires release acceptance. Full delivery remains under evaluation;
+This stage requires release acceptance or an authorised pilot with passing native prerequisites. Full delivery remains under evaluation;
 see [supported use](README.md#supported-use) before a run.
 
 ## 4. Review and publish

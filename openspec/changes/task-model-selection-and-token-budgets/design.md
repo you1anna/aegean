@@ -162,4 +162,5 @@ On 15 November, installed `aegean doctor --json` confirms both subscriptions but
 This checkout also has no `aegean.json` enrolment file.
 The installed Aegean skill permits discovery and specification work while required capabilities are unavailable.
 The earlier bootstrap exception does not authorise this new feature automatically.
-Implementation needs the required workflow or a separately recorded, explicit exception for this scope.
+The operator subsequently approved the manual source-work exception recorded in the proposal.
+The live execution gates remain unchanged.

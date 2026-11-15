@@ -14,7 +14,8 @@
 ## Supported use
 
 Controlled trials currently support specification drafting and review. Implementation
-requires release acceptance; the complete delivery workflow remains under evaluation.
+requires release acceptance or an authorised pilot with passing native prerequisites.
+The complete delivery workflow remains under evaluation.
 The initial adapter targets command-line changes on macOS.
 
 Before installation or a run, read the [operating requirements](OPERATIONS.md).

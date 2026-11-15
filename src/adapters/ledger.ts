@@ -108,7 +108,9 @@ export class GitLedger {
   private async checkout<T>(fn: (dir: string, value: unknown) => Promise<T>): Promise<T> {
     const dir = await mkdtemp(join(tmpdir(), 'aegean-control-'));
     try {
-      await this.git(['-c', 'core.hooksPath=/dev/null', 'clone', '--bare', '--single-branch', '--branch', 'control', '--quiet', '--', this.remote, dir]);
+      // A local filesystem clone can race receive-side repacking/removal of
+      // temporary objects. Use Git transport for a coherent object transfer.
+      await this.git(['-c', 'core.hooksPath=/dev/null', 'clone', '--no-local', '--bare', '--single-branch', '--branch', 'control', '--quiet', '--', this.remote, dir]);
       const size = Number(await this.git(['cat-file', '-s', 'HEAD:control.json'], { cwd: dir }));
       if (!Number.isSafeInteger(size) || size < 1 || size > maxBytes) invalid();
       let value: unknown;

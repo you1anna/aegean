@@ -17,7 +17,7 @@ The documentation review did not repeat host acceptance or change the installati
 | Ordinary implementation | Blocked. Native detached-process containment failed; release acceptance remains incomplete. |
 | Verifier VM | Stopped at the last primary host assessment. |
 | secondary Mac | Installation and acceptance remain unverified. |
-| PR #2 source | Bounded CLI foundations are implemented; full pilot and local decision integration remain incomplete. |
+| PR #2 source | Local decisions, pilot controls and model-use accounting are implemented in source; final checks and live qualification are recorded in bounded CLI progress. |
 
 For the source in PR #2, read [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
 It records implementation and approval evidence separately from the installed-host

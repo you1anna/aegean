@@ -1,6 +1,11 @@
 # Task-based model selection and token budgets
 
-Status: proposed. Implementation and model qualification are not complete.
+Status: approved for source implementation. Model qualification remains pending.
+
+On 15 November 2026, the operator approved the scope at commit `25ddb49` and a manual source-work exception.
+The approval covers scope and manual source work.
+The exception permits code, synthetic tests and independent review in PR #2.
+Installation, live pilots and merge still require separate approval.
 
 ## Why
 

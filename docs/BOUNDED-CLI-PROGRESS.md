@@ -1,20 +1,36 @@
 # Bounded CLI checkpoint
 
-## Model policy proposal — 15 November 2026
+## Source implementation — 15 November 2026
 
-The operator requested task-based model selection and token budgets in the current PR.
-The [proposal](../openspec/changes/task-model-selection-and-token-budgets/proposal.md)
-defines requirements, design decisions and implementation checks. It is not implemented.
-The existing pilot, decision and recovery work below remains required for release.
+The operator approved the [model policy specification](../openspec/changes/task-model-selection-and-token-budgets/proposal.md)
+at `25ddb49` and the manual source-work exception. This permits code, synthetic tests and independent review in PR #2.
+Installation, live qualification, real pilots, acceptance and merge retain their separate approvals.
 
-At assessment, PR #2 is open, is not a draft and has head `952ec75`.
-The dated draft and pause statements below describe earlier checkpoints.
-The new request authorises continued work; it does not authorise merge, installation or a real pilot.
+The implementation incorporates source and tests from the preserved prerequisite commit `eaa8d5e`.
+It adds scoped pilot authorisation, local decisions, bounded calls and durable lifecycle records.
+The new model policy adds explicit settings, qualification checks, context records and token reservations.
+Both Auditors retain the baseline. The shipped policy contains no qualified smaller model.
+See [model use](MODEL-USAGE.md) for enforcement and recovery limits.
 
-Validation of this documentation change passed: locked dependency installation,
-type checking, strict OpenSpec validation, local documentation links and `git diff --check`.
-The full synthetic suite passed 141 tests, with no failures or skips, in 234.19 seconds.
-Source behaviour is unchanged. These checks do not establish model qualification or release acceptance.
+Independent review found gaps in expired-pilot archival, status, incomplete usage, replay, context rejection and qualification identity.
+The source includes fixes and regression tests. [Follow-up review](MODEL-POLICY-REVIEW.md) found no remaining actionable finding.
+Verification passed:
+
+- Locked dependency installation and `npm run check`.
+- Full synthetic suite: 174 tests, no failures or skips, 541.85 seconds.
+- Final focused checks: 20 model, context, usage and budget tests; all passed.
+- Added lifecycle check: qualified smaller Builder, baseline repair, unchanged protected suite and retained usage; passed in 24.41 seconds.
+- Documentation check: 135 local links across 22 Markdown files and 19 shell examples.
+- Strict OpenSpec validation and `git diff --check`.
+
+The final focused checks include the last qualification-identity correction and the added lifecycle fixture.
+The full suite preceded those final changes. Hosted CI will verify the complete candidate.
+CI permits 15 minutes because the expanded local suite takes approximately nine minutes.
+This changes the job deadline, not individual test limits or assertions.
+No live model call, installation or readiness change forms part of this source-work exception.
+
+PR #2 remains open and is not a draft. The dated draft and pause statements below describe earlier checkpoints.
+The older remaining-work list is historical; use the current [implementation checklist](../openspec/changes/task-model-selection-and-token-budgets/tasks.md).
 
 ## Session close-out — 13 November 2026
 

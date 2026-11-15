@@ -9,7 +9,7 @@ import { assertDecision, type HumanDecision } from '../adapters/human-decision.j
 import { ApproverSchema, ProjectSchema, ReviewSchema, SuiteSchema, assertSupportedImage, type Project } from '../domain/config.js';
 import { assertRunPolicy, digest, POLICY, type Run } from '../domain/workflow.js';
 import { hostConfig } from './runtime.js';
-import { privateRunDirectory, type LocalRun } from './run-record.js';
+import { privateRunDirectory, suiteRelativePath, type LocalRun } from './run-record.js';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/); const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const scope = {
@@ -24,7 +24,7 @@ export type SpecArtifact = z.infer<typeof SpecArtifactSchema>;
 export type PublicationArtifact = z.infer<typeof PublicationArtifactSchema>;
 export type RevisionArtifact = z.infer<typeof RevisionArtifactSchema>;
 export type LocalDecisionArtifact = SpecArtifact | PublicationArtifact | RevisionArtifact;
-const DecisionSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(), action: z.enum(['approve', 'publish', 'pilot', 'revise', 'migrate-control']), run: z.string().max(128), actor: ApproverSchema, binding: hash, decidedAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
+export const DecisionSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(), action: z.enum(['approve', 'publish', 'pilot', 'revise', 'migrate-control']), run: z.string().max(128), actor: ApproverSchema, binding: hash, decidedAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 const RecordSchema = z.object({ decision: DecisionSchema, artifact: z.union([SpecArtifactSchema, PublicationArtifactSchema, RevisionArtifactSchema]), review: z.string().max(300_000).optional() }).strict();
 
 /** The raw committed project document is the single project-policy identity. */
@@ -69,7 +69,7 @@ export async function buildPublicationArtifact(root: string, dir: string, local:
   if (await candidateGitChecked(['rev-parse', 'HEAD'], { cwd: local.worktree }) !== run.commit || await candidateGitChecked(['status', '--porcelain', '--', '.', ':(exclude).aegean-tmp'], { cwd: local.worktree })) throw new Error('candidate changed after verification; revise before publication');
   const host = await hostConfig();
   if (host.host !== run.host) throw new Error('publication host differs from run ownership');
-  const suite = SuiteSchema.parse(JSON.parse((await readBoundedEvidenceFile(join(host.verifierCheckout, 'suites', `${run.id}.json`), 2_000_000)).toString('utf8')));
+  const suite = SuiteSchema.parse(JSON.parse((await readBoundedEvidenceFile(join(host.verifierCheckout, suiteRelativePath(run)), 2_000_000)).toString('utf8')));
   if (suite.spec !== run.spec || digest(JSON.stringify(suite)) !== run.suite) throw new Error('protected suite differs from verified identity');
   const receipt = JSON.parse((await readBoundedEvidenceFile(join(dir, 'repair-feedback.json'), 262_144)).toString('utf8')) as Record<string, unknown>;
   if (!receipt || digest(JSON.stringify(receipt)) !== run.receipt || receipt.schemaVersion !== 1 || receipt.commit !== run.commit || receipt.spec !== run.spec || receipt.suite !== run.suite || receipt.image !== spec.release.image || receipt.outcome !== 'pass' || receipt.failed !== 0 || receipt.retainedResources) throw new Error('verification receipt is stale, incomplete or has unresolved resources');

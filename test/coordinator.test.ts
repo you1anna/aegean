@@ -102,11 +102,12 @@ test('malformed Scout output pauses with charged time instead of losing recovery
     await f.scenario({}); const resumed=await f.resume(); assert.equal(resumed.code,0,resumed.stderr); assert.equal((await f.current()).state,'spec-drafted');
   }finally{await f.cleanup();}
 });
-test('quota failure pauses and explicit resume reuses the immutable protected suite',async()=>{
+test('quota failure with incomplete usage retains the immutable suite and blocks further model calls',async()=>{
   const f=await fixture();try {
     await f.start(); await f.scenario({approved:true,quotaRole:'builder'}); await f.resume(); const paused=await f.current();
     assert.equal(paused.state,'paused'); assert.equal(paused.resumeState,'building');
-    await f.scenario({approved:true}); const resumed=await f.resume(); assert.equal(resumed.code,0,resumed.stderr); assert.equal((await f.current()).suite,paused.suite); assert.equal((await f.current()).state,'human-merge-review');
+    await f.scenario({approved:true}); const resumed=await f.resume(); assert.notEqual(resumed.code,0); assert.match(resumed.stderr,/unknown token usage/); assert.equal((await f.current()).suite,paused.suite); assert.equal((await f.current()).state,'paused');
+    assert.equal((await f.events()).filter(e=>e.role==='builder').length,1);
     assert.equal((await f.events()).filter(e=>e.role==='auditor-tests').length,1);
   }finally{await f.cleanup();}
 });
