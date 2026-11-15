@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { atomicJson, readJson } from '../adapters/files.js';
 import type { Result } from '../adapters/process.js';
-import { recordUsage } from '../adapters/usage.js';
 export interface RoleRecord { key: string; startedAt: number; timeoutMs: number; status: 'running' | 'completed'; result?: Result }
 export async function roleResult(dir: string, key: string, timeoutMs: number, invoke: () => Promise<Result>): Promise<Result> {
   if (!/^[\w-]+$/.test(key)) throw new Error('invalid role effect key');
@@ -16,6 +15,5 @@ export async function roleResult(dir: string, key: string, timeoutMs: number, in
   await atomicJson(path, intent);
   const result = await invoke();
   await atomicJson(path, { ...intent, status: 'completed', result });
-  await recordUsage(dir, key, result);
   return result;
 }

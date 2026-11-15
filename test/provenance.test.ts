@@ -10,23 +10,35 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
   const root=await mkdtemp(join(tmpdir(),'aegean-provenance-test-')); const repo=join(root,'source'); const user=join(root,'user'); const bin=join(root,'bin');
   try {
     for(const path of [repo,user,bin,...['scripts','docs','skills','policy','tools'].map(p=>join(repo,p))]) await mkdir(path,{recursive:true});
-    for(const name of ['install.mjs','source-provenance.mjs']) await cp(join('scripts',name),join(repo,'scripts',name));
-    const pins={node:process.version.slice(1),claude:'2.1.322',policy:'0.1.0',maxRepairs:2,maxInfrastructureRetries:1,activeTimeoutMs:3600000};
+    await cp('scripts', join(repo, 'scripts'), { recursive: true });
+    const pins = { ...JSON.parse(await readFile('toolchain.json', 'utf8')), node: process.versions.node };
     await writeFile(join(repo,'toolchain.json'),JSON.stringify(pins));
     const pkg={name:'synthetic-release',version:'0.1.0',type:'module',scripts:{build:'node build.mjs'}};
-    for(const folder of [repo,join(repo,'tools')]) {
-      await writeFile(join(folder,'package.json'),JSON.stringify(pkg));
-      await writeFile(join(folder,'package-lock.json'),JSON.stringify({name:pkg.name,version:pkg.version,lockfileVersion:3,packages:{'':pkg}}));
-    }
+    const { dependencies } = JSON.parse(await readFile('package.json', 'utf8'));
+    const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
+    const app = { ...pkg, dependencies };
+    await writeFile(join(repo, 'package.json'), JSON.stringify(app));
+    await writeFile(join(repo, 'package-lock.json'), JSON.stringify({
+      ...lock, name: app.name, version: app.version,
+      packages: { ...lock.packages, '': app },
+    }));
+    await writeFile(join(repo, 'tools/package.json'), JSON.stringify(pkg));
+    await writeFile(join(repo, 'tools/package-lock.json'), JSON.stringify({
+      name: pkg.name, version: pkg.version, lockfileVersion: 3, packages: { '': pkg },
+    }));
     const output:Record<string,string>={
       'app.js':'fresh committed build',
       'toolchain.json':JSON.stringify(pins),
-      'src/adapters/files.js':await readFile('dist/src/adapters/files.js','utf8'),
-      'src/adapters/release-artifacts.js':await readFile('dist/src/adapters/release-artifacts.js','utf8'),
-      'src/domain/workflow.js':await readFile('dist/src/domain/workflow.js','utf8'),
     };
     await writeFile(join(repo,'build-output.json'),JSON.stringify(output));
-    await writeFile(join(repo,'build.mjs'),`import fs from 'node:fs/promises'; import path from 'node:path'; for(const [name,value] of Object.entries(JSON.parse(await fs.readFile('build-output.json','utf8')))){const target=path.join('dist',name);await fs.mkdir(path.dirname(target),{recursive:true});await fs.writeFile(target,value);}`);
+    await cp('dist/src', join(repo, 'compiled-source'), { recursive: true });
+    await writeFile(join(repo, 'build.mjs'), `
+      import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+      await mkdir('dist', { recursive: true });
+      await cp('compiled-source', 'dist/src', { recursive: true });
+      const output = JSON.parse(await readFile('build-output.json', 'utf8'));
+      for (const [name, value] of Object.entries(output)) await writeFile('dist/' + name, value);
+    `);
     await writeFile(join(repo,'policy/ROUTING.md'),'Synthetic fixture policy.');
     await writeFile(join(repo,'docs/fixture.md'),'Synthetic fixture.'); await writeFile(join(repo,'skills/fixture.md'),'Synthetic fixture.');
     await writeFile(join(repo,'.gitignore'),'dist/\nnode_modules/\n');

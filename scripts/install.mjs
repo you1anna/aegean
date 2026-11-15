@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceProvenance } from './source-provenance.mjs';
+import { assertRoutingAllowsSelection, managedRelease, routingAction, routingContext, safeParents, validateInstalledRelease, withInstallationLock } from './routing.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -14,51 +15,68 @@ const data = join(userRoot, '.local/share/aegean');
 const releases = join(data, 'releases');
 const current = join(data, 'current');
 const previous = join(data, 'previous');
+const routingFlags = ['--activate-routing', '--deactivate-routing', '--migrate-routing', '--recover-routing'];
+const requestedRouting = routingFlags.filter(name => args.includes(name));
+if (requestedRouting.length > 1 || (requestedRouting.length && args.includes('--rollback'))) throw new Error('Choose one installer or explicit routing action');
+for (let i = 0; i < args.length; i++) {
+  if (['--user-root', '--project', '--project-path'].includes(args[i])) { if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${args[i]}`); i++; }
+  else if (!['--rollback', ...routingFlags].includes(args[i])) throw new Error(`Unknown installer option: ${args[i]}`);
+}
+if (requestedRouting.length) {
+  const values = name => args.flatMap((item, i) => item === name ? [args[i + 1]] : []);
+  const projects = values('--project'); const paths = values('--project-path');
+  const action = requestedRouting[0].slice(2).replace('-routing', '');
+  if (projects.length !== paths.length || (action !== 'activate' && projects.length)) throw new Error('Activation requires paired --project owner/repo and --project-path PATH; other routing actions take no projects');
+  console.log(JSON.stringify(await routingAction(userRoot, action, projects.map((repository, i) => ({ repository, path: paths[i] })))));
+  process.exit(0);
+}
+if (args.includes('--project') || args.includes('--project-path')) throw new Error('Projects are only valid with --activate-routing');
 const exists = async p => { try { await lstat(p); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } };
 const link = async (target, path) => {
   if (await exists(path)) { const st = await lstat(path); if (!st.isSymbolicLink()) throw new Error(`Refusing to replace non-managed file: ${path}`); }
   const temp = `${path}.${randomUUID()}`; await symlink(target, temp); await rename(temp, path);
 };
 const quote = s => "'" + s.replaceAll("'", "'\\''") + "'";
-async function manageInstructions(path, routing) {
-  const begin = '<!-- aegean:begin -->'; const end = '<!-- aegean:end -->';
-  await mkdir(dirname(path), { recursive: true });
-  const old = await exists(path) ? await readFile(path, 'utf8') : '';
-  if ((old.includes(begin) || old.includes(end)) && !(old.indexOf(begin) >= 0 && old.indexOf(end) > old.indexOf(begin) && old.split(begin).length === 2 && old.split(end).length === 2)) throw new Error(`Malformed managed block: ${path}`);
-  const block = `${begin}\n## Aegean engineering workflow\n\n${routing.trim()}\n${end}`;
-  const next = old.includes(begin) ? old.slice(0, old.indexOf(begin)) + block + old.slice(old.indexOf(end) + end.length) : old.trimEnd() + '\n\n' + block + '\n';
-  if (next === old) return;
-  if (old) { const backup = join(data, 'config-backups', createHash('sha256').update(path + old).digest('hex') + '.md'); await mkdir(dirname(backup), { recursive: true, mode: 0o700 }); await writeFile(backup, old, { mode: 0o600 }); }
-  const temp = `${path}.${randomUUID()}`; await writeFile(temp, next, { mode: 0o600 }); await rename(temp, path);
-}
-async function activate(release) {
+async function selectRelease(release) {
+  const context = await routingContext(userRoot); release = await managedRelease(context, release);
+  await validateInstalledRelease(release);
+  return withInstallationLock(context, async () => {
+  const routing = await assertRoutingAllowsSelection(context, release);
   const manifest = JSON.parse(await readFile(join(release, 'installation.json'), 'utf8'));
-  const routing = await readFile(join(release, 'policy/ROUTING.md'), 'utf8');
-  await manageInstructions(join(userRoot, '.codex/AGENTS.md'), routing);
-  await manageInstructions(join(userRoot, '.claude/CLAUDE.md'), routing);
+  if (await realpath(manifest.node) !== await realpath(process.execPath)) throw new Error('Selected release Node path differs from its verified runtime');
+  for (const name of ['current', 'previous']) if (await exists(join(data, name))) {
+    if (!(await lstat(join(data, name))).isSymbolicLink()) throw new Error(`Refusing unmanaged release pointer: ${name}`);
+    await managedRelease(context, await realpath(join(data, name)));
+  }
+  // Validate every managed destination before changing any executable or link.
   for (const parent of ['.agents/skills', '.claude/skills']) {
-    await mkdir(join(userRoot, parent), { recursive: true });
     const dest = join(userRoot, parent, 'aegean');
+    await safeParents(userRoot, dest, true);
     if (await exists(dest)) {
       const st = await lstat(dest);
-      if (!st.isSymbolicLink() || !(await readlink(dest)).startsWith(data + '/')) throw new Error('Refusing to replace an existing unmanaged Aegean skill');
+      if (!st.isSymbolicLink() || !resolve(dirname(dest), await readlink(dest)).startsWith(data + '/')) throw new Error('Refusing to replace an existing unmanaged Aegean skill');
     }
-    await link(join(current, 'skills/aegean'), dest);
   }
-  await mkdir(join(userRoot, '.local/bin'), { recursive: true });
   const wrapper = join(userRoot, '.local/bin/aegean');
-  if (await exists(wrapper) && !(await readFile(wrapper, 'utf8')).includes('# managed-by-aegean')) throw new Error('Existing aegean executable is not managed by this installer');
-  await writeFile(wrapper, `#!/bin/sh\n# managed-by-aegean\nexec ${quote(manifest.node)} ${quote(join(current, 'dist/src/cli.js'))} "$@"\n`, { mode: 0o755 });
+  await safeParents(userRoot, wrapper, true);
+  if (await exists(wrapper)) {
+    const info = await lstat(wrapper);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 8192 || !(await readFile(wrapper, 'utf8')).startsWith('#!/bin/sh\n# managed-by-aegean\n')) throw new Error('Existing aegean executable is not managed by this installer');
+  }
+  for (const parent of ['.agents/skills', '.claude/skills']) await link(join(current, 'skills/aegean'), join(userRoot, parent, 'aegean'));
+  const temporary = `${wrapper}.${randomUUID()}`;
+  await writeFile(temporary, `#!/bin/sh\n# managed-by-aegean\nexec ${quote(manifest.node)} ${quote(join(current, 'dist/src/cli.js'))} "$@"\n`, { mode: 0o755 }); await rename(temporary, wrapper);
   const old = await exists(current) ? await readlink(current) : null;
   if (old && old !== release) await link(old, previous);
   await link(release, current);
-  console.log(JSON.stringify({ installed: release, previous: old, fullWorkflowReady: false }));
+  console.log(JSON.stringify({ installed: release, previous: old, fullWorkflowReady: false, ...routing, ...(routing.migrationRequired ? { routingAction: 'Existing mandatory blocks were preserved. Review and run --migrate-routing; activation is a separate explicit accepted-host/project action.' } : {}) }));
+  });
 }
-await mkdir(releases, { recursive: true, mode: 0o700 });
+await safeParents(userRoot, join(releases, 'placeholder'), true);
 if (args.includes('--rollback')) {
   const release = await realpath(previous);
   if (!release.startsWith(releases + '/')) throw new Error('Rollback target outside managed releases');
-  await activate(release);
+  await selectRelease(release);
 } else {
   const provenance = sourceProvenance(repo);
   const pins = JSON.parse(await readFile(join(repo, 'toolchain.json'), 'utf8'));
@@ -94,5 +112,5 @@ if (args.includes('--rollback')) {
     await rename(staging, release);
     } finally { await rm(build, { recursive: true, force: true }); await rm(staging, { recursive: true, force: true }); }
   }
-  await activate(release);
+  await selectRelease(release);
 }

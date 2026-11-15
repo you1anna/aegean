@@ -7,6 +7,8 @@ import { checked, command } from './process.js';
 import { digest } from '../domain/workflow.js';
 import { assertSupportedImage, type Suite, type Project } from '../domain/config.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
+import { docker, removeContainer } from './container-runtime.js';
+export { docker } from './container-runtime.js';
 export interface Receipt {
   schemaVersion: 1; commit: string; spec: string; suite: string; image: string;
   outcome: 'pass' | 'fail' | 'inconclusive' | 'cancelled'; passed: number; failed: number;
@@ -15,17 +17,6 @@ export interface Receipt {
 }
 export type VerifierResource = NonNullable<Receipt['retainedResources']>;
 export class CandidateRejected extends Error {}
-export const docker = (args: string[]): string[] => ['--context', `colima-${toolchain.verifier.profile}`, ...args];
-async function removeContainer(name: string, execute: typeof command): Promise<boolean> {
-  try {
-    const removed = await execute('docker', docker(['rm', '--force', name]), { timeoutMs: 10_000 });
-    if (removed.code === 0 && !removed.interrupted) return true;
-    // A lost removal response or failed container creation may leave nothing to
-    // remove. Confirm absence through a successful daemon query, never stderr.
-    const listed = await execute('docker', docker(['container', 'ls', '--all', '--filter', `name=^/${name}$`, '--format', '{{.Names}}']), { timeoutMs: 10_000 });
-    return listed.code === 0 && !listed.interrupted && listed.stdout.trim() === '';
-  } catch { return false; }
-}
 export async function cleanupRetained(receipt: Receipt, execute = command): Promise<boolean> {
   const resource = receipt.retainedResources;
   if (!resource) return true;
@@ -44,7 +35,7 @@ export async function exportCommit(repo: string, commit: string, target: string,
   for (const item of listing.split('\0').filter(Boolean)) {
     signal?.throwIfAborted();
     const candidateName = item.slice(item.indexOf('\t') + 1);
-    if (['.agents/', '.claude/', '.codex/'].some(prefix => candidateName.startsWith(prefix))) continue;
+    if (candidateName === '.mcp.json' || ['.agents/', '.claude/', '.codex/'].some(prefix => candidateName.startsWith(prefix))) continue;
     const match = /^(100644|100755) blob ([a-f0-9]{40})\t(.+)$/s.exec(item);
     if (!match) throw new CandidateRejected('candidate includes symlinks, submodules or unsupported file types');
     const [, mode, object, name] = match as unknown as [string, string, string, string];

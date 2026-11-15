@@ -1,36 +1,35 @@
 # Aegean
 
-Human-governed agentic software delivery, using OpenSpec, Claude Code and Codex.
+Aegean coordinates Claude Code and Codex to draft specifications, write code and
+check software changes. It uses OpenSpec to record the requirements.
 
-**Status: bootstrap installed on the primary Mac; full workflow acceptance pending.**
-See [current evidence and gaps](docs/STATUS.md).
+You approve the specification before implementation and the code before publication.
+You decide whether to merge the pull request.
 
-The reusable implementation is on `bootstrap-v1` for human review. The secondary Mac,
-live subscription role loop and real-project pilot have not passed acceptance.
-`aegean doctor --json` reports these gates; installation alone does not enable
-implementation runs.
+[Workflow](docs/WORKFLOW.md) · [Guides](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
-PR remediation also confirmed a detached-child sandbox containment gap. Ordinary
-use remains blocked until that control passes native acceptance on both Macs;
-see the [acceptance contract](docs/ACCEPTANCE.md).
+![A translucent ribbon forms an A above a calm Aegean sea at dusk.](docs/images/aegean.png)
 
-Aegean is the default route for significant engineering changes. Simple,
-low-risk operations retain a lightweight path. Specifications, protected tests,
-implementation, verification and human decisions have distinct owners.
+## How it works
 
-The intended loop is:
+1. **Specify.** The Scout drafts the requirements from your request. You review
+   and approve the scope before code changes begin.
+2. **Build.** The Builder writes code in an isolated worktree against the approved
+   specification.
+3. **Check.** A separate Auditor creates protected tests and reviews the code.
+   The verifier runs the tests and records the results.
+4. **Review.** You inspect the code diff and results, approve the push and decide
+   whether to merge.
 
-`request → spec → human approval → protected tests → build → verify/review → human publication approval → human merge`
+See the [workflow guide](docs/WORKFLOW.md) for the roles and review steps.
 
-One Builder, two repair attempts, subscription authentication only. Either Mac
-can own a run; the secondary host is not a required server. Public developer tests remain
-visible. Protected test source and expected results live outside Builder access.
+## Use Aegean
 
-- [Implementation plan](docs/PLAN.md)
-- [Status and release gates](docs/STATUS.md)
-- [Architecture and security](docs/ARCHITECTURE.md)
-- [Installation and recovery](docs/OPERATIONS.md)
+Aegean currently supports specification drafting and review in controlled trials.
+Full delivery remains under evaluation and requires release acceptance or an authorised pilot.
+Start with the [guides](docs/README.md) for supported use and operating instructions.
 
-This repository is private pending an explicit publication decision. It contains
-no history from the former personal-capture project, which is preserved privately
-as `legacy-project`. Public demonstrations use synthetic data only.
+The initial scope is command-line changes on macOS with subscription CLI accounts.
+See [engineering details](docs/ENGINEERING.md) for architecture, decisions and evidence.
+
+This repository remains private and has no software licence.

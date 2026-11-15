@@ -1,7 +1,37 @@
 # Status
 
-Evidence recorded 12 November 2026, with a 14 November addendum directly below.
-This is an installed bootstrap, not an accepted release of the complete workflow.
+[Documentation](README.md) · [Operations](OPERATIONS.md) · [Acceptance](ACCEPTANCE.md)
+
+**Experimental. The full workflow is not accepted for ordinary use.**
+
+## At a glance
+
+Last host assessment: **14 November 2026**. Documentation review: **15 November 2026**.
+The documentation review did not repeat host acceptance or change the installation.
+
+| Area | Last recorded result |
+| --- | --- |
+| Source | The bootstrap and review fixes are merged into `main` through PR #1. |
+| Installed release | the primary host has `0.1.0-6a00b329342a`; later source changes remain uninstalled at the last assessment. |
+| Specification trial | One pilot project run reached specification review, then was cancelled on request. |
+| Ordinary implementation | Blocked. Native detached-process containment failed; release acceptance remains incomplete. |
+| Verifier VM | Stopped at the last primary host assessment. |
+| secondary Mac | Installation and acceptance remain unverified. |
+| PR #2 source | Local decisions, pilot controls and model-use accounting are implemented in source; final checks and live qualification are recorded in bounded CLI progress. |
+
+For the source in PR #2, read [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
+It records implementation and approval evidence separately from the installed-host
+assessment below. A source change does not update the installed release.
+Do not enrol further real projects or treat local test success as release acceptance.
+
+For live installed readiness, run `aegean doctor --json`. Its result can differ
+from these dated records.
+
+## Evidence and history
+
+The records below preserve observations from 12 and 14 November. References to
+unmerged work describe the state at that time. PR #1 is now merged into `main`;
+merge does not mean installation or acceptance.
 
 ## 14 November 2026: pilot project enrolment and the path to a usable host
 
@@ -86,7 +116,7 @@ highly certain. None met that bar, and nothing was changed:
    then, capture console output and write a [pilot note](PILOT-NOTES.md) for
    every real run.
 
-## PR #1 remediation (not installed)
+## PR #1 remediation (merged; not installed at the last assessment)
 
 The `bootstrap-v1` changes integrate the existing coordinator recovery work and
 the [review remediation](PR-1-REVIEW.md). The operator selected explicit approval before

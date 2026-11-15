@@ -3,8 +3,9 @@
 This repository contains the Aegean software-delivery coordinator.
 Keep unrelated projects and their records outside this checkout.
 
-Read README.md, docs/PLAN.md and docs/STATUS.md. Significant changes use a branch
-and a human-reviewed PR. Never merge, publish, deploy, change billing, or bypass
+Read README.md, docs/PLAN.md and docs/STATUS.md. All Aegean changes, including
+documentation, use a branch and a human-reviewed PR. Never push changes directly
+to `main`. Never merge, publish, deploy, change billing, or bypass
 the verifier without the user's explicit instruction. The initial documentation
 commit on main is the recorded bootstrap exception.
 
@@ -17,6 +18,9 @@ Run `npm ci`, `npm run check` and `npm test`. Test rejection, concurrent ownersh
 stale evidence, interruption and idempotence. Keep fixtures synthetic. Do not
 commit credentials, private suites, run databases, raw prompts or old project
 records. Docs must distinguish tested behaviour from outstanding release gates.
+
+For every PR, apply the documentation standard in
+[CONTRIBUTING.md](CONTRIBUTING.md#documentation).
 
 For every real run, capture console output and add an entry to
 docs/PILOT-NOTES.md, as "Run records and debugging" in docs/OPERATIONS.md

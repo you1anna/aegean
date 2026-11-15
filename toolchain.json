@@ -4,9 +4,14 @@
   "openspec": "2.0.0",
   "codex": "0.167.2",
   "claude": "2.1.322",
-  "policy": "0.1.0",
-  "supportedHosts": ["darwin-arm64", "darwin-x64"],
+  "policy": "0.4.0",
+  "supportedHosts": [
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "maxModelCalls": 12,
   "maxRepairs": 2,
+  "maxRevisions": 2,
   "maxInfrastructureRetries": 1,
   "activeTimeoutMs": 3600000,
   "verifier": {
@@ -18,5 +23,46 @@
     "diskGiB": 20,
     "candidateRoot": "/private/tmp/aegean-verifier",
     "image": "node@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797"
+  },
+  "models": {
+    "schemaVersion": 1,
+    "roles": {
+      "scout": {
+        "baseline": {
+          "provider": "claude",
+          "model": "claude-sonnet-5",
+          "effort": "medium"
+        },
+        "inputBytes": 60000,
+        "toolOutputBytes": 256000
+      },
+      "builder": {
+        "baseline": {
+          "provider": "codex",
+          "model": "gpt-6.1-sol",
+          "effort": "medium"
+        },
+        "inputBytes": 60000,
+        "toolOutputBytes": 256000
+      },
+      "auditor-tests": {
+        "baseline": {
+          "provider": "claude",
+          "model": "claude-sonnet-5",
+          "effort": "medium"
+        },
+        "inputBytes": 60000,
+        "toolOutputBytes": 256000
+      },
+      "auditor-review": {
+        "baseline": {
+          "provider": "claude",
+          "model": "claude-sonnet-5",
+          "effort": "medium"
+        },
+        "inputBytes": 260000,
+        "toolOutputBytes": 256000
+      }
+    }
   }
 }
