@@ -1,6 +1,6 @@
 # Live qualification plan
 
-Status: proposed for approval. This document authorises no live calls, installation or model activation.
+Status: the operator approved this plan and fixture preparation on 15 November 2026. Live calls, installation and model activation remain unauthorised.
 
 ## Scope
 
@@ -53,7 +53,9 @@ Freeze the following public requests before execution:
 For each fixture, record the request, source-tree and protected-suite SHA-256 hashes in a private manifest.
 Specify newline handling, invalid input and exit behaviour completely before the human approves that manifest.
 Record a hash of the full manifest in the public report. Do not commit protected expectations or raw prompts.
-The fixture repositories and private manifest do not yet exist; this table is a preparation specification, not execution evidence.
+The [fixture package](../../../qualification/builder-v1/README.md) now contains complete public requirements, starter files, hashes and the fixed arm schedule.
+Its private package contains 56 protected cases, reference programs and seeded defects. No live model evidence exists.
+The [execution record](../../../qualification/builder-v1/EXECUTION.md) states the exact next scope and remaining prerequisites.
 
 ## Proposed budgets
 
