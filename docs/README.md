@@ -1,47 +1,38 @@
-# Documentation
+# Aegean guides
 
-[Aegean](../README.md) coordinates AI-assisted software delivery with human
-approval and independent checks. It remains experimental.
+[Overview](../README.md) · [The workflow](WORKFLOW.md) · [Contribute](../CONTRIBUTING.md)
 
-## Choose a guide
+Start with the result you need. Each guide explains one part of the path from
+request to reviewed change.
 
-| I want to… | Read |
+| Your goal | Guide |
 | --- | --- |
-| Understand the purpose and workflow | [Project overview](../README.md) |
-| See what works and what remains unproven | [Current status](STATUS.md) |
-| Install, configure or operate an approved trial | [Operations](OPERATIONS.md) |
-| Understand roles, data and trust boundaries | [Architecture](ARCHITECTURE.md) |
-| Change the source or improve the docs | [Contribute](../CONTRIBUTING.md) |
-| Review the evidence required for release | [Acceptance contract](ACCEPTANCE.md) |
+| Understand what each stage gives you | [The workflow](WORKFLOW.md) |
+| Prepare an approved installation | [Installation](OPERATIONS.md#install-on-either-mac) |
+| Take a request through its review steps | [Run lifecycle](OPERATIONS.md#run-lifecycle) |
+| Inspect a run and its evidence | [Run records](OPERATIONS.md#run-records-and-debugging) |
+| Recover interrupted work | [Recovery](OPERATIONS.md#recovery) |
+| Improve the product or its documentation | [Contribute](../CONTRIBUTING.md) |
 
-Start with status before a trial. There is no general quickstart while the full
-workflow remains unaccepted.
+## Supported use
 
-## Plans and trial records
+Controlled trials currently support specification drafting and review. Implementation
+requires release acceptance; the complete delivery workflow remains under evaluation.
+The initial adapter targets command-line changes on macOS.
 
-These records explain decisions and evidence. They do not replace the operating
-instructions or grant approval for a run.
+Before installation or a run, read the [operating requirements](OPERATIONS.md).
+If Aegean is already installed, inspect its readiness:
 
-| Record | Purpose |
-| --- | --- |
-| [Accepted plan](PLAN.md) | Original scope and approved design decisions. |
-| [Proposed CLI pilot](BOUNDED-CLI-SPEC.md) | Draft of the next milestone; not implemented. |
-| [Pilot notes](PILOT-NOTES.md) | Short records of real runs and links to private evidence. |
-| [Recovery checks](RECOVERY-CHECKS.md) | Scope and limits of the coordinator's synthetic tests. |
-| [Bootstrap review](PR-1-REVIEW.md) | Findings from the first implementation review. |
-| [Follow-up review](PR-1-FOLLOWUP-REVIEW.md) | Usability findings and proposed changes. |
+```sh
+aegean doctor --json
+```
 
-## Keep the docs simple
+Read `fullWorkflowReady` and each reported check. Use the operations guide path
+in the result for that installed version. A source checkout can describe changes
+that the installed release does not yet contain.
 
-The [contributor guide](../CONTRIBUTING.md#documentation) owns the writing guidance.
-Give each fact one home, then link to it:
+## Understand the design
 
-- **Status** owns dated results and open release requirements.
-- **Operations** owns procedures, run records and recovery.
-- **Architecture** owns explanations of roles and boundaries.
-- **Acceptance** explains the evidence contract and links to its schema in code.
-- **Plans and reviews** preserve decisions and proposals with their original status.
-
-The source checkout and installed release can differ. Use the operations guide
-path from `aegean doctor --json` for the installed version. Read this checkout's
-guides when you review a proposed change.
+The [engineering guide](ENGINEERING.md) links to architecture, technical decisions,
+release evidence and trial records. These details support the user guides without
+interrupting the main workflow.

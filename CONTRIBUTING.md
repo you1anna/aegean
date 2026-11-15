@@ -1,10 +1,10 @@
 # Contribute to Aegean
 
-[Overview](README.md) · [Documentation](docs/README.md) · [Status](docs/STATUS.md)
+[Overview](README.md) · [Guides](docs/README.md) · [Engineering](docs/ENGINEERING.md)
 
-Aegean remains under trial. Clear bug reports, documentation fixes and small,
-testable changes are useful now. Read [AGENTS.md](AGENTS.md) for repository rules
-and [the accepted plan](docs/PLAN.md) for scope.
+Help make each change easier to understand, use and review. Clear bug reports,
+focused improvements and useful documentation all contribute to that result.
+Read [AGENTS.md](AGENTS.md) for repository rules and [the accepted plan](docs/PLAN.md) for scope.
 
 ## Check the source
 
@@ -55,7 +55,23 @@ content or data from another project.
 
 ## Documentation
 
-Make clarity and simplicity govern technical complexity.
+Make clarity and simplicity govern technical complexity. Lead with the useful
+result for the reader and the capabilities that support it.
+
+### Review the reader's path in every pull request
+
+1. State the value that the change delivers and the evidence for it.
+2. Review the README and every guide it links to directly.
+3. Update the affected pages together so the introduction, examples and next steps agree.
+4. Keep the main path focused on user outcomes, supported use and clear actions.
+5. Put technical decisions, trial history and unfinished work in the engineering references.
+6. Keep material limits visible where they affect use. Do not present proposed or unaccepted behaviour as available.
+7. Check links, heading order and image descriptions. Preview layout changes.
+
+If a change has no effect on the reader's path, record that in the pull request.
+Do not add a top-level progress note for every internal change.
+
+### Write with restraint
 
 - Put the reader's purpose first. Explain what a command does before you show it.
 - Use short sentences, common words and UK English. Explain a technical term
@@ -67,4 +83,4 @@ Make clarity and simplicity govern technical complexity.
 
 Keep the overview short. Put procedures in the operations guide and evidence in
 the status record. Preserve dated trial records and approved decisions.
-Use the [documentation map](docs/README.md) to choose the right file.
+Use the [guides](docs/README.md) for reader tasks and the [engineering reference](docs/ENGINEERING.md) for technical records.

@@ -2,64 +2,45 @@
 
 **Clarity at every step of AI-assisted software delivery.**
 
-Aegean coordinates OpenSpec, Claude Code and Codex around a change you approve.
-It separates the specification, code and independent checks, with human decisions
-before implementation, publication and merge.
+Turn a software request into a clear specification, a focused change and evidence
+for a human decision. Aegean brings OpenSpec, Claude Code and Codex into one
+reviewable workflow.
 
-[Documentation](docs/README.md) · [Current status](docs/STATUS.md) ·
-[Architecture](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md)
-
-> **Experimental.** Aegean is under active trial. The full workflow is not yet
-> accepted for ordinary use. Read the [tested behaviour and open release
-> requirements](docs/STATUS.md) before installation or a trial.
+[The workflow](docs/WORKFLOW.md) · [Guides](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
 ![A translucent ribbon forms an A above a calm Aegean sea at dusk.](docs/images/aegean.png)
 
-## Why Aegean
+## Useful at every step
+
+Each stage has a clear purpose and a concrete result:
+
+- **Agree on the right change.** A written specification makes scope and success
+  criteria explicit before implementation.
+- **Keep the work focused.** The Builder works against the approved specification
+  in an isolated worktree.
+- **Review with evidence.** Independent tests and review give you a basis for
+  a decision about the candidate.
+- **Stay in control.** You approve the scope, approve publication and decide
+  whether to merge.
+
+[Follow the workflow](docs/WORKFLOW.md) to see what each stage produces and how
+its result supports the next decision.
+
+## Beauty in simplicity
 
 Software delivery can be complex. The process should remain clear.
 
-Aegean's aim is beauty in simplicity: a clear request, visible evidence and
-deliberate decisions. Each step has one purpose. Each fact has one owner.
-You should be able to see what changed, why it changed and what still needs proof.
+Each step has one purpose. Each fact has one owner. Aegean keeps the request,
+change and evidence connected so you can understand the result without tracing
+every technical detail.
 
-## How it works
+## Use Aegean
 
-1. **Describe the change.** The Scout drafts an OpenSpec specification.
-2. **Approve the scope.** You review the specification before implementation.
-3. **Build and check.** An independent Auditor creates protected tests. The
-   Builder writes code, then the verifier checks it and the Auditor reviews it.
-4. **Review the result.** You approve the candidate before Aegean pushes it.
-   You decide whether to merge.
+Aegean currently supports specification drafting and review in controlled trials.
+Full delivery remains under evaluation and requires release acceptance.
+Start with the [guides](docs/README.md) for supported use and operating instructions.
 
-Claude Code supplies the Scout and Auditor; Codex supplies the Builder.
-The coordinator controls state, credentials and approvals. Models do not approve
-their own work. A passing test suite does not replace human review.
-
-The initial scope is small command-line changes on macOS. Aegean uses subscription
-CLI accounts, with one Builder at a time and bounded repair attempts.
-See the [architecture](docs/ARCHITECTURE.md) for the boundaries and current limits.
-
-## Start here
-
-- **Understand the project:** read the [documentation map](docs/README.md).
-- **Assess a trial:** read the [current status](docs/STATUS.md), then the
-  [installation and operations guide](docs/OPERATIONS.md).
-- **Work on the source:** follow the [contributor guide](CONTRIBUTING.md).
-
-If Aegean is already installed, inspect its readiness:
-
-```sh
-aegean doctor --json
-```
-
-Read `fullWorkflowReady` and each reported check. Installation alone does not
-mean the workflow is ready. The [operations guide](docs/OPERATIONS.md) explains
-the requirements and recovery steps.
-
-## Project status
+The initial scope is command-line changes on macOS with subscription CLI accounts.
+See [engineering details](docs/ENGINEERING.md) for architecture, decisions and evidence.
 
 This repository remains private and has no software licence.
-Public release requires a separate decision. The [accepted plan](docs/PLAN.md) records
-the original scope. The [next milestone](docs/BOUNDED-CLI-SPEC.md) is a draft,
-not an implemented feature list.
