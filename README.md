@@ -26,7 +26,7 @@ See the [workflow guide](docs/WORKFLOW.md) for the roles and review steps.
 ## Use Aegean
 
 Aegean currently supports specification drafting and review in controlled trials.
-Full delivery remains under evaluation and requires release acceptance.
+Full delivery remains under evaluation and requires release acceptance or an authorised pilot.
 Start with the [guides](docs/README.md) for supported use and operating instructions.
 
 The initial scope is command-line changes on macOS with subscription CLI accounts.

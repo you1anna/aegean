@@ -12,7 +12,7 @@ VM-contained Builder, separate execution permits, host-specific evidence and exp
 The source includes scoped pilot authorisation, local decisions and model-use controls. Live qualification remains pending.
 [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) records that work and its evidence.
 
-The operations guide labels bootstrap procedures. Before any live action, use
+The operations guide describes this source version. Before any live action, use
 `aegean doctor --json` and the guide for the installed release.
 
 ## Design and evidence
@@ -20,6 +20,7 @@ The operations guide labels bootstrap procedures. Before any live action, use
 | Reference | Purpose |
 | --- | --- |
 | [Architecture](ARCHITECTURE.md) | Roles, data ownership, module boundaries and trust boundaries. |
+| [Model use](MODEL-USAGE.md) | Selection, context, token allowances and recovery limits. |
 | [Testing](TESTING.md) | Focused checks, full-suite commands and fixture requirements. |
 | [Current status](STATUS.md) | Dated results, installed versions and open release requirements. |
 | [Acceptance contract](ACCEPTANCE.md) | Evidence required for an exact installed release. |
@@ -33,8 +34,7 @@ grant permission for a run.
 | Record | Purpose |
 | --- | --- |
 | [Bounded CLI specification](BOUNDED-CLI-SPEC.md) | Scope for the implementation in PR #2; see its approval record below. |
-| [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, implemented foundations and remaining integration work. |
-| [Model use](MODEL-USAGE.md) | Selection, context, token allowances and recovery limits. |
+| [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, source checks and remaining release requirements. |
 | [Model selection and token budgets](../openspec/changes/task-model-selection-and-token-budgets/proposal.md) | Approved scope, design and implementation checklist. |
 | [Model policy review](MODEL-POLICY-REVIEW.md) | Independent findings, fixes and verification limits. |
 | [Test report](TEST-REPORT-2026-11-13.md) | Recorded local and hosted results for the bounded CLI candidate. |

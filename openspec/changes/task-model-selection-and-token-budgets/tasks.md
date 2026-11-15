@@ -46,7 +46,7 @@ Source implementation uses the recorded manual review exception. This checklist 
 - [ ] 6.4 Run authorised paired comparisons. Verify every threshold in the design, including all repairs and escalations.
 - [x] 6.5 Retain baseline selection for failed classes. Activate only qualified entries and test rejection of stale qualification evidence.
 - [x] 6.6 Review README and its immediate links against delivered behaviour. Keep technical evidence in the engineering reference.
-- [ ] 6.7 Update the current PR with verified results and outstanding gates. Confirm the remote head and hosted checks for that candidate.
+- [x] 6.7 Update the current PR with verified results and outstanding gates. Confirm the remote head and hosted checks for that candidate.
 
 Live capability probes and paired qualification remain outside the approved source-work exception.
 The [qualification candidate](qualification.md) records the preparation that still needs exact models, allowances and fixture hashes.
