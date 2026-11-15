@@ -34,6 +34,7 @@ grant permission for a run.
 | --- | --- |
 | [Bounded CLI specification](BOUNDED-CLI-SPEC.md) | Scope for the implementation in PR #2; see its approval record below. |
 | [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, implemented foundations and remaining integration work. |
+| [Model selection and token budgets](../openspec/changes/task-model-selection-and-token-budgets/proposal.md) | Proposed task policy, usage controls and qualification checks; not implemented. |
 | [Test report](TEST-REPORT-2026-11-13.md) | Recorded local and hosted results for the bounded CLI candidate. |
 | [Pilot notes](PILOT-NOTES.md) | Real run outcomes and links to private evidence. |
 | [Recovery checks](RECOVERY-CHECKS.md) | Scope and limits of synthetic coordinator tests. |

@@ -1,5 +1,21 @@
 # Bounded CLI checkpoint
 
+## Model policy proposal — 15 November 2026
+
+The operator requested task-based model selection and token budgets in the current PR.
+The [proposal](../openspec/changes/task-model-selection-and-token-budgets/proposal.md)
+defines requirements, design decisions and implementation checks. It is not implemented.
+The existing pilot, decision and recovery work below remains required for release.
+
+At assessment, PR #2 is open, is not a draft and has head `952ec75`.
+The dated draft and pause statements below describe earlier checkpoints.
+The new request authorises continued work; it does not authorise merge, installation or a real pilot.
+
+Validation of this documentation change passed: locked dependency installation,
+type checking, strict OpenSpec validation, local documentation links and `git diff --check`.
+The full synthetic suite passed 141 tests, with no failures or skips, in 234.19 seconds.
+Source behaviour is unchanged. These checks do not establish model qualification or release acceptance.
+
 ## Session close-out — 13 November 2026
 
 Published the explicitly approved commit
