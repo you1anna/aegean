@@ -4,7 +4,10 @@
 
 Aegean remains under trial. Read [current status](STATUS.md) before any installation
 or run. Installation, live trials and release acceptance require explicit approval.
-This guide describes the source checkout; an installed release can differ.
+The procedures below describe the bootstrap workflow on `main`.
+The bounded CLI source in PR #2 changes installation, ownership, approvals and
+acceptance. See [version context](ENGINEERING.md#versions-in-context) before use.
+Use the guide path from the installed `aegean doctor --json` for live operations.
 
 [Install](#install-on-either-mac) · [Configure](#configure-and-approve-billing-policy) ·
 [Run](#run-lifecycle) · [Record evidence](#run-records-and-debugging) · [Recover](#recovery)

@@ -20,6 +20,7 @@ mise exec -- npm test
 These commands install development dependencies, check types, build the source
 and run the automated tests. They do not install an Aegean release.
 The suite uses synthetic fixtures and temporary directories.
+See [testing](docs/TESTING.md) for focused checks, resource limits and fixture requirements.
 
 After a branch change, move any old `dist/` output aside before these checks.
 The build does not remove obsolete compiled files.
@@ -31,8 +32,8 @@ See [current results and gaps](docs/STATUS.md).
 ## Make a change
 
 1. Read the relevant guide and source before you edit.
-2. Follow the approval path in [AGENTS.md](AGENTS.md). Significant engineering
-   work needs an approved specification, an isolated branch and human review.
+2. Follow [AGENTS.md](AGENTS.md). Use a branch and human-reviewed PR for every
+   change, including documentation. Significant engineering work also needs an approved specification.
 3. Keep the change focused. Preserve the [module boundaries](docs/ARCHITECTURE.md#code-structure).
 4. Add appropriate automated coverage for behaviour changes. Test rejection and
    recovery as well as success.

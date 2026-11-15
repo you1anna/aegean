@@ -3,8 +3,9 @@
 This repository contains the Aegean software-delivery coordinator.
 Keep unrelated projects and their records outside this checkout.
 
-Read README.md, docs/PLAN.md and docs/STATUS.md. Significant changes use a branch
-and a human-reviewed PR. Never merge, publish, deploy, change billing, or bypass
+Read README.md, docs/PLAN.md and docs/STATUS.md. All Aegean changes, including
+documentation, use a branch and a human-reviewed PR. Never push changes directly
+to `main`. Never merge, publish, deploy, change billing, or bypass
 the verifier without the user's explicit instruction. The initial documentation
 commit on main is the recorded bootstrap exception.
 

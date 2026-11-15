@@ -47,9 +47,10 @@ boundary. There is no general scheduler or background model polling.
 | Private execution context and local paths | Local run records. |
 | Reusable implementation | This source repository. |
 
-The global lease is the record of which host owns the run. Only one run can own
-it, including while it waits for human approval. Local files do not create a
-second shared ownership record.
+The control ledger records durable run ownership separately from execution capacity.
+Each repository has one execution permit. One global Builder permit limits
+implementation across hosts. Human waits release permits only after confirmed cleanup;
+the run retains its owner. Local files do not create a competing shared owner.
 
 Control updates use a parent revision and a normal Git push. Two competing pushes
 cannot both advance the same parent. An uncertain push requires a fresh remote
@@ -60,13 +61,13 @@ explicit recovery decision. See [recovery](OPERATIONS.md#recovery).
 
 ## Approval and evidence
 
-Specification approval binds the exact digest and published commit. The committed
-specification must match the local files.
+Approval binds the specification revision, candidate and verification evidence.
+The source in PR #2 separates local decisions from publication. It stops for
+local specification review before the first push. Public local-decision commands
+remain incomplete at this checkpoint; see [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
 
-Candidate publication requires a separate human comment. It binds the candidate
-commit, specification, suite and verification receipt. The coordinator reads both
-approvals independently from GitHub. Candidate code stays local until publication
-approval, so its CI cannot run before that decision.
+The [operations guide](OPERATIONS.md#run-lifecycle) describes the earlier bootstrap
+comment-approval workflow. Use the installed release's guide for live operations.
 
 Protected tests expose public requirement identifiers to repair feedback. The
 Builder receives the approved requirement text, not hidden cases, expected
@@ -83,15 +84,19 @@ message is not verification evidence.
 Claude planning and review calls have no tools. They use subscription login,
 restricted mode and bounded inputs. Their responses must pass schema checks.
 
-The Builder uses a separate Codex process with a restricted filesystem profile.
-Its tool network is disabled. It inherits neither user configuration nor the
-operator's GitHub environment. Git metadata and agent configuration paths are
-denied. Unreviewed executable agent settings block implementation.
+The Builder uses a trusted host Codex client and a restricted tool bridge.
+Candidate execution occurs in a dedicated VM container. Bounded snapshots supply
+candidate files; validated import returns the result to the worktree. Host model
+authentication stays outside candidate execution.
 
-**The native Builder boundary does not contain detached process sessions.**
-A child process can survive its parent and continue to write within the sandbox.
-Process-group cleanup alone does not satisfy the required isolation check.
-Ordinary implementation remains blocked; see [release acceptance](ACCEPTANCE.md).
+The old host-execution entry points refuse use. Resource and import records
+support interruption recovery. Unknown cleanup retains ownership and execution intent.
+Native synthetic controls are recorded in [bounded CLI progress](BOUNDED-CLI-PROGRESS.md);
+they do not establish full live workflow acceptance.
+
+The installed bootstrap used a native process boundary that failed detached-process
+containment. Its evidence does not describe the newer VM boundary or qualify a
+new release. See [release acceptance](ACCEPTANCE.md).
 
 ### Git on the host
 

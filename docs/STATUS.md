@@ -17,10 +17,11 @@ The documentation review did not repeat host acceptance or change the installati
 | Ordinary implementation | Blocked. Native detached-process containment failed; release acceptance remains incomplete. |
 | Verifier VM | Stopped at the last primary host assessment. |
 | secondary Mac | Installation and acceptance remain unverified. |
-| Next milestone | A bounded CLI pilot with independent host acceptance is proposed, not implemented. |
+| PR #2 source | Bounded CLI foundations are implemented; full pilot and local decision integration remain incomplete. |
 
-**Next decision:** approve or revise the proposed minimum for a usable host in the
-[14 November assessment](#14-november-2026-pilot project-enrolment-and-the-path-to-a-usable-host).
+For the source in PR #2, read [bounded CLI progress](BOUNDED-CLI-PROGRESS.md).
+It records implementation and approval evidence separately from the installed-host
+assessment below. A source change does not update the installed release.
 Do not enrol further real projects or treat local test success as release acceptance.
 
 For live installed readiness, run `aegean doctor --json`. Its result can differ
