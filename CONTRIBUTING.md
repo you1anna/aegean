@@ -2,8 +2,6 @@
 
 [Overview](README.md) · [Guides](docs/README.md) · [Engineering](docs/ENGINEERING.md)
 
-Help make each change easier to understand, use and review. Clear bug reports,
-focused improvements and useful documentation all contribute to that result.
 Read [AGENTS.md](AGENTS.md) for repository rules and [the accepted plan](docs/PLAN.md) for scope.
 
 ## Check the source
@@ -56,25 +54,25 @@ content or data from another project.
 
 ## Documentation
 
-Make clarity and simplicity govern technical complexity. Lead with the useful
-result for the reader and the capabilities that support it.
+Describe what the software does, what it produces and how to use it.
 
-### Review the reader's path in every pull request
+### Check the docs in every pull request
 
-1. State the value that the change delivers and the evidence for it.
+1. Explain what the change lets the user do. Support the claim with observed behaviour.
 2. Review the README and every guide it links to directly.
 3. Update the affected pages together so the introduction, examples and next steps agree.
-4. Keep the main path focused on user outcomes, supported use and clear actions.
+4. Use the overview and guides to explain supported tasks, their results and the steps to follow.
 5. Put technical decisions, trial history and unfinished work in the engineering references.
 6. Keep material limits visible where they affect use. Do not present proposed or unaccepted behaviour as available.
 7. Check links, heading order and image descriptions. Preview layout changes.
 
-If a change has no effect on the reader's path, record that in the pull request.
+If the change needs no documentation update, explain why in the pull request.
 Do not add a top-level progress note for every internal change.
 
-### Write with restraint
+### Wording
 
-- Put the reader's purpose first. Explain what a command does before you show it.
+- Describe actions, outputs and checks. Do not use slogans, promotional language or vague promises.
+- Explain what a command does before you show it.
 - Use short sentences, common words and UK English. Explain a technical term
   when the reader first needs it.
 - Give each fact one home. Link to detail instead of copying it between guides.

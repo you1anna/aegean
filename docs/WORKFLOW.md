@@ -1,47 +1,43 @@
-# From request to reviewed change
+# Workflow
 
 [Overview](../README.md) · [Guides](README.md)
 
-Aegean gives each stage a clear result for the next decision. The specification
-states the intended change. The candidate contains the code. The evidence shows
-what the checks establish.
+Aegean separates specification, implementation and verification. You approve the
+scope before implementation and review the code and test results before publication.
 
-## 1. Make the request clear
+## 1. Draft the specification
 
-Describe the problem, the useful outcome and the constraints. The Scout turns
-that request into an OpenSpec specification for your review.
+Describe the problem, the expected behaviour and the constraints. The Scout uses
+Claude Code to draft an OpenSpec specification with requirements and success criteria.
 
-**Your result:** a concrete scope and success criteria you can discuss before
-implementation.
+Review the specification before implementation. Resolve missing requirements or
+unwanted changes at this stage.
 
-## 2. Agree on the scope
+## 2. Approve the scope
 
-Review the specification and request changes where needed. Your approval identifies
-an exact revision, so later checks refer to the same agreement.
+Request revisions where needed. Your approval identifies an exact specification
+revision, so implementation and tests refer to the same requirements.
 
-**Your result:** a shared definition of the change and how to assess it.
+## 3. Build and check the code
 
-## 3. Produce a candidate and evidence
+The Auditor uses Claude Code to prepare protected tests from the approved
+specification. The Builder uses Codex to write code in an isolated worktree.
 
-An independent Auditor prepares protected tests from the approved specification.
-The Builder creates a candidate in an isolated worktree. The verifier checks the
-candidate, and the Auditor reviews it in a fresh context.
-
-**Your result:** a proposed change with test and review evidence. Bounded repair
-attempts let the Builder address failures without an open-ended loop.
+The verifier runs the tests and records the results. The Auditor reviews the
+candidate code in a fresh context. Repair attempts have a fixed limit.
 
 This stage requires release acceptance. Full delivery remains under evaluation;
 see [supported use](README.md#supported-use) before a run.
 
-## 4. Decide what to publish and merge
+## 4. Review and publish
 
-Review the candidate and its evidence. You approve publication before Aegean pushes
-the candidate code. You then decide whether to merge the pull request.
+Inspect the code diff, test results and review findings. Approve publication only
+when you are satisfied with the change. Aegean checks that approval before the push.
 
-**Your result:** a deliberate delivery decision tied to the reviewed change.
-Aegean never supplies your approval or merges on your behalf.
+You then decide whether to merge the pull request. Aegean never supplies your
+approval or merges on your behalf.
 
-## Continue
+## Operating instructions
 
 For commands, approval steps and recovery, use the [operations guide](OPERATIONS.md).
 For roles and trust boundaries, read the [architecture](ARCHITECTURE.md).

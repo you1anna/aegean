@@ -2,10 +2,10 @@
 
 [Overview](../README.md) · [Guides](README.md) · [Contribute](../CONTRIBUTING.md)
 
-Use these records to understand the design, assess evidence or review a proposed
-change. For the product workflow and operating steps, start with the [guides](README.md).
+These records describe the implementation, test results and proposed changes.
+For operating instructions, use the [guides](README.md).
 
-## Versions in context
+## Source and installed versions
 
 The installed bootstrap and the source in PR #2 differ. The branch adds a
 VM-contained Builder, separate execution permits, host-specific evidence and explicit routing activation.

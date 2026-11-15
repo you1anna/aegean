@@ -1,38 +1,27 @@
 # Aegean
 
-**Clarity at every step of AI-assisted software delivery.**
+Aegean coordinates Claude Code and Codex to draft specifications, write code and
+check software changes. It uses OpenSpec to record the requirements.
 
-Turn a software request into a clear specification, a focused change and evidence
-for a human decision. Aegean brings OpenSpec, Claude Code and Codex into one
-reviewable workflow.
+You approve the specification before implementation and the code before publication.
+You decide whether to merge the pull request.
 
-[The workflow](docs/WORKFLOW.md) · [Guides](docs/README.md) · [Contribute](CONTRIBUTING.md)
+[Workflow](docs/WORKFLOW.md) · [Guides](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
 ![A translucent ribbon forms an A above a calm Aegean sea at dusk.](docs/images/aegean.png)
 
-## Useful at every step
+## How it works
 
-Each stage has a clear purpose and a concrete result:
+1. **Specify.** The Scout drafts the requirements from your request. You review
+   and approve the scope before code changes begin.
+2. **Build.** The Builder writes code in an isolated worktree against the approved
+   specification.
+3. **Check.** A separate Auditor creates protected tests and reviews the code.
+   The verifier runs the tests and records the results.
+4. **Review.** You inspect the code diff and results, approve the push and decide
+   whether to merge.
 
-- **Agree on the right change.** A written specification makes scope and success
-  criteria explicit before implementation.
-- **Keep the work focused.** The Builder works against the approved specification
-  in an isolated worktree.
-- **Review with evidence.** Independent tests and review give you a basis for
-  a decision about the candidate.
-- **Stay in control.** You approve the scope, approve publication and decide
-  whether to merge.
-
-[Follow the workflow](docs/WORKFLOW.md) to see what each stage produces and how
-its result supports the next decision.
-
-## Beauty in simplicity
-
-Software delivery can be complex. The process should remain clear.
-
-Each step has one purpose. Each fact has one owner. Aegean keeps the request,
-change and evidence connected so you can understand the result without tracing
-every technical detail.
+See the [workflow guide](docs/WORKFLOW.md) for the roles and review steps.
 
 ## Use Aegean
 
