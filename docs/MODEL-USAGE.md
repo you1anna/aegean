@@ -12,6 +12,9 @@ The Scout and Builder can use a smaller model for an approved, qualified task cl
 Unknown or consequential scope uses the baseline. Repairs use the baseline.
 Both Auditor tasks retain the baseline, and the verifier uses no model.
 
+The [live qualification plan](../openspec/changes/task-model-selection-and-token-budgets/qualification.md) proposes the Builder comparison and trial allowances.
+It requires approval before execution.
+
 The shipped policy has no smaller-model qualification entries. It therefore selects the baseline for every model role.
 Unavailable models and reported model changes stop execution; no provider or API fallback replaces them.
 A requested model identifier is not proof of the model actually served. Usage records preserve that distinction.

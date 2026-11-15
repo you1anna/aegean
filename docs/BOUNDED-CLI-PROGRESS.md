@@ -30,6 +30,9 @@ verified the complete source candidate `b631e8d85b5fee81c2e1f5a2f568703e2399bf8f
 Dependency installation, type checking and all 175 tests passed, with no failures or skips.
 The hosted test runner took 779.41 seconds. Independent review found no remaining actionable finding.
 The subsequent documentation commit records these results and aligns the overview; it does not change source, tests or policy.
+The documentation follow-up `bf5b92d` also passed hosted CI run 43714883064 (archived CI record).
+All 175 tests passed with no failures or skips in 628.59 seconds.
+
 CI permits 15 minutes because the expanded local suite takes approximately nine minutes.
 This changes the job deadline, not individual test limits or assertions.
 No live model call, installation or readiness change forms part of this source-work exception.
