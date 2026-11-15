@@ -1,37 +1,65 @@
 # Aegean
 
-Human-governed agentic software delivery, using OpenSpec, Claude Code and Codex.
+**Clarity at every step of AI-assisted software delivery.**
 
-**Status: bootstrap installed on the primary Mac; full workflow acceptance pending.**
-See [current evidence and gaps](docs/STATUS.md).
+Aegean coordinates OpenSpec, Claude Code and Codex around a change you approve.
+It separates the specification, code and independent checks, with human decisions
+before implementation, publication and merge.
 
-The reusable implementation is on `bootstrap-v1` for human review. The secondary Mac,
-live subscription role loop and real-project pilot have not passed acceptance.
-`aegean doctor --json` reports these gates; installation alone does not enable
-implementation runs.
+[Documentation](docs/README.md) · [Current status](docs/STATUS.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md)
 
-PR remediation also confirmed a detached-child sandbox containment gap. Ordinary
-use remains blocked until that control passes native acceptance on both Macs;
-see the [acceptance contract](docs/ACCEPTANCE.md).
+> **Experimental.** Aegean is under active trial. The full workflow is not yet
+> accepted for ordinary use. Read the [tested behaviour and open release
+> requirements](docs/STATUS.md) before installation or a trial.
 
-Aegean is the default route for significant engineering changes. Simple,
-low-risk operations retain a lightweight path. Specifications, protected tests,
-implementation, verification and human decisions have distinct owners.
+![A translucent ribbon forms an A above a calm Aegean sea at dusk.](docs/images/aegean.png)
 
-The intended loop is:
+## Why Aegean
 
-`request → spec → human approval → protected tests → build → verify/review → human publication approval → human merge`
+Software delivery can be complex. The process should remain clear.
 
-One Builder, two repair attempts, subscription authentication only. Either Mac
-can own a run; the secondary host is not a required server. Public developer tests remain
-visible. Protected test source and expected results live outside Builder access.
+Aegean's aim is beauty in simplicity: a clear request, visible evidence and
+deliberate decisions. Each step has one purpose. Each fact has one owner.
+You should be able to see what changed, why it changed and what still needs proof.
 
-- [Implementation plan](docs/PLAN.md)
-- [Status and release gates](docs/STATUS.md)
-- [Architecture and security](docs/ARCHITECTURE.md)
-- [Installation and recovery](docs/OPERATIONS.md)
-- [Low-cost testing](docs/TESTING.md)
+## How it works
 
-This repository is private pending an explicit publication decision. It contains
-no history from the former personal-capture project, which is preserved privately
-as `legacy-project`. Public demonstrations use synthetic data only.
+1. **Describe the change.** The Scout drafts an OpenSpec specification.
+2. **Approve the scope.** You review the specification before implementation.
+3. **Build and check.** An independent Auditor creates protected tests. The
+   Builder writes code, then the verifier checks it and the Auditor reviews it.
+4. **Review the result.** You approve the candidate before Aegean pushes it.
+   You decide whether to merge.
+
+Claude Code supplies the Scout and Auditor; Codex supplies the Builder.
+The coordinator controls state, credentials and approvals. Models do not approve
+their own work. A passing test suite does not replace human review.
+
+The initial scope is small command-line changes on macOS. Aegean uses subscription
+CLI accounts, with one Builder at a time and bounded repair attempts.
+See the [architecture](docs/ARCHITECTURE.md) for the boundaries and current limits.
+
+## Start here
+
+- **Understand the project:** read the [documentation map](docs/README.md).
+- **Assess a trial:** read the [current status](docs/STATUS.md), then the
+  [installation and operations guide](docs/OPERATIONS.md).
+- **Work on the source:** follow the [contributor guide](CONTRIBUTING.md).
+
+If Aegean is already installed, inspect its readiness:
+
+```sh
+aegean doctor --json
+```
+
+Read `fullWorkflowReady` and each reported check. Installation alone does not
+mean the workflow is ready. The [operations guide](docs/OPERATIONS.md) explains
+the requirements and recovery steps.
+
+## Project status
+
+This repository remains private and has no software licence.
+Public release requires a separate decision. The [accepted plan](docs/PLAN.md) records
+the original scope. The [next milestone](docs/BOUNDED-CLI-SPEC.md) is a draft,
+not an implemented feature list.

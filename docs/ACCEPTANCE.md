@@ -1,16 +1,19 @@
 # Release acceptance evidence
 
-This is a fail-closed bootstrap. **The current native Builder adapter cannot
-contain a descendant that starts a new process session.** A bounded native probe
-on 12 November 2026 confirmed that the descendant could write inside its sandbox
-after the parent exited. Same-group termination tests do not establish detached
-writer containment. A supported containment adapter and fresh native evidence
-are required before ordinary use; no real repository is to be enrolled yet.
+[Documentation](README.md) · [Status](STATUS.md) · [Operations](OPERATIONS.md)
 
-The acceptance validator's schema and required check names are owned by
-`src/adapters/acceptance.ts`. Do not copy a synthetic test fixture into operator
-state or mark an unsupported capability as passing. The fixture providers emulate
-external systems solely to exercise orchestration; they are not release evidence.
+Acceptance ties a release decision to the exact installed files and observed
+test results. Missing, failed or stale evidence blocks readiness.
+
+**The native Builder still fails the required detached-process containment check.**
+Ordinary use requires a supported containment adapter and fresh native evidence.
+Do not enrol further real projects. [Status](STATUS.md) records the failed probe
+and existing enrolment.
+
+The [acceptance validator](../src/adapters/acceptance.ts) owns the schema and
+required check names. Never copy a synthetic fixture into operator state or mark
+an unsupported capability as passed. Fixture providers imitate external systems
+to test the coordinator. They are not release evidence.
 
 ## Identities
 
