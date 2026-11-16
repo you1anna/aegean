@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { transition, digest, POLICY, assertRunPolicy, type Event, type Run } from '../domain/workflow.js';
 import { selectModel, identity, type ModelRole, type ModelProfile } from '../domain/model-policy.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
-import { sourceContext } from './model-context.js';
-import { scoutPrefix, parseDraft, draftFiles, reviewSummary } from '../domain/scout.js';
+import { sourceContext, scoutContext } from './model-context.js';
+import { parseDraft, draftFiles, reviewSummary, responseFault } from '../domain/scout.js';
 import { nextSteps, listSteps } from '../domain/next-steps.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { SuiteSchema, ReviewSchema, assertSupportedImage } from '../domain/config.js';
@@ -24,7 +24,7 @@ import { reserveHost } from '../adapters/host-activity.js';
 import { archiveMerged } from './archive.js';
 import { budgetStatus, budgetedRole, budgetedExecution, reconcileCompletedBudget, nextArchiveAttempt } from './usage-budget.js';
 import { observeRun, finalizeRunEvidence } from './run-evidence.js';
-import { executionAuthorization } from './pilot.js';
+import { executionAuthorization, savedPilot } from './pilot.js';
 import { executionLock } from '../adapters/run-lock.js';
 import { pushExact, assertRemoteIdentity } from '../adapters/git-effects.js';
 import { recordVerifierResource, reconcileVerifierResource } from './verifier-recovery.js';
@@ -68,9 +68,9 @@ export async function status(id?: string): Promise<unknown> {
   try { usage = await budgetStatus(dir); }
   catch (error) { usage = { available: false, reason: (error as Error).message }; }
   // Guidance reads local facts only; a run owned by another host has none here.
-  const pilot = await access(join(dir, 'pilot.json')).then(() => true, () => false);
+  const pilot = await savedPilot(dir).then(saved => saved && { expiresAt: saved.artifact.expiresAt, budget: saved.artifact.budget }, () => undefined);
   const specification = run.spec ? await loadLocalRun(dir).then(local => join(local.worktree, 'openspec/changes', id) + '/', () => undefined) : undefined;
-  return { ...run, usage, ...(specification ? { specification } : {}), next: nextSteps(run, { pilot, ...(specification ? { specification } : {}) }) };
+  return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}) }) };
 }
 export async function cancel(id: string, root: string): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
@@ -142,11 +142,12 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
     try {
       if (result.code !== 0 || result.interrupted) throw new Error('interrupted, quota or tool failure');
       value = parse(result);
-    } catch {
+    } catch (error) {
+      const fault = result.code !== 0 || result.interrupted ? 'interrupted or unavailable' : `invalid response (${responseFault(error)})`;
       const failedKind = role === 'scout' ? 'lifecycle' : 'live-loop';
       const failedCheck = role === 'scout' ? 'scout' : role === 'builder' ? 'sandboxed-builder' : role === 'auditor-tests' ? 'independent-auditor' : 'independent-review';
       await observeRun(root, dir, run!, failedKind, failedCheck, 'unknown', { role, code: result.code, interrupted: result.interrupted });
-      await update(nowEvent('pause', { reason: `${role}: interrupted, unavailable or invalid response; inspect private effect receipt before explicit resume`, activeMs: result.durationMs }));
+      await update(nowEvent('pause', { reason: `${role}: ${fault}; inspect private effect receipt before explicit resume`, activeMs: result.durationMs }));
       return undefined;
     }
     if (limits.pilot) await observeRun(root, dir, run!, 'real-pilot', 'compatible-project', 'pass', limits.pilot);
@@ -193,10 +194,8 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
     if (run.state === 'requested') {
       await requireSubscriptions(root);
       const request = await readFile(local.sourceRequest, 'utf8');
-      const prefix = scoutPrefix(request, project);
-      const source = await sourceContext(local.worktree, project.modelExecution!.task, POLICY.models.roles.scout.inputBytes - Buffer.byteLength(prefix) - 256);
+      const { source, prompt } = await scoutContext(local.worktree, project, request);
       await recordContext(join(dir, `contexts/scout-${run.events.length}-source.json`), { ...source, text: undefined });
-      const prompt = prefix + source.text + `\nContext limit: ${POLICY.models.roles.scout.inputBytes} bytes; omitted ${source.omitted.length} files.\n`;
       const result = await model('scout', prompt, 900000, (timeout, deadline, profile) => claudeRole(bins.claude, prompt, dir, timeout, deadline, profile), r => parseDraft(parseJsonAnswer(claudeText(r))));
       if (!result) return { run };
       const draft = result.value;
@@ -221,7 +220,7 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
       const actual = await treeDigest(specDir);
       if (await committedSpecDigest(local.worktree, specCommit, specPath.slice(0, -1)) !== actual) throw new Error('local specification differs from its committed tree; refusing publication and approval');
       if (actual !== run.spec || specCommit !== run.specCommit) await update(nowEvent('draft', { spec: actual, specCommit }));
-      if (project.approvalMode === 'local') return { run, action: `Review the local specification with aegean approve --run ${id}`, worktree: local.worktree, specification: specDir + '/', ...(drafted ? { review: drafted } : {}), next: nextSteps(run, { pilot: true, specification: specDir + '/' }) };
+      if (project.approvalMode === 'local') return { run, action: `Review the local specification with aegean approve --run ${id}`, worktree: local.worktree, specification: specDir + '/', ...(drafted ? { review: drafted } : {}), next: nextSteps(run, { specification: specDir + '/' }) };
       const body = join(dir, 'pr-body.md');
       await writeFile(body, `Aegean specification review.\n\nPublished specification commit: [${specCommit}](https://github.com/${project.repository}/commit/${specCommit})\n\nSpecification digest: ${run.spec}\n\nApprove this exact published revision with:\n\n\`/aegean approve-spec ${run.spec} ${specCommit}\`\n\nImplementation starts only after approval and protected tests.\n`);
       await assertOwned(); await pushExact(local.worktree, local.branch, specCommit, signal, project.repository);

@@ -1,16 +1,18 @@
 import type { Run } from './workflow.js';
 import { REVIEW_NOTES } from './scout.js';
 
-export interface StepFacts { pilot?: boolean; specification?: string }
+export interface StepFacts { pilotExpiresAt?: number; specification?: string }
 type Guided = Pick<Run, 'id' | 'state'> & Partial<Pick<Run, 'reason' | 'publicationRef'>>;
 
 /** Operator guidance only. It grants no permission and replaces no gate. */
-export function nextSteps(run: Guided, facts: StepFacts = {}): string[] {
+export function nextSteps(run: Guided, facts: StepFacts = {}, now = Date.now()): string[] {
   const id = run.id, resume = `aegean resume --run ${id}`;
+  if (facts.pilotExpiresAt !== undefined && facts.pilotExpiresAt <= now && !['cancelled', 'archived', 'escalated'].includes(run.state))
+    return [`The pilot authorisation expired at ${new Date(facts.pilotExpiresAt).toISOString()}. It cannot be replaced.`, `Stop this run: aegean cancel --run ${id}`, 'Then, for new work, run in the project repository: aegean prepare --request FILE'];
   const folder = facts.specification ?? `openspec/changes/${id}/ in the run worktree`;
   switch (run.state) {
     case 'requested': return [
-      ...(facts.pilot ? [] : [`If aegean doctor shows fullWorkflowReady false, authorise a pilot first: aegean authorize-pilot --run ${id} --limits FILE`]),
+      ...(facts.pilotExpiresAt !== undefined ? [] : [`If aegean doctor shows fullWorkflowReady false, authorise a pilot first: aegean authorize-pilot --run ${id} --limits FILE`]),
       `Draft the specification (one model call): ${resume}`,
     ];
     case 'spec-drafted': return [

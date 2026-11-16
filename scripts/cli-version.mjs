@@ -2,6 +2,16 @@
 const stable = '(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)';
 const exact = new RegExp(`^${stable}$`);
 
+/** @param {string} value */
+export function isStableVersion(value) { return typeof value === 'string' && exact.test(value); }
+
+/** Numeric order of two stable versions. @param {string} left @param {string} right @returns {-1 | 0 | 1} */
+export function compareVersions(left, right) {
+  const a = left.split('.').map(BigInt); const b = right.split('.').map(BigInt);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+  return 0;
+}
+
 /** @param {string} output @returns {string | undefined} */
 export function reportedVersion(output) {
   const line = output.trim();
@@ -16,10 +26,5 @@ export function matchesVersion(output, requirement) {
   if (exact.test(requirement)) return actual === requirement;
   const range = requirement.match(new RegExp(`^>=(${stable}) <(${stable})$`));
   if (!range) return false;
-  const compare = (left, right) => {
-    const a = left.split('.').map(BigInt); const b = right.split('.').map(BigInt);
-    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
-    return 0;
-  };
-  return compare(actual, range[1]) >= 0 && compare(actual, range[2]) < 0;
+  return compareVersions(actual, range[1]) >= 0 && compareVersions(actual, range[2]) < 0;
 }

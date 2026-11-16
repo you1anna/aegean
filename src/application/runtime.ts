@@ -72,7 +72,7 @@ export async function doctor(root: string): Promise<Readiness> {
   let accepted = false; let acceptanceDetail = 'bootstrap: full workflow not accepted';
   try {
     await acceptedRelease(root, stateRoot(), undefined, host?.host); accepted = true;
-  } catch (error) { acceptanceDetail += `; ${(error as Error).message.slice(0, 160)}`; }
+  } catch (error) { acceptanceDetail += (error as NodeJS.ErrnoException).code === 'ENOENT' ? '; this host has no acceptance record. An authorised pilot does not need one' : `; ${(error as Error).message.slice(0, 160)}`; }
   checks.push({ name: 'release-acceptance', ok: accepted, detail: accepted ? 'release-specific gates accepted' : acceptanceDetail });
   return { version: packageInfo.version, ...(host ? {host:host.host} : {}), capability:'bounded-cli-v1', prerequisitesReady, crossHostHandoff:false, fullWorkflowReady: checks.every(c => c.ok), checks, operations: join(root, 'docs/OPERATIONS.md') };
 }

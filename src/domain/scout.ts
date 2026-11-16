@@ -1,12 +1,12 @@
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 
-const note = z.string().min(1).max(600);
+const note = z.string().min(1).max(2000);
 export const DraftSchema = z.object({
   proposal: z.string().min(1), requirements: z.string().min(1), design: z.string().min(1), tasks: z.string().min(1),
-  verification: z.string().min(1).max(4000),
-  coverage: z.array(note).min(1).max(40),
-  constraints: z.array(note).max(20),
-  openQuestions: z.array(note).max(20),
+  verification: z.string().min(1).max(8000),
+  coverage: z.array(note).min(1).max(80),
+  constraints: z.array(note).max(40),
+  openQuestions: z.array(note).max(40),
 }).strict();
 export type Draft = z.infer<typeof DraftSchema>;
 export interface ProjectChecks { checks: string[][]; verifier: { kind: string; image: string; command: string[] } }
@@ -23,6 +23,7 @@ export function scoutPrefix(request: string, project: ProjectChecks): string {
     '- coverage: array of strings. Write one entry for each need in the REQUEST and for each need in a context section that the REQUEST names. Give the need, then the requirement that covers it, or NOT COVERED and the reason.',
     '- constraints: array of strings. Write one entry for each repository rule that limits the REQUEST or conflicts with it. Give the file, the rule and its effect on the plan. Obey the rule and report it. Use [] if there is none.',
     '- openQuestions: array of strings. List each decision that the human must make before approval. Use [] if there is none.',
+    'Write at most 300 characters in each array entry and at most 10 sentences in verification.',
     'Obey the ignore rules in .gitignore: do not put a committed deliverable in an ignored path.',
     'Do not implement.',
     `PROJECT CHECKS:\n${JSON.stringify({ checks: project.checks, verifier: project.verifier })}`,
@@ -59,4 +60,11 @@ export function draftFiles(draft: Draft): Record<string, string> {
 /** Short operator summary; the complete notes stay in the specification folder. */
 export function reviewSummary(draft: Draft) {
   return { projectRulesThatLimitedTheRequest: draft.constraints, openQuestions: draft.openQuestions, notCovered: notCovered(draft) };
+}
+
+/** Names the fault class and field names only; model text never enters a run record. */
+export function responseFault(error: unknown): string {
+  if (error instanceof ZodError) return `fields: ${[...new Set(error.issues.map(issue => String(issue.path[0] ?? 'root')))].sort().join(', ').slice(0, 200)}`;
+  if (error instanceof SyntaxError) return 'not valid JSON';
+  return /Requirement and Scenario headings/.test((error as Error)?.message ?? '') ? 'requirements lack Requirement and Scenario headings' : 'unusable content';
 }

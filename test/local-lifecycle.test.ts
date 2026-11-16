@@ -71,6 +71,8 @@ test('pilot refuses missing authorization and expiry; call cap rejects execution
     record.decision.binding = digest(JSON.stringify(record.artifact)); // synthetic fixture models an honestly expired decision
     await writeFile(file, JSON.stringify(record));
     const expired = await f.resume(); assert.notEqual(expired.code, 0); assert.match(expired.stderr, /expired/); assert.equal((await f.events()).filter(e => e.role).length, 1);
+    const guided = JSON.parse((await f.cli(['status', '--run', (await f.current()).id])).stdout);
+    assert.match(guided.next[0], /pilot authorisation expired at .* It cannot be replaced/); assert.equal(guided.pilot.budget.maxModelCalls, 1);
     const late = await decision(f, 'pilot', { ...opts, expiresAt: record.artifact.expiresAt }); assert.notEqual(late.code, 0); assert.match(late.stderr, /expired at .*cannot be replaced/);
   } finally { await f.cleanup(); }
 });

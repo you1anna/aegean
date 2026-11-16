@@ -4,9 +4,9 @@ import { ProjectSchema, assertSupportedImage } from '../domain/config.js';
 import { candidateGit, candidateGitChecked } from '../adapters/candidate-git.js';
 import { eligible } from './enrol.js';
 import { hostConfig } from './runtime.js';
-import { digest, POLICY } from '../domain/workflow.js';
+import { digest } from '../domain/workflow.js';
 import type { Project } from '../domain/config.js';
-import { sourceContext } from './model-context.js';
+import { scoutContext } from './model-context.js';
 export async function checkProject(repo: string, signal?: AbortSignal) {
   repo = await realpath(repo);
   eligible(repo, (await hostConfig()).excludedRoots);
@@ -33,8 +33,7 @@ export async function checkProject(repo: string, signal?: AbortSignal) {
 }
 /** Lists the committed files that the Scout receives. No model call; no file text in the result. */
 export async function agentContext(repo: string, project: Project) {
-  const limitBytes = POLICY.models.roles.scout.inputBytes;
-  const source = await sourceContext(repo, project.modelExecution!.task, limitBytes - 256);
+  const { source, limit: limitBytes } = await scoutContext(repo, project, '');
   return {
     files: source.manifest.filter(part => part.included).map(part => ({ path: part.path, bytes: part.bytes, required: part.required })),
     omitted: source.omitted, bytes: source.bytes, limitBytes,
