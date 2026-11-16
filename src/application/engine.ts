@@ -86,7 +86,7 @@ export async function cancel(id: string, root: string): Promise<unknown> {
     await reconcileBuilder(dir, local.worktree);
     if (state.runs[id]?.state === 'cancelled') return state;
     const cancelledRun = state.runs[id]!;
-    const cancelled = await ledger.owned(id, host.host, local.generation, run => transition(run, nowEvent('cancel')));
+    const cancelled = await ledger.cancelOwned(id, host.host, local.generation, run => transition(run, nowEvent('cancel')));
     try {
       if (cancelledRun.schemaVersion === 2) await observeRun(root, dir, cancelledRun, 'recovery', 'cancellation', 'pass', { resourcesStopped: true, generation: local.generation });
     } catch (error) { return { ...cancelled, evidenceWarning: `Cancellation completed; observation unavailable: ${(error as Error).message}` }; }

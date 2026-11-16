@@ -39,6 +39,9 @@ here is fixed through the normal branch and PR, then linked from its entry.
   from the plan without a report; a second `authorize-pilot` asked for the confirmation, then failed with `EEXIST`;
   `status` gave no next step
 - Follow-up: [STATUS](STATUS.md), 16 November specification section
+- Cancel attempt: on `0.1.0-0c289ca0c4d2` (policy 0.5.0), `aegean cancel` failed with "run policy differs
+  from installed policy". Diagnostic log `~/Library/Logs/aegean/<timestamp>-*.jsonl`. The run stays
+  `spec-drafted`. Fix: [STATUS](STATUS.md), 16 November cancel section
 
 ## trial-01 — pilot project — 14 November 2026
 

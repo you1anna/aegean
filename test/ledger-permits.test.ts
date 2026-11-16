@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GitLedger, emptyLedger, Conflict, assertOwned, type Ledger } from '../src/adapters/ledger.js';
 import { checked, command } from '../src/adapters/process.js';
+import { acquireRunPermit } from '../src/application/ownership.js';
 import { createRun, transition, POLICY, digest, type Run, type HistoricalRun } from '../src/domain/workflow.js';
 
 async function fixture(initial: unknown = emptyLedger()) {
@@ -116,7 +117,8 @@ test('terminal transitions clear only exact own permits and cannot rewrite run i
     const ended = await f.ledger.owned('a', 'air', a, cancelled);
     assert.equal(ended.owners.a, undefined); assert.equal(ended.repositories['owner/a'], undefined);
     assert.equal(ended.builder!.run, 'b'); assert.equal(ended.owners.b!.generation, b);
-    const complete = await f.ledger.owned('b', 'mini', b, cancelled);
+    const complete = await f.ledger.cancelOwned('b', 'mini', b, cancelled);
+    assert.equal(complete.runs.b!.state, 'cancelled');
     assert.deepEqual(complete.owners, {}); assert.deepEqual(complete.repositories, {}); assert.equal(complete.builder, null);
     await assert.rejects(f.ledger.resumeOwned('a', 'air', a), /stale|terminal/);
   } finally { await f.close(); }
@@ -216,4 +218,25 @@ test('missing historical identity is restricted to terminal bootstrap records an
     {schemaVersion:2,revision:5,owners:{},repositories:{},builder:null,runs:{old:{...cancelled(run('old')),policyIdentity:undefined}}},
   ];
   for(const value of invalid){const f=await fixture(value);try{await assert.rejects(f.ledger.inspectMigration(),/invalid|quiescent/);await assert.rejects(f.ledger.migrateQuiescent(),/invalid|quiescent/);}finally{await f.close();}}
+});
+
+test('a run from an older policy can only be cancelled: permits are reacquired and released, every other change fails closed', async () => {
+  const older: Run = { ...run('older'), state: 'spec-drafted', policy: '0.4.0', policyIdentity: digest('older policy') };
+  const f = await fixture({ ...emptyLedger(), revision: 3, owners: { older: { run: 'older', host: 'air', generation: 3 } }, runs: { older } });
+  try {
+    const dir = await mkdtemp(join(f.root, 'run-')); const local = { id: 'older', generation: 3 };
+    await acquireRunPermit(f.ledger, dir, local, 'air');
+    const held = await f.ledger.read(); assert.ok(local.generation > 3); assert.equal(held.repositories['owner/repo']!.generation, local.generation);
+    await assert.rejects(f.ledger.owned('older', 'air', local.generation, value => value), /policy differs/);
+    await assert.rejects(f.ledger.owned('older', 'air', local.generation, cancelled), /policy differs/);
+    await assert.rejects(f.ledger.claimBuilder('older', 'air', local.generation), /policy differs/);
+    assert.throws(() => assertOwned(held, 'older', 'air', local.generation), /policy differs/);
+    await assert.rejects(f.ledger.cancelOwned('older', 'air', local.generation, value => ({ ...value, state: 'paused' })), /only cancel/);
+    await assert.rejects(f.ledger.cancelOwned('older', 'air', local.generation, value => ({ ...cancelled(value), policy: POLICY.version })), /identity/);
+    await assert.rejects(f.ledger.cancelOwned('older', 'foreign', local.generation, cancelled), /stale|foreign/);
+    const ended = await f.ledger.cancelOwned('older', 'air', local.generation, cancelled);
+    assert.equal(ended.runs.older!.state, 'cancelled'); assert.equal(ended.runs.older!.policy, '0.4.0');
+    assert.deepEqual(ended.owners, {}); assert.deepEqual(ended.repositories, {}); assert.equal(ended.builder, null);
+    await assert.rejects(f.ledger.cancelOwned('older', 'air', local.generation, cancelled), /stale|foreign/);
+  } finally { await f.close(); }
 });

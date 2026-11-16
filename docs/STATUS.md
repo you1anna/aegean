@@ -16,6 +16,17 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Cancel a run from an older policy
+
+`aegean cancel` refused `trial-02`, which policy 0.4.0 created. The installed release has policy 0.5.0.
+The error told the operator to cancel, but the ownership check applied the policy check to cancellation too.
+
+- The ledger now checks ownership separately from policy. Permit acquisition and release use the ownership check only.
+- `cancelOwned` accepts a run from any policy, but the change must end in `cancelled`. The run identity cannot change.
+- Each other change and effect still requires the installed policy. A ledger test shows both results on a synthetic run.
+
+Not established: this fix was not installed, and no real run was cancelled with it.
+
 ## 16 November 2026: Interactive guide
 
 Two pilot runs exposed the need for a guided command line. `aegean guide` is in source.

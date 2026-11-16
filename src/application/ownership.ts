@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { atomicJson } from '../adapters/files.js';
-import { assertOwned, type GitLedger } from '../adapters/ledger.js';
+import { assertOwnership, type GitLedger } from '../adapters/ledger.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 
 interface LocalOwner { id: string; generation: number }
@@ -8,7 +8,7 @@ const readRecord = async (path: string): Promise<unknown> => JSON.parse((await r
 export async function acquireRunPermit<T extends LocalOwner>(ledger: GitLedger, dir: string, local: T, host: string): Promise<void> {
   try { if (await readRecord(join(dir, 'permit-intent.json')) !== null) throw new Error('unresolved permit intent; explicitly recover before reacquiring'); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  const state = await ledger.read(); const run = assertOwned(state, local.id, host, local.generation, false);
+  const state = await ledger.read(); const run = assertOwnership(state, local.id, host, local.generation, false);
   const permit = state.repositories[run.repository.toLowerCase()];
   if (permit?.run === local.id && permit.host === host && permit.generation === local.generation) return;
   if (state.revision === Number.MAX_SAFE_INTEGER) throw new Error('control revision exhausted; permit cannot be reacquired');
@@ -28,7 +28,7 @@ export async function reconcilePermitIntent<T extends LocalOwner>(ledger: GitLed
   if (!intent || typeof intent !== 'object' || Array.isArray(intent) || Object.keys(intent).length !== 4 || intent.run !== local.id || intent.host !== host || !Number.isSafeInteger(intent.previous) || intent.previous <= 0 || !Number.isSafeInteger(intent.grant) || intent.grant <= intent.previous || ![intent.previous, intent.grant].includes(local.generation)) throw new Error('invalid or unrelated permit recovery intent');
   const state = await ledger.read(); const owner = state.owners[local.id];
   if (!owner || owner.host !== host || ![intent.previous, intent.grant].includes(owner.generation)) throw new Error('permit recovery cannot adopt a generation other than its exact recorded grant');
-  const run = assertOwned(state, local.id, host, owner.generation, false);
+  const run = assertOwnership(state, local.id, host, owner.generation, false);
   if (owner.generation !== intent.previous && state.repositories[run.repository.toLowerCase()]?.generation !== owner.generation) throw new Error('permit recovery has no matching confirmed repository grant');
   local.generation = owner.generation; await atomicJson(join(dir, 'run.json'), local);
   await atomicJson(join(dir, 'permit-intent.json'), null);
