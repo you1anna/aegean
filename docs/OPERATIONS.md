@@ -26,7 +26,10 @@ The bootstrap implementation is on `main`. A merged change does not update the
 installed release or establish readiness. Each Mac needs its own evidence.
 
 [toolchain.json](../toolchain.json) owns the required versions. Claude Code must
-already be installed with subscription authentication. Colima must match the declared version. Bootstrap downloads the pinned Docker client
+already be installed with subscription authentication.
+The Claude requirement is a stable-version range: at least the declared minimum, below the next major version.
+Newer versions within that range do not require a source change or a Claude downgrade.
+Old, prerelease and unrecognised versions fail the check. Colima must match the declared version. Bootstrap downloads the pinned Docker client
 from [Docker](https://download.docker.com/mac/static/stable/), verifies archive and binary SHA-256 hashes, and includes it in the release.
 The installed command selects that client automatically. Homebrew Docker and shell configuration remain unchanged.
 
@@ -52,6 +55,10 @@ If a cached client fails its integrity check, inspect and remove that client, th
 Codex and OpenSpec live inside the release. The installer copies the existing
 Claude binary into the release. It leaves the ordinary Claude installation and
 the desktop app unchanged.
+`aegean info --json` reports the copied Claude version under `toolVersions`.
+The artifact manifest covers `tool-versions.json` and the copied binary, so run evidence identifies the exact installed tool.
+Ordinary Claude updates do not change that copy. Repeated installation of the same source reuses its existing release.
+A compatible version passes the version check; native qualification and release acceptance remain separate requirements.
 
 The installer exports the recorded commit and builds in an empty directory.
 It rejects uncommitted source, including nonignored untracked files. Old local
@@ -136,7 +143,7 @@ Use `aegean COMMAND --help` to inspect command arguments. Unknown and duplicate 
 
 | File | Purpose |
 | --- | --- |
-| Repository `toolchain.json` | Runtime, provider, VM and image pins |
+| Repository `toolchain.json` | Runtime pins, Claude compatibility range, VM and image pins |
 | Repository `mise.toml` | Source runtime selection, checked against the Node pin |
 | Root and tools `package-lock.json` | Locked dependencies; source setup preserves these files |
 | Project `aegean.json` | Reviewed approver, task scope, verifier and token allowances |

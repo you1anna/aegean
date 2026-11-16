@@ -36,7 +36,7 @@ if (tool === 'git') {
   }
   const result = cp.spawnSync(config.git, args, { stdio: 'inherit' }); process.exit(result.status ?? 1);
 }
-if (args.includes('--version')) { output(tool === 'claude' ? '2.1.322 (Claude Code)' : tool === 'codex' ? 'codex-cli 0.167.2' : '2.0.0'); process.exit(0); }
+if (args.includes('--version')) { output(tool === 'claude' ? '2.1.323 (Claude Code)' : tool === 'codex' ? 'codex-cli 0.167.2' : '2.0.0'); process.exit(0); }
 if (tool === 'claude' && args[0] === 'auth') { output({ loggedIn:true, authMethod:'claude.ai', subscriptionType:'pro' }); process.exit(0); }
 if (tool === 'codex' && args[0] === 'login') { output('Logged in using ChatGPT'); process.exit(0); }
 if (tool === 'claude' || tool === 'codex') {

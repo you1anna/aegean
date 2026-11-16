@@ -47,6 +47,8 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
       import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
       await mkdir('dist', { recursive: true });
       await cp('compiled-source', 'dist/src', { recursive: true });
+      await mkdir('dist/scripts', { recursive: true });
+      await cp('scripts/cli-version.mjs', 'dist/scripts/cli-version.mjs');
       const output = JSON.parse(await readFile('build-output.json', 'utf8'));
       for (const [name, value] of Object.entries(output)) await writeFile('dist/' + name, value);
     `);
@@ -54,7 +56,7 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     await writeFile(join(repo,'docs/fixture.md'),'Synthetic fixture.'); await writeFile(join(repo,'skills/fixture.md'),'Synthetic fixture.');
     await writeFile(join(repo,'.gitignore'),'dist/\nnode_modules/\n');
     await symlink('docs/fixture.md',join(repo,'link'));
-    await writeFile(join(bin,'claude'),'#!/bin/sh\necho "2.1.322 (Claude Code)"\n',{mode:0o755});
+    await writeFile(join(bin,'claude'),'#!/bin/sh\necho "2.1.323 (Claude Code)"\n',{mode:0o755});
     const env={...process.env,PATH:bin+':'+process.env.PATH,npm_config_offline:'true',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1'};
     const git=(args:string[])=>checked('git',args,{cwd:repo,env});
     await git(['init','-b','main']);await git(['add','.']);await git(['-c','user.name=Test','-c','user.email=test@localhost','commit','-m','fixture']);
@@ -63,8 +65,17 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     await mkdir(join(repo,'dist'));await writeFile(join(repo,'dist/app.js'),'untrusted stale output');await writeFile(join(repo,'dist/obsolete.js'),'untracked old executable');
     assert.deepEqual(sourceProvenance(repo),identity);
     await writeFile(join(repo,'untracked'),'uncommitted');assert.throws(()=>sourceProvenance(repo),/clean committed/);await rm(join(repo,'untracked'));
+    for (const rejected of ['2.1.321', '3.0.0', '2.1.323-beta.1']) {
+      await writeFile(join(bin,'claude'),`#!/bin/sh\necho "${rejected} (Claude Code)"\n`,{mode:0o755});
+      await assert.rejects(checked(process.execPath,[join(repo,'scripts/install.mjs'),'--user-root',user],{cwd:repo,env,timeoutMs:30000}), /Claude >=2\.1\.322 <3\.0\.0 required/);
+      await assert.rejects(readlink(join(user,'.local/share/aegean/current')), {code:'ENOENT'});
+    }
+    await writeFile(join(bin,'claude'),'#!/bin/sh\necho "2.1.323 (Claude Code)"\n',{mode:0o755});
     await checked(process.execPath,[join(repo,'scripts/install.mjs'),'--user-root',user],{cwd:repo,env,timeoutMs:30000});
     const release=await readlink(join(user,'.local/share/aegean/current'));
+    assert.deepEqual(JSON.parse(await readFile(join(release,'tool-versions.json'),'utf8')), {claude:'2.1.323'});
+    await checked(process.execPath,[join(repo,'scripts/install.mjs'),'--user-root',user],{cwd:repo,env,timeoutMs:30000});
+    assert.equal(await readlink(join(user,'.local/share/aegean/current')),release);
     const installed=JSON.parse(await readFile(join(release,'installation.json'),'utf8'));
     assert.equal(await readFile(join(release,'bin/docker-client/docker'),'utf8'), dockerBytes);
     assert.match(await readFile(join(user,'.local/bin/aegean'),'utf8'), /current\/bin/);
@@ -76,5 +87,6 @@ test('provenance rejects dirty sources and installer rebuilds from the recorded 
     await assert.rejects(readFile(join(release,'dist/obsolete.js')));
     for(const name of ['aegean.json','pilot-limits.json']) assert.equal(await readFile(join(release,'examples',name),'utf8'),await readFile(join(repo,'examples',name),'utf8'));
     const artifacts=JSON.parse(await readFile(join(release,'artifact-manifest.json'),'utf8'));assert.ok(artifacts.some((entry:{path:string})=>entry.path==='examples/pilot-limits.json'));
+    assert.ok(artifacts.some((entry:{path:string})=>entry.path==='tool-versions.json'));
   }finally{await rm(root,{recursive:true,force:true});}
 });

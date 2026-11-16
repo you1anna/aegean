@@ -16,6 +16,22 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Claude compatibility fix
+
+The source accepts stable Claude versions within the range in `toolchain.json`.
+Installation, authentication and doctor use the same rule. The copied version remains bound to the release artifact identity.
+See [installation requirements](OPERATIONS.md#install-on-either-mac) for operation and reporting.
+
+The regression reproduced rejection of Claude 2.1.323 before the fix.
+After the fix, synthetic installation accepts that version and rejects old, prerelease and next-major versions.
+Repeated installation preserves the existing release. The host's Claude 2.1.325 output also passes the compatibility rule.
+
+Locked dependency installation, type checks, changed-script syntax checks, documentation links and `git diff --check` passed.
+The full suite passed **212 tests, with no failures or skips**: 191 TypeScript tests and 21 script tests.
+Durations were 613.41 seconds and 1.14 seconds. An earlier sandbox-blocked attempt was stopped and is not passing evidence.
+These results cover synthetic behaviour. This change has no live installation, native qualification or release-acceptance evidence.
+Publication and human PR review remain pending.
+
 ## 15 November 2026: Local operator commands
 
 The operator approved the manual source-work exception used for PR #2, tests, independent review and removal of the current installation.
