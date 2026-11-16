@@ -16,6 +16,24 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Review of the specification and guidance code
+
+A review of the code from PR #6 and the project standard fix found these weak points. All are corrected in source:
+
+- The `project check` preview and the run built the Scout prompt separately, with different size limits. One function now builds both.
+- Length limits on draft entries could fail a charged Scout call. The limits are wider, and the prompt states the wanted length.
+- A pause after a bad model answer did not say what was wrong. The reason now names the fault and the fields, never model text.
+- `status` sent the operator to `resume` after a pilot authorisation expired. It now shows the expiry and tells the operator to cancel.
+- A first `authorize-pilot` made two control ledger round trips. It makes one again.
+- Version order had two implementations. `scripts/cli-version.mjs` owns it.
+- `doctor` printed a raw `ENOENT` for an absent acceptance record. It prints a plain sentence.
+
+The tests are split by concern: `scout.test.ts` and `operator-guidance.test.ts`. No behaviour of an approval gate changed.
+No live model call or installation occurred. The check results are in the pull request.
+
+Next step at session close: the operator reviews this pull request. Run `trial-02` is still `spec-drafted` in the control ledger;
+cancel it before the next `aegean prepare`.
+
 ## 16 November 2026: Project standard range
 
 PR #6 made each enrolled project edit `standardVersion` after the policy change. The manual step was removed.

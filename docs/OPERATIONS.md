@@ -310,6 +310,9 @@ Read `review-notes.md` in that folder first. It contains:
 The Scout writes these notes. They are not verification evidence. If a project rule or the request is wrong, cancel the run.
 Then correct the project on main and prepare a new run.
 
+If a model answer does not have the required format, the run pauses and the call stays charged.
+The pause reason names the fault and the fields, for example `invalid response (fields: coverage)`. It never contains model text.
+
 Before approval, edit only `openspec/changes/RUN_ID/` in the isolated worktree.
 Run `aegean resume --run ID` to record a revised draft.
 The human then runs:
@@ -366,6 +369,7 @@ Revisions retain all consumed time, calls and tokens.
 Use `aegean status` or `aegean status --run ID` to inspect state without a model
 call. Status preserves durable run state if local accounting is unavailable.
 The `next` field gives the commands for the current state. It is guidance; it grants no permission.
+For a pilot run, the `pilot` field shows the expiry time and the limits. After the expiry, `next` tells you to cancel the run.
 A failed command prints a `recovery` line that names the missing step where Aegean can identify it.
 Use Ctrl-C to interrupt the call. Follow [recovery](#recovery) before further action.
 

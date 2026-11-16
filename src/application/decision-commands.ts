@@ -76,12 +76,10 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       if (run.revisions >= limits.budget.maxRevisions) throw new Error('revision budget exhausted');
       return buildRevisionArtifact(root, dir, local, run, options.scope);
     };
-    // Check a saved authorisation before the human is asked to type a confirmation.
-    if (action === 'pilot') {
-      const repeated = await withRun(id, async (dir, _local, run) => { const saved = await savedPilot(dir); return saved ? { run, ...repeatedPilot(saved.artifact, run.id, options) } : undefined; });
-      if (repeated) return { ...repeated, authorized: true, action: `already authorised; no new decision was recorded. Continue with aegean resume --run ${id}` };
-    }
     const reviewed = await withRun(id, async (dir, local, run) => {
+      // Check a saved authorisation before the human is asked to type a confirmation.
+      const saved = action === 'pilot' ? await savedPilot(dir) : undefined;
+      if (saved) return { run, repeated: repeatedPilot(saved.artifact, run.id, options) };
       const artifact = await build(dir, local, run);
       if (action === 'publish' && run.publicationRef) {
         await validateLocalPublication(root, dir, local, run);
@@ -94,6 +92,7 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       if (Buffer.byteLength(summary) > 300_000) throw new Error('decision review exceeds bounded capacity');
       return { artifact, run, summary, authorized: false };
     });
+    if ('repeated' in reviewed) return { run: reviewed.run, ...reviewed.repeated, authorized: true, action: `already authorised; no new decision was recorded. Continue with aegean resume --run ${id}` };
     if (reviewed.authorized) return { run: reviewed.run, authorized: true, action: 'resume exact publication' };
     // Neither a Git transaction, execution permit nor local lock spans human waiting.
     const decision = await confirm(action, id, reviewed.summary, reviewed.artifact, reviewed.run.approver, () => authenticatedApprover(reviewed.run.approver, signal), signal);

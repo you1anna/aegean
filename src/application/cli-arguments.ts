@@ -45,7 +45,7 @@ export function validateArguments(args:string[]):string|undefined{
 const hints:[RegExp,string][]=[
   [/--run is required/,'Give the run identifier with --run ID. Run aegean status to list the runs. A run exists only after aegean prepare --request FILE.'],
   [/--request is required/,'Give the request file: aegean prepare --request FILE. Run the command in the project repository.'],
-  [/--limits|--expires-at is required/,'Give the reviewed limits file: aegean authorize-pilot --run ID --limits FILE.'],
+  [/(--limits|--expires-at) (is required|requires a value)/,'Give the reviewed limits file: aegean authorize-pilot --run ID --limits FILE.'],
   [/invalid run identifier|unknown run/,'Copy the complete run identifier from aegean status.'],
   [/pilot authorization (expired|with different limits)|already has a pilot authorization/,'One pilot authorisation applies to one run. Run aegean status --run ID to see the next step.'],
   [/commit or preserve current work/,'Commit the project changes, push main to origin, then run the command again.'],

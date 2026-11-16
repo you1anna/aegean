@@ -2,6 +2,9 @@ import { parseSnapshot } from '../adapters/builder-snapshot.js';
 import { candidateGitChecked } from '../adapters/candidate-git.js';
 import { boundedContext, type ContextPart } from '../domain/context.js';
 import type { TaskScope } from '../domain/model-policy.js';
+import type { Project } from '../domain/config.js';
+import { POLICY } from '../domain/workflow.js';
+import { scoutPrefix } from '../domain/scout.js';
 /** All reads use committed Git objects through the candidate-safe adapter. */
 export async function sourceContext(repo: string, task: TaskScope, limit: number, includeOptional = true) {
   const commit = await candidateGitChecked(['rev-parse', 'HEAD'], { cwd: repo });
@@ -27,4 +30,11 @@ export async function sourceContext(repo: string, task: TaskScope, limit: number
   }
   const result = boundedContext(parts, limit);
   return { ...result, commit, sourceObjects: selected.map(path => metadata.get(path)!), omitted: [...omitted, ...result.manifest.filter(p => !p.included).map(p => p.path)] };
+}
+/** The complete Scout prompt. The run and the project check preview both use this function. */
+export async function scoutContext(repo: string, project: Project, request: string) {
+  if (!project.modelExecution) throw new Error('explicit modelExecution policy required');
+  const limit = POLICY.models.roles.scout.inputBytes, prefix = scoutPrefix(request, project);
+  const source = await sourceContext(repo, project.modelExecution.task, limit - Buffer.byteLength(prefix) - 256);
+  return { source, limit, prompt: prefix + source.text + `\nContext limit: ${limit} bytes; omitted ${source.omitted.length} files.\n` };
 }
