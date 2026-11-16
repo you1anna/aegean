@@ -90,13 +90,37 @@ function quiescentMigration(value: unknown): { schemaVersion: 1 | 2; ledger: Led
   return { schemaVersion: 1, ledger: parseLedger({ ...emptyLedger(), revision: legacy.data.revision, runs: legacy.data.runs }) };
 }
 
-/** Durable ownership always applies; effectful operations additionally need the repository permit. */
-export function assertOwned(ledger: Ledger, runId: string, ownerHost: string, generation: number, requireRepo = true): Run {
+/**
+ * Durable ownership only, for any policy. Permit bookkeeping and cancellation use it;
+ * every other change and effect uses assertOwned, which also requires the installed policy.
+ */
+export function assertOwnership(ledger: Ledger, runId: string, ownerHost: string, generation: number, requireRepo: boolean): Run {
   const owner = ledger.owners[runId]; const run = ledger.runs[runId];
   if (!run || !owner || terminal(run.state) || !same(owner, { run: runId, host: ownerHost, generation })) throw new Conflict('stale or foreign run ownership');
-  assertRunPolicy(run);
+  if (run.schemaVersion !== 2) assertRunPolicy(run);
   if (requireRepo && !same(owner, ledger.repositories[repositoryKey(run.repository)])) throw new Conflict('repository execution permit is not held by this run generation');
   return run;
+}
+/** Durable ownership always applies; effectful operations additionally need the repository permit. */
+export function assertOwned(ledger: Ledger, runId: string, ownerHost: string, generation: number, requireRepo = true): Run {
+  const run = assertOwnership(ledger, runId, ownerHost, generation, requireRepo);
+  assertRunPolicy(run);
+  return run;
+}
+
+/** Applies an owned change that keeps the run identity. A terminal state releases every permit of the owner. */
+function applyOwnedChange(state: Ledger, run: Run, change: (run: Run) => Run): Ledger {
+  const identity = JSON.stringify([run.id, run.host, run.repository, run.policy, run.policyIdentity, run.createdAt, run.approver.id, run.approver.login, run.projectPolicy]);
+  const next = change(run);
+  if (identity !== JSON.stringify([next.id, next.host, next.repository, next.policy, next.policyIdentity, next.createdAt, next.approver?.id, next.approver?.login, next.projectPolicy])) throw new Error('owned update cannot change immutable run identity, approver or project policy');
+  state.runs[run.id] = next;
+  if (terminal(next.state)) {
+    const owner = state.owners[run.id]!;
+    if (same(state.repositories[repositoryKey(next.repository)], owner)) delete state.repositories[repositoryKey(next.repository)];
+    if (same(state.builder, owner)) state.builder = null;
+    delete state.owners[run.id];
+  }
+  return state;
 }
 
 export class GitLedger {
@@ -164,25 +188,20 @@ export class GitLedger {
     });
   }
   async owned(runId: string, ownerHost: string, generation: number, change: (run: Run) => Run): Promise<Ledger> {
-    return this.update(state => {
-      const run = assertOwned(state, runId, ownerHost, generation);
-      const identity = JSON.stringify([run.id, run.host, run.repository, run.policy, run.policyIdentity, run.createdAt, run.approver.id, run.approver.login, run.projectPolicy]);
+    return this.update(state => applyOwnedChange(state, assertOwned(state, runId, ownerHost, generation), change));
+  }
+  /** Cancellation stays available to a run from an older policy. The change must end in `cancelled`. */
+  async cancelOwned(runId: string, ownerHost: string, generation: number, change: (run: Run) => Run): Promise<Ledger> {
+    return this.update(state => applyOwnedChange(state, assertOwnership(state, runId, ownerHost, generation, true), run => {
       const next = change(run);
-      if (identity !== JSON.stringify([next.id, next.host, next.repository, next.policy, next.policyIdentity, next.createdAt, next.approver?.id, next.approver?.login, next.projectPolicy])) throw new Error('owned update cannot change immutable run identity, approver or project policy');
-      state.runs[runId] = next;
-      if (terminal(next.state)) {
-        const owner = state.owners[runId]!;
-        if (same(state.repositories[repositoryKey(next.repository)], owner)) delete state.repositories[repositoryKey(next.repository)];
-        if (same(state.builder, owner)) state.builder = null;
-        delete state.owners[runId];
-      }
-      return state;
-    });
+      if (next.state !== 'cancelled') throw new Error('cancelOwned can only cancel a run');
+      return next;
+    }));
   }
   async resumeOwned(runId: string, ownerHost: string, generation: number, expectedRevision?: number): Promise<Ledger> {
     return this.update(state => {
       if (expectedRevision !== undefined && state.revision !== expectedRevision) throw new Conflict('control revision changed before the recorded permit grant; reconcile its intent before retrying');
-      const run = assertOwned(state, runId, ownerHost, generation, false);
+      const run = assertOwnership(state, runId, ownerHost, generation, false);
       const owner = state.owners[runId]!; const key = repositoryKey(run.repository); const occupied = state.repositories[key];
       if (same(occupied, owner)) return state;
       if (occupied) throw new Conflict(`repository permit active for run ${occupied.run}; no automatic takeover`);
@@ -200,7 +219,7 @@ export class GitLedger {
   }
   async releaseBuilder(runId: string, ownerHost: string, generation: number): Promise<Ledger> {
     return this.update(state => {
-      assertOwned(state, runId, ownerHost, generation, false);
+      assertOwnership(state, runId, ownerHost, generation, false);
       if (same(state.builder, state.owners[runId])) state.builder = null;
       return state;
     });
@@ -208,7 +227,7 @@ export class GitLedger {
   /** Caller must confirm every writer stopped before releasing execution permits. */
   async releasePermits(runId: string, ownerHost: string, generation: number): Promise<Ledger> {
     return this.update(state => {
-      const run = assertOwned(state, runId, ownerHost, generation, false); const owner = state.owners[runId]!;
+      const run = assertOwnership(state, runId, ownerHost, generation, false); const owner = state.owners[runId]!;
       const key = repositoryKey(run.repository);
       if (same(state.repositories[key], owner)) delete state.repositories[key];
       if (same(state.builder, owner)) state.builder = null;

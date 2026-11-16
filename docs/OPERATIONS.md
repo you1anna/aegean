@@ -408,6 +408,7 @@ Use Ctrl-C to interrupt the call. Follow [recovery](#recovery) before further ac
 
 Use `aegean cancel --run ID` only when the local run is not executing.
 Cancellation must confirm resource cleanup before it releases ownership.
+Cancellation also works for a run that an older policy created. Every other command for that run fails.
 
 After independent confirmation of the human merge, Aegean archives OpenSpec in a
 separate worktree. Only `openspec/` documentation changes can use that direct-main
