@@ -31,6 +31,9 @@ A review of the code from PR #6 and the project standard fix found these weak po
 The tests are split by concern: `scout.test.ts` and `operator-guidance.test.ts`. No behaviour of an approval gate changed.
 No live model call or installation occurred. The check results are in the pull request.
 
+Next step at session close: the operator reviews this pull request. Run `trial-02` is still `spec-drafted` in the control ledger;
+cancel it before the next `aegean prepare`. the pilot project edits are uncommitted in its working tree.
+
 ## 16 November 2026: Project standard range
 
 PR #6 made each enrolled project edit `standardVersion` after the policy change. The manual step was removed.
