@@ -16,6 +16,22 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Interactive guide
+
+Two pilot runs exposed the need for a guided command line. `aegean guide` is in source.
+[Operations](OPERATIONS.md#use-the-interactive-guide) owns the procedure.
+
+- The guide covers the host check, the unfinished runs, the project check, the request, the pilot limits and authorisation,
+  the Scout draft and the specification review. After the approval, its first choice stops.
+- The guide calls the same dispatch function as the command line. The diagnostic log, the host reservation and each gate are unchanged.
+  `confirmHumanDecision` is unchanged: the human types each confirmation.
+- `aegean` without arguments starts the guide at a terminal only. A pipe still gets the command list.
+- The prompts use the Node standard library. No dependency was added.
+
+Not established: no real project and no live model call used the guide. The guide was not installed; the release on the primary host does not contain it.
+Ctrl-C at a typed confirmation prompt was not tested. Tab completion and an external editor were tested only as functions, not at a real keyboard.
+The check results are in the pull request.
+
 ## 16 November 2026: Review of the specification and guidance code
 
 A review of the code from PR #6 and the project standard fix found these weak points. All are corrected in source:

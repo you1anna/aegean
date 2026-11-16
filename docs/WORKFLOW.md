@@ -44,5 +44,6 @@ approval or merges on your behalf.
 
 ## Operating instructions
 
+For the first two stages, `aegean guide` asks a question for each step; see the [interactive guide](OPERATIONS.md#use-the-interactive-guide).
 For commands, approval steps and recovery, use the [operations guide](OPERATIONS.md).
 For roles and trust boundaries, read the [architecture](ARCHITECTURE.md).

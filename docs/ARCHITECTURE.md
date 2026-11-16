@@ -34,6 +34,9 @@ CLI → application services → domain rules
 - `src/domain/` owns pure workflow rules and data contracts.
 - `src/adapters/` handles processes, files, Git, GitHub, agents and verification.
 
+`aegean guide` is one more caller of the command dispatch in `src/cli.ts`. `src/domain/guide.ts` owns its choices,
+`src/application/guide.ts` its sequence and `src/adapters/terminal.ts` its prompts. It has no separate route to an effect.
+
 Domain code does not import application services or adapters. Tests guard this
 boundary. There is no general scheduler or background model polling.
 

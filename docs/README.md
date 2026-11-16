@@ -9,6 +9,7 @@
 | Inspect authentication and the verifier | [Host commands](OPERATIONS.md#host-commands) |
 | Check project configuration | [Configuration files](OPERATIONS.md#configuration-files) |
 | Prepare a project and write a request | [Project and request](OPERATIONS.md#prepare-the-project-and-the-request) |
+| Draft and approve a specification with guided questions | [Interactive guide](OPERATIONS.md#use-the-interactive-guide) |
 | Start and review a run | [Run lifecycle](OPERATIONS.md#run-lifecycle) |
 | Inspect a run and its evidence | [Run records](OPERATIONS.md#run-records-and-debugging) |
 | Recover interrupted work | [Recovery](OPERATIONS.md#recovery) |
