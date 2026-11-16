@@ -239,6 +239,37 @@ see [execution boundaries](ARCHITECTURE.md#execution-boundaries).
 The full workflow remains unaccepted. The commands below describe its checkpoints;
 they do not grant permission for a trial or bypass readiness checks.
 
+### Use the interactive guide
+
+At a terminal, start the guide in the root folder of the enrolled project:
+
+```sh
+aegean guide
+```
+
+`aegean` without arguments at a terminal also starts the guide. The guide asks a question for each step.
+Select an answer with the arrow keys or a number, then press Enter. You do not copy a command or a run ID.
+
+The guide does these steps in sequence:
+
+1. It checks the host with `doctor`. For a failed login or a stopped verifier, it offers the command that corrects the check.
+2. It reads the runs. If this host has an unfinished run, you can continue that run.
+3. It checks the project and lists the committed files that the Scout reads.
+4. It takes the request from a file, or it opens your editor (`VISUAL` or `EDITOR`) on a new private request file.
+5. It prepares the run. If the release has no full acceptance, it asks for the pilot limits and starts the authorisation.
+6. It starts the Scout draft. Then it shows the review summary and the specification folder.
+7. At the specification review, you can read each file, open the folder in your editor, record your edits, approve or cancel.
+
+The guide runs the same commands as the sections below, and it prints each command before the command runs.
+It adds no permission and replaces no check. You type each authorisation and approval confirmation yourself.
+After the specification approval, the first choice stops the guide. The later stages use the commands in this document.
+
+The guide keeps two private files under `~/.local/state/aegean/`: the requests that you write in `requests/`, and the last limits that you entered in `pilot-limits.json`.
+Press Ctrl-C to stop the guide. The run keeps its state, and `aegean guide` continues it.
+The guide needs an interactive terminal. An agent must not operate it; a pipe or a script gets a failure and no effect.
+
+Tested: the synthetic suite and one pseudo-terminal session on a synthetic project. No real project or live model call used the guide.
+
 ### Prepare the project and the request
 
 Aegean works in an existing GitHub repository that you enrolled. It does not create a repository.
@@ -259,6 +290,8 @@ A rule in the project `AGENTS.md` limits the Scout. Remove rules that are no lon
 Write the goal, the limits and the tests of success in the request. The Scout proposes the design.
 
 ### Specification and approval
+
+The [interactive guide](#use-the-interactive-guide) does the steps in this section for you. The commands are:
 
 From the prepared project's clean, reviewed main revision, check the configuration:
 

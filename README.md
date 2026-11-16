@@ -29,6 +29,7 @@ Aegean currently supports specification drafting and review in controlled trials
 Full delivery remains under evaluation and requires release acceptance or an authorised pilot.
 Use the [installation and command guide](docs/OPERATIONS.md) for a fresh installation, host checks and a controlled pilot.
 Aegean works in an existing GitHub repository; first [prepare the project and the request](docs/OPERATIONS.md#prepare-the-project-and-the-request).
+In the project folder, run `aegean guide`. The [interactive guide](docs/OPERATIONS.md#use-the-interactive-guide) asks a question for each step, from the host check to the specification approval.
 Use `./scripts/dev help` for local build commands; see [Contribute](CONTRIBUTING.md) for source checks.
 
 The initial scope is command-line changes on macOS with subscription CLI accounts.

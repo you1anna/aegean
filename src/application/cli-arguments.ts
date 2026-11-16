@@ -1,4 +1,5 @@
 const commands:Record<string,{usage:string;flags:string[];switches?:string[];repeat?:string[];words?:number}>={
+  guide:{usage:'guide',flags:[]},
   info:{usage:'info [--json]',flags:[],switches:['--json']},
   doctor:{usage:'doctor [--json] [--require prerequisites|full]',flags:['--require'],switches:['--json']},
   auth:{usage:'auth status | auth login claude|codex',flags:[],words:2},
@@ -22,7 +23,7 @@ const commands:Record<string,{usage:string;flags:string[];switches?:string[];rep
 };
 export function commandHelp(command?:string){
   if(command){if(!commands[command])throw new Error(`unknown command: ${command}`);return `Usage: aegean ${commands[command].usage}`;}
-  return `Aegean — local build: ./scripts/dev help; installed commands:\n\n${Object.values(commands).map(c=>'  '+c.usage).join('\n')}\n\nCommands preserve separate human approval and release acceptance gates. See aegean info for the installed guide.`;
+  return `Aegean — local build: ./scripts/dev help; installed commands:\n\nRun aegean guide at a terminal for the interactive route from the host check to the specification approval.\n\n${Object.values(commands).map(c=>'  '+c.usage).join('\n')}\n\nCommands preserve separate human approval and release acceptance gates. See aegean info for the installed guide.`;
 }
 export function validateArguments(args:string[]):string|undefined{
   if(!args.length||['help','--help','-h'].includes(args[0]!))return commandHelp(args[0]==='help'?args[1]:undefined);
@@ -51,6 +52,8 @@ const hints:[RegExp,string][]=[
   [/commit or preserve current work/,'Commit the project changes, push main to origin, then run the command again.'],
   [/start from the reviewed remote main revision/,'Make the local main branch and origin/main the same revision, then run the command again.'],
   [/required context (missing|exceeds)|protected or invalid required context/,'Correct modelExecution.task.paths in aegean.json. Run aegean project check to see the files that the agents read.'],
+  [/specification head changed/,'Record the edit first: aegean resume --run ID. Then approve the recorded specification.'],
+  [/ENOENT.*aegean\.json/,'Run the command in the root folder of an enrolled project. The operations guide gives the enrolment procedure.'],
   [/Pilot authorization required/,'Authorise the pilot, then run aegean resume --run ID.'],
 ];
 /** Advice only; it never changes the failure or its exit code. */
