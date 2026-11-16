@@ -26,6 +26,20 @@ here is fixed through the normal branch and PR, then linked from its entry.
 - Follow-up: <issue, commit or PR>
 ```
 
+## trial-02 — pilot project — 16 November 2026
+
+- Host and release: primary host, `0.1.0-bc78bef49e53`
+- Request: data foundation for pilot project; goal only, design left to the Scout
+- Reached: `spec-drafted`, by `aegean resume`; local approval mode, no push
+- Outcome: blocked at specification review; the operator did not approve the draft
+- Usage: Scout 95 seconds; 17,605 tokens reported (9,278 input, 8,327 output, 3,293 cached); 1 of 12 calls
+- Records: retained locally outside Git; identifiers in this document are anonymised.
+- Findings: the Scout context had 4 files (10,791 bytes) and no `.gitignore` or check commands; the draft put
+  committed samples in an ignored path and planned no automated check; a stale project rule removed all code
+  from the plan without a report; a second `authorize-pilot` asked for the confirmation, then failed with `EEXIST`;
+  `status` gave no next step
+- Follow-up: [STATUS](STATUS.md), 16 November specification section
+
 ## trial-01 — pilot project — 14 November 2026
 
 - Host and release: primary host, `0.1.0-6a00b329342a`

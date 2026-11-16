@@ -12,8 +12,8 @@ You decide whether to merge the pull request.
 
 ## How it works
 
-1. **Specify.** The Scout drafts the requirements from your request. You review
-   and approve the scope before code changes begin.
+1. **Specify.** The Scout drafts the requirements from your request and the
+   committed project files. You review and approve the scope before code changes begin.
 2. **Build.** The Builder writes code in an isolated worktree against the approved
    specification.
 3. **Check.** A separate Auditor creates protected tests and reviews the code.
@@ -28,6 +28,7 @@ See the [workflow guide](docs/WORKFLOW.md) for the roles and review steps.
 Aegean currently supports specification drafting and review in controlled trials.
 Full delivery remains under evaluation and requires release acceptance or an authorised pilot.
 Use the [installation and command guide](docs/OPERATIONS.md) for a fresh installation, host checks and a controlled pilot.
+Aegean works in an existing GitHub repository; first [prepare the project and the request](docs/OPERATIONS.md#prepare-the-project-and-the-request).
 Use `./scripts/dev help` for local build commands; see [Contribute](CONTRIBUTING.md) for source checks.
 
 The initial scope is command-line changes on macOS with subscription CLI accounts.

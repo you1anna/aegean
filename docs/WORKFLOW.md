@@ -10,8 +10,13 @@ scope before implementation and review the code and test results before publicat
 Describe the problem, the expected behaviour and the constraints. The Scout uses
 Claude Code to draft an OpenSpec specification with requirements and success criteria.
 
+The Scout reads the request, the project checks and a fixed set of committed project files.
+It cannot read other files on your computer. The operations guide lists
+[what the Scout reads](OPERATIONS.md#prepare-the-project-and-the-request).
+
 Review the specification before implementation. Resolve missing requirements or
-unwanted changes at this stage.
+unwanted changes at this stage. Start with the review notes in the draft: they list the
+project rules that limited the request, the open questions and each need that the draft omits.
 
 ## 2. Approve the scope
 

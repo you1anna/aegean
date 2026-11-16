@@ -12,10 +12,10 @@ import { decide } from './application/decision-commands.js';
 import { migrateControl } from './application/control-migration.js';
 import { recover } from './application/recovery.js';
 import { prepareRun } from './application/prepare.js';
-import { checkProject } from './application/project-check.js';
+import { checkProject, agentContext } from './application/project-check.js';
 import { releaseInfo, authCommand, verifierCommand } from './application/operator.js';
 import { parsePilotLimits } from './domain/pilot-limits.js';
-import { validateArguments } from './application/cli-arguments.js';
+import { validateArguments, recoveryHint } from './application/cli-arguments.js';
 import { reserveHost } from './adapters/host-activity.js';
 import { OperatorLog, setOperatorLog, failureCode } from './adapters/operator-log.js';
 import { readBoundedEvidenceFile } from './adapters/acceptance-evidence.js';
@@ -49,7 +49,7 @@ try {
     case 'info': result = await releaseInfo(root); break;
     case 'auth': result = await authCommand(root,args[1] ?? '',args[2],controller.signal); break;
     case 'verifier': result = await verifierCommand(args[1] ?? '',controller.signal,args.includes('--confirm-stopped')); break;
-    case 'project': if(args[1] !== 'check') throw new Error('Usage: aegean project check'); result = await checkProject(process.cwd(),controller.signal); break;
+    case 'project': if(args[1] !== 'check') throw new Error('Usage: aegean project check'); { const check = await checkProject(process.cwd(),controller.signal); result = { ...check, agentContext: await agentContext(check.repo, check.project) }; break; }
     case 'prepare': result = await prepareRun(process.cwd(),(await readBoundedEvidenceFile(resolve(required('--request')),60_000)).toString('utf8'),controller.signal); break;
     case 'doctor': {
       const mode=optional('--require'); if(mode && !['prerequisites','full'].includes(mode)) throw new Error('--require must be prerequisites or full');
@@ -95,7 +95,7 @@ try {
   if (controller.signal.aborted) process.exitCode = 130;
 } catch (error) {
   try { log?.event(controller.signal.aborted?'interrupted':'failed',{command:args[0]!,code:controller.signal.aborted?130:1,failure:failureCode((error as Error).message)}); } catch { console.error('Private diagnostic capture failed; inspect retained run records.'); }
-  console.error(JSON.stringify({ error: (error as Error).message, recovery: args[0] === 'configure' ? 'Inspect host configuration in the operations guide before retrying.' : 'Run aegean status and inspect the operations guide before retrying effects.' })); process.exitCode = controller.signal.aborted ? 130 : 1;
+  console.error(JSON.stringify({ error: (error as Error).message, recovery: recoveryHint(args[0], (error as Error).message) })); process.exitCode = controller.signal.aborted ? 130 : 1;
 }
 
 finally { setOperatorLog(undefined); log?.close(); await hostRelease?.(); }

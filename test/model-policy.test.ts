@@ -28,7 +28,7 @@ test('model choice is explicit and keeps unknown scope, repairs and both Auditor
   assert.equal(qualifies(profile, toolchain.codex, qualificationPolicyIdentity(policy, toolchain)), false);
   report.pairs[0]!.candidate.acceptedDefects = 0;
   assert.equal(qualifies(profile, 'different-cli', qualificationPolicyIdentity(policy, toolchain)), false);
-  assert.equal(qualifies(profile, toolchain.codex, qualificationPolicyIdentity(policy, { ...toolchain, policy: '0.5.0' })), false);
+  assert.equal(qualifies(profile, toolchain.codex, qualificationPolicyIdentity(policy, { ...toolchain, policy: '99.0.0' })), false);
   assert.equal(qualifies(profile, toolchain.codex, qualificationPolicyIdentity(policy, { ...toolchain, maxRepairs: 3 })), false);
   assert.equal(qualifies(profile, toolchain.codex, 'b'.repeat(64)), false);
   assert.equal(qualifies(profile, toolchain.codex, qualificationPolicyIdentity(policy, { ...toolchain, claude: 'changed-auditor-cli' })), false);

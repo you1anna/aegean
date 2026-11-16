@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
@@ -59,12 +59,19 @@ test('pilot refuses missing authorization and expiry; call cap rejects execution
     ok(await decision(f, 'pilot', opts)); ok(await f.resume()); ok(await decision(f, 'approve'));
     const exhausted = await f.resume(); assert.notEqual(exhausted.code, 0); assert.match(exhausted.stderr, /usage budget exhausted/);
     assert.equal((await f.events()).filter(e => e.role).length, 1);
-    assert.notEqual((await decision(f, 'pilot', opts)).code, 0); // no replacement/reset
-    const file = join(f.state, 'runs', (await f.current()).id, 'pilot.json'); const record = JSON.parse(await readFile(file, 'utf8'));
+    const file = join(f.state, 'runs', (await f.current()).id, 'pilot.json'); const saved = await readFile(file, 'utf8');
+    // A repeated identical request reports the saved decision without a new human prompt; nothing is replaced or reset.
+    const repeated = await decision(f, 'pilot', opts, 'throw new Error("unexpected human prompt")'); ok(repeated);
+    assert.equal(JSON.parse(repeated.stdout).alreadyAuthorized, true); assert.match(JSON.parse(repeated.stdout).action, /aegean resume --run/);
+    const replaced = await decision(f, 'pilot', { ...opts, budget: { ...defaultBudget, maxModelCalls: 2 } });
+    assert.notEqual(replaced.code, 0); assert.match(replaced.stderr, /different limits; it cannot be replaced/);
+    assert.equal(await readFile(file, 'utf8'), saved);
+    const record = JSON.parse(saved);
     record.artifact.expiresAt = Date.now() - 1; record.decision.decidedAt = record.artifact.expiresAt - 1;
     record.decision.binding = digest(JSON.stringify(record.artifact)); // synthetic fixture models an honestly expired decision
     await writeFile(file, JSON.stringify(record));
     const expired = await f.resume(); assert.notEqual(expired.code, 0); assert.match(expired.stderr, /expired/); assert.equal((await f.events()).filter(e => e.role).length, 1);
+    const late = await decision(f, 'pilot', { ...opts, expiresAt: record.artifact.expiresAt }); assert.notEqual(late.code, 0); assert.match(late.stderr, /expired at .*cannot be replaced/);
   } finally { await f.cleanup(); }
 });
 
@@ -159,6 +166,30 @@ test('durable status survives absent and incompatible local accounting', async (
       assert.equal(JSON.parse(result.stdout).state, 'spec-drafted'); assert.equal(JSON.parse(result.stdout).usage.available, false);
       assert.notEqual((await f.resume()).code, 0);
     }
+  } finally { await f.cleanup(); }
+});
+
+test('Scout reads ignore rules; the draft stop gives review notes, the specification path and the next step', async () => {
+  const f = await fixture({ approvalMode: 'local' });
+  try {
+    await writeFile(join(f.repo, '.gitignore'), 'data/\n'); await f.realGit(['add', '.']); await f.realGit(['commit', '-m', 'ignore rules']); await f.realGit(['push', 'origin', 'main']);
+    const preview = await f.cli(['project', 'check']); ok(preview);
+    const context = JSON.parse(preview.stdout).agentContext;
+    assert.ok(context.files.some((file: {path: string; required: boolean}) => file.path === '.gitignore' && file.required)); assert.ok(context.bytes <= context.limitBytes);
+    assert.equal((await f.runDirs().catch(() => [])).length, 0); // the preview allocates no run
+    const started = await f.start(); ok(started); const out = JSON.parse(started.stdout); const id = (await f.current()).id;
+    const contexts = join(f.state, 'runs', id, 'contexts'); const source = (await readdir(contexts)).find(name => name.endsWith('-source.json'))!;
+    assert.ok(JSON.parse(await readFile(join(contexts, source), 'utf8')).manifest.some((part: {path: string; included: boolean}) => part.path === '.gitignore' && part.included));
+    const notes = await readFile(join(out.specification, 'review-notes.md'), 'utf8');
+    assert.match(notes, /## Project rules that limited the request\n\nNone reported\./); assert.match(notes, /- Synthetic open question/);
+    assert.deepEqual(out.review, { projectRulesThatLimitedTheRequest: [], openQuestions: ['Synthetic open question'], notCovered: [] });
+    assert.ok(out.next.some((step: string) => step.includes(`aegean approve --run ${id}`)));
+    const status = JSON.parse((await f.cli(['status', '--run', id])).stdout);
+    assert.equal(status.specification, out.specification); assert.match(status.next[0], /review-notes\.md/);
+    assert.match(JSON.parse((await f.cli(['status'])).stdout).next[0], /aegean status --run ID/);
+    // A second resume keeps the reviewed notes inside the frozen specification.
+    ok(await f.resume()); assert.equal((await f.current()).spec, status.spec);
+    const missing = await f.cli(['resume']); assert.notEqual(missing.code, 0); assert.match(missing.stderr, /A run exists only after aegean prepare --request FILE/);
   } finally { await f.cleanup(); }
 });
 

@@ -16,6 +16,32 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Specification inputs and operator guidance
+
+The second pilot project run reached `spec-drafted` with a draft that the operator could not approve.
+[Pilot notes](PILOT-NOTES.md) record the run. The causes were in Aegean and in the project guidance.
+
+Source changes, tested with synthetic fixtures only:
+
+- The Scout now receives the committed `.gitignore` and the project check and verifier commands.
+- The draft must contain a verification statement, request coverage, the project rules that limited the request and open questions.
+  A draft without them, or without Requirement and Scenario headings, pauses the run. Aegean writes them to `review-notes.md`.
+- `project check` lists the files that the Scout will read. A missing or oversized required file fails before a run exists.
+- A repeated `authorize-pilot` with the same limits reports the saved authorisation without a prompt. It replaces nothing.
+- `status`, the draft stop and failed commands name the next step.
+- The policy version is `0.5.0` because context selection changed. Each enrolled project must set this `standardVersion`.
+
+Not established: no live model call used the new prompt. The stricter draft format can pause a run after one charged Scout call;
+the rate is unmeasured. Aegean does not check that the draft obeys the ignore rules or the check commands; the human reads the notes.
+The installed release on the primary host is unchanged until a reviewed installation. Host qualification is necessary again after installation.
+
+Checks on the final source with the pinned Node runtime: the type and script checks passed. The full suite ran 198 tests in 592 seconds;
+197 passed. The one failure was a test that used `0.5.0` as its example of a changed policy version. That test now uses a version
+that cannot equal the shipped one; its file was run again and passed. The 22 script tests passed. No live run or installation occurred.
+
+Open items from the same session, not started: a managed method for private local context, a check for stale
+enrolment text in a project `AGENTS.md`, and a plain message for the absent release acceptance file in `doctor`.
+
 ## 16 November 2026: Installation test reliability
 
 This source fix used manual approval. No additional full pipeline run was performed.

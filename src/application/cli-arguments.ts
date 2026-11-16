@@ -42,3 +42,19 @@ export function validateArguments(args:string[]):string|undefined{
   if(args[0]==='verifier'&&args.includes('--confirm-stopped')&&args[1]!=='recover')throw new Error('--confirm-stopped is only valid for verifier recover');
   return;
 }
+const hints:[RegExp,string][]=[
+  [/--run is required/,'Give the run identifier with --run ID. Run aegean status to list the runs. A run exists only after aegean prepare --request FILE.'],
+  [/--request is required/,'Give the request file: aegean prepare --request FILE. Run the command in the project repository.'],
+  [/--limits|--expires-at is required/,'Give the reviewed limits file: aegean authorize-pilot --run ID --limits FILE.'],
+  [/invalid run identifier|unknown run/,'Copy the complete run identifier from aegean status.'],
+  [/pilot authorization (expired|with different limits)|already has a pilot authorization/,'One pilot authorisation applies to one run. Run aegean status --run ID to see the next step.'],
+  [/commit or preserve current work/,'Commit the project changes, push main to origin, then run the command again.'],
+  [/start from the reviewed remote main revision/,'Make the local main branch and origin/main the same revision, then run the command again.'],
+  [/required context (missing|exceeds)|protected or invalid required context/,'Correct modelExecution.task.paths in aegean.json. Run aegean project check to see the files that the agents read.'],
+  [/Pilot authorization required/,'Authorise the pilot, then run aegean resume --run ID.'],
+];
+/** Advice only; it never changes the failure or its exit code. */
+export function recoveryHint(command:string|undefined,message:string):string{
+  if(command==='configure')return 'Inspect host configuration in the operations guide before retrying.';
+  return hints.find(([pattern])=>pattern.test(message))?.[1]??'Run aegean status and inspect the operations guide before retrying effects.';
+}

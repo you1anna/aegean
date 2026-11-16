@@ -8,6 +8,7 @@
 | Prepare an approved installation | [Installation](OPERATIONS.md#install-on-either-mac) |
 | Inspect authentication and the verifier | [Host commands](OPERATIONS.md#host-commands) |
 | Check project configuration | [Configuration files](OPERATIONS.md#configuration-files) |
+| Prepare a project and write a request | [Project and request](OPERATIONS.md#prepare-the-project-and-the-request) |
 | Start and review a run | [Run lifecycle](OPERATIONS.md#run-lifecycle) |
 | Inspect a run and its evidence | [Run records](OPERATIONS.md#run-records-and-debugging) |
 | Recover interrupted work | [Recovery](OPERATIONS.md#recovery) |
