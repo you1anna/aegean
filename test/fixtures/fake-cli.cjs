@@ -73,7 +73,7 @@ if (tool === 'claude' || tool === 'codex') {
     if(execution.code!==0||execution.interrupted) fail('fixture VM command failed: '+execution.stderr);
     output(JSON.stringify({ type:'turn.completed', model, usage: scenario.missingUsage === role ? undefined : usage }) + '\n');
   } else {
-    const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output' } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:'pass', findings:[] };
+    const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output', verification:'The check command runs the CLI and compares its output.', coverage:['Return ok: Requirement Output'], constraints:[], openQuestions:['Synthetic open question'] } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:'pass', findings:[] };
     output({ type: 'result', model, result: scenario.malformedRole === role ? 'malformed JSON' : JSON.stringify(data), usage: scenario.missingUsage === role ? undefined : usage });
   }
 } else if (tool === 'gh') {

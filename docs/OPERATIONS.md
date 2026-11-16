@@ -239,6 +239,25 @@ see [execution boundaries](ARCHITECTURE.md#execution-boundaries).
 The full workflow remains unaccepted. The commands below describe its checkpoints;
 they do not grant permission for a trial or bypass readiness checks.
 
+### Prepare the project and the request
+
+Aegean works in an existing GitHub repository that you enrolled. It does not create a repository.
+A run exists only after `aegean prepare`. Before that command, `resume`, `approve` and `status --run` have no run to use.
+
+The Scout reads only these inputs:
+
+- the request file;
+- the check commands and the verifier command from `aegean.json`;
+- the committed `README.md`, `.gitignore` and each `AGENTS.md` and `CLAUDE.md`;
+- each committed path in `modelExecution.task.paths` and `modelExecution.task.dependencies`;
+- for task class `unknown`, committed source files while space remains.
+
+The agents cannot read other folders on your computer. If the agents need background, commit it as a project document.
+Add its path to `modelExecution.task.paths`. Do not commit private data; commit a description of the data.
+
+A rule in the project `AGENTS.md` limits the Scout. Remove rules that are no longer correct before a run.
+Write the goal, the limits and the tests of success in the request. The Scout proposes the design.
+
 ### Specification and approval
 
 From the prepared project's clean, reviewed main revision, check the configuration:
@@ -249,6 +268,9 @@ aegean project check --json
 
 This reads configuration and Git identity without executing project commands or allocating a run.
 It rejects old schemas and missing budgets. Image compatibility does not prove that project executables or dependencies exist in the verifier.
+The `agentContext` field lists each committed file that the Scout will read, with its size. Check this list before you prepare a run.
+A missing or oversized required file fails this command before a run exists.
+The `standardVersion` in `aegean.json` must equal the `policy` value of the installed release; `examples/aegean.json` shows the current value.
 Review configuration changes through the project's own workflow before a run.
 
 Prepare the request without a model call:
@@ -266,6 +288,8 @@ aegean resume --run RUN_ID
 ```
 
 Answer the exact authorisation prompt yourself. The prompt shows the effective limits and project token allowances.
+One run has one authorisation. If you repeat the command with the same limits, it reports the saved authorisation and asks nothing.
+Different limits, or an expired authorisation, need a new run.
 Native prerequisites must pass. Without full release acceptance, scoped pilot authorisation is required before the first model call.
 `prepare` and `authorize-pilot` do not call models. `resume` executes the authorised stage.
 The existing `start --request FILE` remains available; it prepares a run and immediately attempts resume.
@@ -273,6 +297,18 @@ The existing `start --request FILE` remains available; it prepares a run and imm
 Console diagnostics are captured automatically. Read the printed run and log paths; do not add a tee pipeline around human decisions.
 
 The default approval mode is `local`. It stops after the specification draft without a GitHub push.
+The result gives the `specification` folder, a `review` summary and the `next` commands.
+
+Read `review-notes.md` in that folder first. It contains:
+
+- each project rule that limited the request;
+- the open questions that you must answer;
+- the request coverage, where `NOT COVERED` marks a need that the draft omits;
+- how the project checks prove the deliverable.
+
+The Scout writes these notes. They are not verification evidence. If a project rule or the request is wrong, cancel the run.
+Then correct the project on main and prepare a new run.
+
 Before approval, edit only `openspec/changes/RUN_ID/` in the isolated worktree.
 Run `aegean resume --run ID` to record a revised draft.
 The human then runs:
@@ -328,6 +364,8 @@ Revisions retain all consumed time, calls and tokens.
 
 Use `aegean status` or `aegean status --run ID` to inspect state without a model
 call. Status preserves durable run state if local accounting is unavailable.
+The `next` field gives the commands for the current state. It is guidance; it grants no permission.
+A failed command prints a `recovery` line that names the missing step where Aegean can identify it.
 Use Ctrl-C to interrupt the call. Follow [recovery](#recovery) before further action.
 
 Use `aegean cancel --run ID` only when the local run is not executing.

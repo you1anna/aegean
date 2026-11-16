@@ -23,10 +23,22 @@ export async function persistPilot(dir: string, run: Run, artifact: PilotArtifac
   try { await file.writeFile(JSON.stringify({ artifact, decision })); await file.sync(); } finally { await file.close(); }
   const folder = await open(dir, 'r'); try { await folder.sync(); } finally { await folder.close(); }
 }
+export async function savedPilot(dir: string): Promise<z.infer<typeof PilotRecord> | undefined> {
+  try { return PilotRecord.parse(JSON.parse((await readBoundedEvidenceFile(join(dir, 'pilot.json'), 65_536)).toString('utf8'))); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; return undefined; }
+}
+/** An authorisation is written once. A repeated request with the same limits reports it; no other request can replace it. */
+export function repeatedPilot(saved: PilotArtifact, run: string, requested: { expiresAt?: number; budget?: ExecutionBudget; limitsDigest?: string }, now = Date.now()) {
+  if (saved.run !== run) throw new Error('pilot authorization belongs to another run');
+  const budget = ExecutionBudget.safeParse(requested.budget);
+  const sameLimits = budget.success && digest(JSON.stringify(saved.budget)) === digest(JSON.stringify(budget.data))
+    && (saved.limitsDigest || requested.limitsDigest ? saved.limitsDigest === requested.limitsDigest : saved.expiresAt === requested.expiresAt);
+  if (!sameLimits) throw new Error(`run already has a pilot authorization with different limits; it cannot be replaced. Inspect it with aegean status --run ${run}`);
+  if (saved.expiresAt <= now) throw new Error(`pilot authorization expired at ${new Date(saved.expiresAt).toISOString()}; it cannot be replaced. Cancel this run and prepare a new run`);
+  return { alreadyAuthorized: true as const, expiresAt: new Date(saved.expiresAt).toISOString(), budget: saved.budget };
+}
 export async function executionAuthorization(root: string, dir: string, local: LocalRun, run: Run, ordinaryReady: boolean) {
-  let saved: z.infer<typeof PilotRecord> | undefined;
-  try { saved = PilotRecord.parse(JSON.parse((await readBoundedEvidenceFile(join(dir, 'pilot.json'), 65_536)).toString('utf8'))); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  const saved = await savedPilot(dir);
   // A pilot's limits continue to apply even if ordinary acceptance arrives later.
   if (saved) {
     const actual = await pilotArtifact(root, dir, local, run, saved.artifact.expiresAt, saved.artifact.budget, saved.artifact.limitsDigest);

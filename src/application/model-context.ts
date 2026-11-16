@@ -8,7 +8,7 @@ export async function sourceContext(repo: string, task: TaskScope, limit: number
   const records = (await candidateGitChecked(['ls-tree', '-rz', commit], { cwd: repo })).split('\0').filter(Boolean).map(record => { const separator = record.indexOf('\t'); return { path: record.slice(separator + 1), mode: record.slice(0, 6), object: record.slice(12, separator) }; });
   const names = records.map(record => record.path).sort();
   const metadata = new Map(records.map(record => [record.path, record]));
-  const required = new Set([...task.paths, ...task.dependencies, ...names.filter(n => /(^|\/)(AGENTS|CLAUDE)\.md$|^README\.md$/.test(n))]);
+  const required = new Set([...task.paths, ...task.dependencies, ...names.filter(n => /(^|\/)(AGENTS|CLAUDE)\.md$|^README\.md$|^\.gitignore$/.test(n))]);
   const selected = names.filter(n => required.has(n) || includeOptional && task.class === 'unknown' && /\.(ts|js|cjs|mjs|py)$/.test(n) && !n.startsWith('test'));
   for (const path of required) if (!names.includes(path)) throw new Error(`required context missing: ${path}`);
   if (selected.length > 10000) throw new Error('source context file capacity exceeded');

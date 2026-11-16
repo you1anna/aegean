@@ -13,7 +13,7 @@ import { hostConfig, stateRoot, doctor } from './runtime.js';
 import { loadLocalRun, type LocalRun } from './run-record.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 import { buildSpecArtifact, buildPublicationArtifact, buildRevisionArtifact, persistLocalDecision, frozenProject, validateLocalPublication, type LocalDecisionArtifact } from './decisions.js';
-import { pilotArtifact, persistPilot, executionAuthorization, type PilotArtifact } from './pilot.js';
+import { pilotArtifact, persistPilot, executionAuthorization, savedPilot, repeatedPilot, type PilotArtifact } from './pilot.js';
 
 type Action = 'approve' | 'publish' | 'revise' | 'pilot';
 export interface DecisionOptions { scope?: 'implementation' | 'contract'; expiresAt?: number; budget?: ExecutionBudget; limitsDigest?: string }
@@ -76,6 +76,11 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       if (run.revisions >= limits.budget.maxRevisions) throw new Error('revision budget exhausted');
       return buildRevisionArtifact(root, dir, local, run, options.scope);
     };
+    // Check a saved authorisation before the human is asked to type a confirmation.
+    if (action === 'pilot') {
+      const repeated = await withRun(id, async (dir, _local, run) => { const saved = await savedPilot(dir); return saved ? { run, ...repeatedPilot(saved.artifact, run.id, options) } : undefined; });
+      if (repeated) return { ...repeated, authorized: true, action: `already authorised; no new decision was recorded. Continue with aegean resume --run ${id}` };
+    }
     const reviewed = await withRun(id, async (dir, local, run) => {
       const artifact = await build(dir, local, run);
       if (action === 'publish' && run.publicationRef) {

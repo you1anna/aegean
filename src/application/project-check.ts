@@ -4,7 +4,9 @@ import { ProjectSchema, assertSupportedImage } from '../domain/config.js';
 import { candidateGit, candidateGitChecked } from '../adapters/candidate-git.js';
 import { eligible } from './enrol.js';
 import { hostConfig } from './runtime.js';
-import { digest } from '../domain/workflow.js';
+import { digest, POLICY } from '../domain/workflow.js';
+import type { Project } from '../domain/config.js';
+import { sourceContext } from './model-context.js';
 export async function checkProject(repo: string, signal?: AbortSignal) {
   repo = await realpath(repo);
   eligible(repo, (await hostConfig()).excludedRoots);
@@ -28,4 +30,14 @@ export async function checkProject(repo: string, signal?: AbortSignal) {
   const committed = committedResult.stdout;
   // Image identity is established; executable availability needs native verification.
   return { repo, project, base, projectPolicy: digest(committed), verifierCompatibility: 'image accepted; executable and dependency availability require protected verification' };
+}
+/** Lists the committed files that the Scout receives. No model call; no file text in the result. */
+export async function agentContext(repo: string, project: Project) {
+  const limitBytes = POLICY.models.roles.scout.inputBytes;
+  const source = await sourceContext(repo, project.modelExecution!.task, limitBytes - 256);
+  return {
+    files: source.manifest.filter(part => part.included).map(part => ({ path: part.path, bytes: part.bytes, required: part.required })),
+    omitted: source.omitted, bytes: source.bytes, limitBytes,
+    note: 'The Scout reads only these committed files, the request and the project checks. The request and the instructions also count towards the limit. To add a file, commit it and add its path to modelExecution.task.paths in aegean.json.',
+  };
 }
