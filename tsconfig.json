@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2023", "module": "NodeNext", "moduleResolution": "NodeNext",
-    "strict": true, "noUncheckedIndexedAccess": true, "exactOptionalPropertyTypes": true,
+    "allowJs": true, "strict": true, "noUncheckedIndexedAccess": true, "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true, "noUnusedParameters": true, "verbatimModuleSyntax": true,
     "rootDir": ".", "outDir": "dist", "skipLibCheck": true, "types": ["node"], "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/cli-version.mjs"]
 }

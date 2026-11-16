@@ -3,7 +3,7 @@
   "node": "26.12.1",
   "openspec": "2.0.0",
   "codex": "0.167.2",
-  "claude": "2.1.322",
+  "claude": ">=2.1.322 <3.0.0",
   "policy": "0.4.0",
   "supportedHosts": [
     "darwin-arm64",

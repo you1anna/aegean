@@ -1,3 +1,4 @@
+import { matchesVersion } from '../../scripts/cli-version.mjs';
 import { ModelProfileSchema, type ModelProfile } from '../domain/model-policy.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { command, checked, type Result } from './process.js';
@@ -35,5 +36,5 @@ export function parseJsonAnswer(text: string): unknown {
 }
 export async function assertVersion(binary: string, version: string): Promise<void> {
   const actual = await checked(binary, ['--version']);
-  if (!new RegExp(`(^|[^\\d])${version.replaceAll('.', '\\.')}([^\\d]|$)`).test(actual)) throw new Error(`tool version drift: expected ${version}`);
+  if (!matchesVersion(actual, version)) throw new Error(`tool version drift: expected ${version}; found ${actual.trim()}`);
 }

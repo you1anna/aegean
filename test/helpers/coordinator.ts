@@ -19,7 +19,7 @@ export async function fixture(options: { approvalMode?: 'local' | 'github-commen
   await writeFile(join(home,'.gitconfig'), `[user]\n name = Fixture\n email = fixture@localhost\n[url "${control}"]\n insteadOf = git@github.com:fixture/verifier.git\n[url "${remote}"]\n insteadOf = git@github.com:fixture/project.git\n`);
   await writeFile(join(home,'fixture.json'), JSON.stringify({git,control,verifier,remote}));
   await writeFile(join(home,'scenario.json'), '{}');
-  await cp('dist/src',join(root,'dist/src'),{recursive:true}); await cp('package.json',join(root,'package.json'));
+  await cp('dist/src',join(root,'dist/src'),{recursive:true}); await cp('dist/scripts',join(root,'dist/scripts'),{recursive:true}); await cp('package.json',join(root,'package.json'));
   await cp('package.json',join(root,'dist/package.json'));
   await mkdir(join(root,'node_modules')); await cp(resolve('node_modules/zod'),join(root,'node_modules/zod'),{recursive:true});
   const pins=JSON.parse(await readFile('toolchain.json','utf8')); pins.verifier.candidateRoot=join(dir,'candidates');

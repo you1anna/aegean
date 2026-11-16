@@ -1,3 +1,4 @@
+import { matchesVersion } from '../../scripts/cli-version.mjs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -49,7 +50,7 @@ export async function doctor(root: string): Promise<Readiness> {
   const checks: { name: string; ok: boolean; detail: string }[] = [];
   checks.push({ name: 'node', ok: process.version === 'v' + pins.node, detail: process.version });
   for (const key of ['codex', 'claude', 'openspec'] as const) {
-    try { const r = await command(bins[key], ['--version']); checks.push({ name: key, ok: r.code === 0 && r.stdout.includes(pins[key]), detail: r.stdout.trim() || 'unavailable' }); }
+    try { const r = await command(bins[key], ['--version']); checks.push({ name: key, ok: r.code === 0 && matchesVersion(r.stdout, pins[key]), detail: r.stdout.trim() || 'unavailable' }); }
     catch { checks.push({ name: key, ok: false, detail: 'not installed in this release' }); }
   }
   try { const auth = await authentication(bins.codex, bins.claude); for (const [name, ok] of Object.entries(auth)) checks.push({ name: `${name}-subscription`, ok, detail: ok ? 'subscription authenticated' : 'subscription not verified from this environment' }); }

@@ -12,7 +12,7 @@ import { verifierStartArgs, verifierProfileState } from '../domain/verifier-plan
 import toolchain from '../../toolchain.json' with {type:'json'};
 export async function releaseInfo(root:string){
   const manifest=JSON.parse(await readFile(join(root,'installation.json'),'utf8'));
-  return {release:root,sourceCommit:manifest.sourceCommit,sourceHash:manifest.sourceHash,artifactHash:manifest.artifactHash,node:manifest.node,hostConfig:join(stateRoot(),'settings.json'),operations:join(root,'docs/OPERATIONS.md')};
+  return {release:root,sourceCommit:manifest.sourceCommit,sourceHash:manifest.sourceHash,artifactHash:manifest.artifactHash,node:manifest.node,toolVersions:await readFile(join(root,'tool-versions.json'),'utf8').then(JSON.parse).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return undefined;throw error;}),hostConfig:join(stateRoot(),'settings.json'),operations:join(root,'docs/OPERATIONS.md')};
 }
 export async function authCommand(root:string,action:string,provider:string|undefined,signal:AbortSignal){
   const bins=binaries(root);
