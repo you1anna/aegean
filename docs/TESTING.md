@@ -26,6 +26,8 @@ node --test --test-concurrency=1 --test-timeout=300000 \
 Inspect that test's dependencies before assuming it is offline. Do not add live
 provider calls to the quick workflow test file.
 
+Bootstrap does not run the development suite. Installation retains source provenance, type, script and artifact checks.
+
 Before accepting a candidate, run `npm ci`, `npm run check` and `npm test`.
 Quick checks are partial feedback, not full-suite or native acceptance evidence.
 Keep the full suite and CI checks intact; avoid repeatedly running the full suite
@@ -35,7 +37,7 @@ the whole suite. Ctrl-C stops a local quick check; it holds no workflow lease or
 VM resources, and rebuilding is its recovery path.
 
 The full suite runs one file at a time and limits individual tests to five
-minutes. CI also has a ten-minute job deadline. Local runs have no aggregate
+minutes. CI also has a fifteen-minute job deadline. Local runs have no aggregate
 deadline. Fixture subprocesses keep their own timeouts and cleanup logic.
 Coordinator fixtures use isolated temporary state and real local Git repositories.
 The Git shim calls Git directly for routine operations and keeps the synthetic

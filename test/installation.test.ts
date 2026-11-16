@@ -184,7 +184,7 @@ test('routing mutations serialize and explicit recovery refuses a live owner but
     await assert.rejects(routing.routingAction(f.user, 'migrate'), /locked/);
     await assert.rejects(routing.routingAction(f.user, 'recover'), /still alive/);
   });
-  const pidOutput = await checked(process.execPath, ['-e', 'console.log(process.pid)']); const stoppedPid = Number(pidOutput);
+  const pidOutput = await checked(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { env: { ...process.env, FORCE_COLOR: '1' } }); const stoppedPid = Number(pidOutput);
   assert.ok(Number.isSafeInteger(stoppedPid) && stoppedPid > 0, `stopped-owner fixture got invalid child pid output: ${JSON.stringify(pidOutput)}`);
   await writeFile(join(f.data, 'installation-lock/owner.json'), JSON.stringify({ pid: stoppedPid, token: randomUUID() }));
   assert.equal((await routing.routingAction(f.user, 'recover')).recovered, false);

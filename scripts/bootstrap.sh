@@ -9,6 +9,5 @@ cd "$repo"
 "$repo/scripts/dev" setup
 mise exec -- node --input-type=module -e "import { sourceProvenance } from './scripts/source-provenance.mjs'; sourceProvenance(process.cwd());"
 "$repo/scripts/dev" check
-"$repo/scripts/dev" test
 mise exec -- node scripts/setup-verifier.mjs
 mise exec -- node scripts/install.mjs "$@"

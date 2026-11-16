@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access } from 'node:fs/promises';
@@ -42,8 +43,26 @@ test('unknown commands do not mutate the checkout',()=>fixture(async root=>{
 }));
 test('source task waits for same-group descendants before returning',()=>fixture(async root=>{
   const {execute}=await import(modulePath);const marker=join(root,'writer');
-  const child=join(root,'writer.cjs');await writeFile(child,`const fs=require('node:fs');process.on('SIGTERM',()=>{});setInterval(()=>fs.appendFileSync(${JSON.stringify(marker)},'x'),30);`);
-  const parent=join(root,'parent.cjs');await writeFile(parent,`const {spawn}=require('node:child_process');const child=spawn(process.execPath,[${JSON.stringify(child)}],{stdio:'ignore'});child.unref();setTimeout(()=>process.exit(0),100);`);
+  const child=join(root,'writer.cjs');await writeFile(child,`const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.appendFileSync(${JSON.stringify(marker)},'x');process.send('ready');setInterval(()=>fs.appendFileSync(${JSON.stringify(marker)},'x'),30);`);
+  const parent=join(root,'parent.cjs');await writeFile(parent,`const {fork}=require('node:child_process');const child=fork(${JSON.stringify(child)},[],{stdio:['ignore','ignore','ignore','ipc']});child.once('message',()=>{child.disconnect();child.unref();process.exit(0);});`);
   await assert.rejects(execute(process.execPath,[parent],root),/failed/);
   const before=await readFile(marker,'utf8');await new Promise(r=>setTimeout(r,150));assert.equal(await readFile(marker,'utf8'),before);
+}));
+
+test('bootstrap checks source and installs without repeating the development suite',()=>fixture(async root=>{
+  await writeFile(join(root,'scripts/bootstrap.sh'),await readFile('scripts/bootstrap.sh'));
+  const bin=join(root,'bin'); await mkdir(bin);
+  const log=join(root,'calls');
+  await writeFile(join(bin,'mise'),'#!/bin/sh\nprintf "mise %s\\n" "$*" >> "$BOOTSTRAP_TEST_LOG"\n',{mode:0o755});
+  await writeFile(join(root,'scripts/dev'),'#!/bin/sh\nprintf "dev %s\\n" "$*" >> "$BOOTSTRAP_TEST_LOG"\n[ "$1" != test ]\n',{mode:0o755});
+  const env={...process.env,PATH:bin+':'+process.env.PATH,BOOTSTRAP_TEST_LOG:log};
+  execFileSync('/bin/sh',[join(root,'scripts/bootstrap.sh')],{env});
+  const calls=await readFile(log,'utf8');
+  assert.match(calls,/dev setup/); assert.match(calls,/dev check/);
+  assert.match(calls,/sourceProvenance/); assert.match(calls,/scripts\/setup-verifier.mjs/); assert.match(calls,/scripts\/install.mjs/);
+  assert.doesNotMatch(calls,/dev test|npm test/);
+  await writeFile(log,'');
+  await writeFile(join(root,'scripts/dev'),'#!/bin/sh\nexit 1\n',{mode:0o755});
+  assert.throws(()=>execFileSync('/bin/sh',[join(root,'scripts/bootstrap.sh')],{env}));
+  assert.equal(await readFile(log,'utf8'),'');
 }));

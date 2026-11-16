@@ -16,6 +16,19 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Installation test reliability
+
+This source fix used manual approval. No additional full pipeline run was performed.
+Forced terminal colour reproduced the stopped-owner fixture failure: `console.log(number)` decorated the PID with ANSI codes.
+The fixture now writes plain text and forces colour during its check. PID validation and live-owner rejection remain intact.
+The source-task fixture now waits for a child readiness message instead of a fixed startup delay.
+
+Bootstrap no longer repeats the development suite on each installation. Source provenance, type, script and artifact checks remain required.
+Development and CI retain the full suite. See [testing](TESTING.md) for focused checks.
+
+All 18 installation tests passed under forced colour in 25.52 seconds. All six source-script tests passed in 1.37 seconds.
+The build, type check, bootstrap syntax check and diff check passed. No full-suite rerun or live installation occurred.
+
 ## 16 November 2026: Claude compatibility fix
 
 The source accepts stable Claude versions within the range in `toolchain.json`.

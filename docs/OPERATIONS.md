@@ -44,7 +44,8 @@ sh scripts/bootstrap.sh
 ```
 
 The bootstrap installs pinned Node through mise, installs locked packages with
-lifecycle scripts disabled, runs checks and installs a versioned release.
+lifecycle scripts disabled, checks types and script syntax, and installs a versioned release.
+It does not repeat the development test suite. Run source tests during development and review; see [testing](TESTING.md).
 It can install mise through Homebrew if mise is absent. It also configures the
 dedicated Colima verifier through `scripts/setup-verifier.mjs`.
 No backup or Docker PATH export is required. Downloads use a private staging directory and an exclusive lock.
