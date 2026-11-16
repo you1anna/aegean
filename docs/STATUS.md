@@ -32,7 +32,7 @@ The tests are split by concern: `scout.test.ts` and `operator-guidance.test.ts`.
 No live model call or installation occurred. The check results are in the pull request.
 
 Next step at session close: the operator reviews this pull request. Run `trial-02` is still `spec-drafted` in the control ledger;
-cancel it before the next `aegean prepare`. the pilot project edits are uncommitted in its working tree.
+cancel it before the next `aegean prepare`.
 
 ## 16 November 2026: Project standard range
 
