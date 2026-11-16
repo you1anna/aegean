@@ -270,7 +270,8 @@ This reads configuration and Git identity without executing project commands or 
 It rejects old schemas and missing budgets. Image compatibility does not prove that project executables or dependencies exist in the verifier.
 The `agentContext` field lists each committed file that the Scout will read, with its size. Check this list before you prepare a run.
 A missing or oversized required file fails this command before a run exists.
-The `standardVersion` in `aegean.json` must equal the `policy` value of the installed release; `examples/aegean.json` shows the current value.
+A project keeps the `standardVersion` that you reviewed. A release accepts each version from `minProjectStandard` to `policy` in `toolchain.json`.
+You edit `standardVersion` only when a release raises `minProjectStandard`; the command then names the accepted versions.
 Review configuration changes through the project's own workflow before a run.
 
 Prepare the request without a model call:

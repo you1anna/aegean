@@ -6,7 +6,6 @@ import { ProjectSchema, assertSupportedImage } from '../domain/config.js';
 import { atomicJson } from '../adapters/files.js';
 import { realpathSync, existsSync } from 'node:fs';
 import { hostConfig } from './runtime.js';
-import { POLICY } from '../domain/workflow.js';
 export function eligible(path: string, excludedRoots?: string[]): void {
   if (!excludedRoots?.length) throw new Error('review host excludedRoots before enrolment; missing policy fails closed');
   const actual = existsSync(path) ? realpathSync(path) : resolve(path);
@@ -26,7 +25,7 @@ export async function enrol(repo: string, configPath: string | undefined, opensp
   await checked(openspec, ['init', '--tools', 'claude,codex', '--profile', 'core', '--no-animation', repo], { env: { ...process.env, OPENSPEC_TELEMETRY: '0' } });
   await atomicJson(target, config);
   const instructions = join(repo, 'AGENTS.md');
-  const block = `\n\n<!-- aegean-project:begin -->\nSignificant changes use Aegean standard ${POLICY.version}. Read aegean.json for repository\nchecks and verifier configuration. Run \`aegean doctor --json\` and use the\ninstalled aegean skill. This supersedes direct-to-main for significant work.\nProject data and deployment restrictions remain authoritative.\n<!-- aegean-project:end -->\n`;
+  const block = `\n\n<!-- aegean-project:begin -->\nSignificant changes use the Aegean standard that aegean.json names. Read aegean.json for\nrepository checks and verifier configuration. Run \`aegean doctor --json\` and use the\ninstalled aegean skill. This supersedes direct-to-main for significant work.\nProject data and deployment restrictions remain authoritative.\n<!-- aegean-project:end -->\n`;
   let before = ''; try { before = await readFile(instructions, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
   await writeFile(instructions, before + block);
   return { enrolled: true, repository: config.repository, reviewRequired: true };

@@ -4,8 +4,14 @@ import toolchain from '../../toolchain.json' with { type: 'json' };
 export const GitHubLogin = z.string().min(1).max(39).regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/).refine(login => !login.includes('--'));
 export const ApproverSchema = z.object({ id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), login: GitHubLogin }).strict();
 export type Approver = z.infer<typeof ApproverSchema>;
+const versionParts = (version: string) => version.split('.').map(Number);
+const versionOrder = (left: string, right: string) => { const a = versionParts(left), b = versionParts(right); for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1; return 0; };
+/** A project keeps the standard it was reviewed against. A release that changes the meaning of aegean.json raises the minimum. */
+export function acceptsStandard(version: string, minimum: string = toolchain.minProjectStandard, current: string = toolchain.policy): boolean {
+  return [version, minimum, current].every(v => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v)) && versionOrder(version, minimum) >= 0 && versionOrder(version, current) <= 0;
+}
 export const ProjectSchema = z.object({
-  schemaVersion: z.literal(2), standardVersion: z.literal(toolchain.policy),
+  schemaVersion: z.literal(2), standardVersion: z.string().refine(value => acceptsStandard(value), { message: `this release accepts project standards ${toolchain.minProjectStandard} to ${toolchain.policy}` }),
   repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
   approver: ApproverSchema, approvalMode: z.enum(['local', 'github-comments']).default('local'),
   modelExecution: ModelExecutionSchema.optional(),

@@ -89,6 +89,17 @@ test('shipped project and limit examples validate against their owners',async()=
   const config=ProjectSchema.parse(JSON.parse(await readFile('examples/aegean.json','utf8')));assert.equal(config.modelExecution?.budget.enforcement,'monitored');
   assert.ok(parsePilotLimits(JSON.parse(await readFile('examples/pilot-limits.json','utf8'))).budget.maxModelCalls>0);
 });
+test('a project keeps its reviewed standard across a compatible policy change; other versions fail closed',async()=>{
+  const {ProjectSchema,acceptsStandard}=await import('../src/domain/config.js');
+  const toolchain=JSON.parse(await readFile('toolchain.json','utf8'));
+  const example=JSON.parse(await readFile('examples/aegean.json','utf8'));
+  for(const version of [toolchain.minProjectStandard,toolchain.policy])assert.equal(ProjectSchema.parse({...example,standardVersion:version}).standardVersion,version);
+  assert.equal(acceptsStandard('0.4.0','0.4.0','0.5.0'),true);assert.equal(acceptsStandard('0.5.0','0.4.0','0.5.0'),true);assert.equal(acceptsStandard('0.4.9','0.4.0','0.5.0'),true);
+  for(const version of ['0.3.9','0.5.1','0.10.0','1.0.0','0.4','0.4.0-rc1','v0.4.0','',' 0.4.0','00.4.0'])assert.equal(acceptsStandard(version,'0.4.0','0.5.0'),false,version);
+  assert.equal(acceptsStandard('0.10.0','0.9.0','0.10.0'),true); // numeric order, not text order
+  assert.throws(()=>ProjectSchema.parse({...example,standardVersion:'0.3.0'}),/accepts project standards/);
+  assert.throws(()=>ProjectSchema.parse({...example,standardVersion:'99.0.0'}),/accepts project standards/);
+});
 test('newline-terminated reviewed project policy survives start and frozen-policy checks',async()=>{
   const f=await fixture({approvalMode:'local'});try{
     const path=join(f.repo,'aegean.json');await writeFile(path,(await readFile(path,'utf8'))+'\n');await f.realGit(['add','.']);await f.realGit(['commit','-m','formatted config']);await f.realGit(['push','origin','main']);

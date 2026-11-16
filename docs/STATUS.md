@@ -16,6 +16,16 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 16 November 2026: Project standard range
+
+PR #6 made each enrolled project edit `standardVersion` after the policy change. The manual step was removed.
+The approval covers this fix directly on `main`, without a pull request or a pipeline run.
+
+A release now accepts each project standard from `minProjectStandard` to `policy` in `toolchain.json`; both are `0.4.0` to `0.5.0` now.
+A version outside that range, or a malformed version, fails `project check` with the accepted versions in the message.
+New enrolment text no longer names a version. The type check and the operator command tests passed; the full suite did not run.
+The release `0.1.0-312da915da1d` on the primary host does not contain this fix and still requires `0.5.0` exactly.
+
 ## 16 November 2026: Specification inputs and operator guidance
 
 The second pilot project run reached `spec-drafted` with a draft that the operator could not approve.
@@ -29,7 +39,7 @@ Source changes, tested with synthetic fixtures only:
 - `project check` lists the files that the Scout will read. A missing or oversized required file fails before a run exists.
 - A repeated `authorize-pilot` with the same limits reports the saved authorisation without a prompt. It replaces nothing.
 - `status`, the draft stop and failed commands name the next step.
-- The policy version is `0.5.0` because context selection changed. Each enrolled project must set this `standardVersion`.
+- The policy version is `0.5.0` because context selection changed.
 
 Not established: no live model call used the new prompt. The stricter draft format can pause a run after one charged Scout call;
 the rate is unmeasured. Aegean does not check that the draft obeys the ignore rules or the check commands; the human reads the notes.
