@@ -32,6 +32,11 @@ Not established: no real project and no live model call used the guide. The guid
 Ctrl-C at a typed confirmation prompt was not tested. Tab completion and an external editor were tested only as functions, not at a real keyboard.
 The check results are in the pull request.
 
+Next step at session close: the operator merged PR #8. The next trial requires a fresh baseline.
+With explicit approval for the installation: install with the bootstrap installer, run `aegean qualify`, cancel `trial-02`, then start a new pilot project request through the guide.
+Treat a run from an older release as cancel-only. Keep the old run records, logs and host settings.
+Not started: a guide message for a run whose policy differs from the installed policy.
+
 ## 16 November 2026: Review of the specification and guidance code
 
 A review of the code from PR #6 and the project standard fix found these weak points. All are corrected in source:
