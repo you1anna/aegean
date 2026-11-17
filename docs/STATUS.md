@@ -16,6 +16,19 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 17 November 2026: Scout model
+
+The Scout policy now requests `claude-sonnet-5-5` at high effort. Before this change it used `claude-sonnet-5` at medium effort.
+The Scout makes one call for each run, and its draft is the contract for each later stage. Both Auditor tasks and the Builder are unchanged.
+
+- [toolchain.json](../toolchain.json) owns the setting. The policy version is `0.6.0`, so that a run from the earlier model setting has a different policy name.
+- `minProjectStandard` stays `0.4.0`. A project with standard `0.5.0` needs no edit.
+- A run that policy `0.5.0` created is cancel-only on a release with this change.
+
+Not established: no live call used this model identifier or effort. The Claude CLI must accept `claude-sonnet-5-5` and report the same model;
+a different reported model stops the run. The effect on draft quality, duration and token use is unmeasured.
+Compare the next pilot project draft with `trial-03` (67 seconds, 16,171 tokens). Host qualification is necessary again after installation.
+
 ## 17 November 2026: Specification review in the guide
 
 The operator used the guide on pilot project run `trial-03` to the specification review. [Pilot notes](PILOT-NOTES.md) record the run.
@@ -36,7 +49,7 @@ The release on the primary host does not contain these changes until a reviewed 
 context selection and the verification rules are the same. The check results are in the pull request.
 
 Open items, not started: `trial-03` and `trial-04` are unfinished in the control ledger; cancel both before new work.
-Each model role uses its baseline, `claude-sonnet-5` at medium effort for the Scout and both Auditor tasks. A change needs the operator's decision and a new qualification.
+The section above records the later change of the Scout model. Both Auditor tasks keep `claude-sonnet-5` at medium effort.
 The first `prepare` on 16 November at 23:42 failed in 24 ms; the diagnostic log has no message text, so the cause is unknown.
 
 ## 16 November 2026: Cancel a run from an older policy
