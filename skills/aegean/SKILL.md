@@ -11,8 +11,9 @@ For eligible significant work, inspect repository instructions and run
 project-specific dependency managers and production access rules. Use
 `aegean start --request <file>` to begin a run and `aegean status` / `aegean resume`
 for its checkpoints. Never start a second independent Builder for the same run.
-Before you give the human a command, run `aegean status` or `aegean status --run ID`
-and give the `next` step that it prints. A run exists only after `aegean prepare`.
+Before you give the human a command, run `aegean status --json` or `aegean status --run ID --json`
+and give the `next` step that it prints. Add `--json` to each command that you read: without it,
+a terminal gets text for a person. A run exists only after `aegean prepare`.
 The Scout reads only the committed files that `aegean project check` lists.
 For the route from the host check to the specification approval, tell the human to run
 `aegean guide` in their own terminal. Never operate the guide; it refuses a pipe.

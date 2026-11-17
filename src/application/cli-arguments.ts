@@ -1,10 +1,10 @@
 const commands:Record<string,{usage:string;flags:string[];switches?:string[];repeat?:string[];words?:number}>={
   guide:{usage:'guide',flags:[]},
-  info:{usage:'info [--json]',flags:[],switches:['--json']},
-  doctor:{usage:'doctor [--json] [--require prerequisites|full]',flags:['--require'],switches:['--json']},
+  info:{usage:'info',flags:[]},
+  doctor:{usage:'doctor [--require prerequisites|full]',flags:['--require']},
   auth:{usage:'auth status | auth login claude|codex',flags:[],words:2},
   verifier:{usage:'verifier status|start|stop | verifier recover --confirm-stopped',flags:[],words:1,switches:['--confirm-stopped']},
-  project:{usage:'project check [--json]',flags:[],words:1,switches:['--json']},
+  project:{usage:'project check',flags:[],words:1},
   prepare:{usage:'prepare --request FILE',flags:['--request']},start:{usage:'start --request FILE',flags:['--request']},
   'authorize-pilot':{usage:'authorize-pilot --run ID --limits FILE | --expires-at ISO --max-model-calls N --active-minutes N --max-repairs N --max-revisions N',flags:['--run','--limits','--expires-at','--max-model-calls','--active-minutes','--max-repairs','--max-revisions']},
   status:{usage:'status [--run ID]',flags:['--run']},resume:{usage:'resume --run ID',flags:['--run']},
@@ -21,20 +21,24 @@ const commands:Record<string,{usage:string;flags:string[];switches?:string[];rep
   'activate-routing':{usage:'activate-routing --project OWNER/REPO --project-path PATH [repeat pairs]',flags:['--project','--project-path'],repeat:['--project','--project-path']},
   'deactivate-routing':{usage:'deactivate-routing',flags:[]},'migrate-routing':{usage:'migrate-routing',flags:[]},'recover-routing':{usage:'recover-routing',flags:[]},
 };
+/** Every command except the guide accepts these switches. */
+const COMMON_SWITCHES=['--json'];
+const OUTPUT_NOTE='Output: text at a terminal; JSON to a pipe or a file, or with --json.';
 export function commandHelp(command?:string){
-  if(command){if(!commands[command])throw new Error(`unknown command: ${command}`);return `Usage: aegean ${commands[command].usage}`;}
-  return `Aegean — local build: ./scripts/dev help; installed commands:\n\nRun aegean guide at a terminal for the interactive route from the host check to the specification approval.\n\n${Object.values(commands).map(c=>'  '+c.usage).join('\n')}\n\nCommands preserve separate human approval and release acceptance gates. See aegean info for the installed guide.`;
+  if(command){if(!commands[command])throw new Error(`unknown command: ${command}`);return `Usage: aegean ${commands[command].usage}${command==='guide'?'':' [--json]'}`;}
+  return `Aegean — local build: ./scripts/dev help; installed commands:\n\nRun aegean guide at a terminal for the interactive route from the host check to the specification approval.\n\n${Object.values(commands).map(c=>'  '+c.usage).join('\n')}\n\n${OUTPUT_NOTE}\nCommands preserve separate human approval and release acceptance gates. See aegean info for the installed guide.`;
 }
 export function validateArguments(args:string[]):string|undefined{
   if(!args.length||['help','--help','-h'].includes(args[0]!))return commandHelp(args[0]==='help'?args[1]:undefined);
-  if(args[0]==='--version'){if(args.length!==1)throw new Error('unexpected version arguments');return;}
+  if(args[0]==='--version'){if(args.length>2||args.slice(1).some(arg=>!COMMON_SWITCHES.includes(arg)))throw new Error('unexpected version arguments');return;}
   const spec=commands[args[0]!];if(!spec)throw new Error(`unknown command: ${args[0]}`);
   if(args.includes('--help')||args.includes('-h'))return commandHelp(args[0]);
   const seen=new Set<string>();let words=0;
   for(let i=1;i<args.length;i++){
     const arg=args[i]!;
     if(!arg.startsWith('-')){words++;continue;}
-    if(!spec.flags.includes(arg)&&!spec.switches?.includes(arg))throw new Error(`unknown option ${arg}; ${commandHelp(args[0])}`);
+    const common=args[0]!=='guide'&&COMMON_SWITCHES.includes(arg);
+    if(!spec.flags.includes(arg)&&!spec.switches?.includes(arg)&&!common)throw new Error(`unknown option ${arg}; ${commandHelp(args[0])}`);
     if(seen.has(arg)&&!spec.repeat?.includes(arg))throw new Error(`duplicate option: ${arg}`);seen.add(arg);
     if(spec.flags.includes(arg)){if(!args[i+1]||args[i+1]!.startsWith('--'))throw new Error(`${arg} requires a value`);i++;}
   }

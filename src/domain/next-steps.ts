@@ -20,7 +20,7 @@ export function nextSteps(run: Guided, facts: StepFacts = {}, now = Date.now()):
   const folder = facts.specification ?? `openspec/changes/${id}/ in the run worktree`;
   switch (run.state) {
     case 'requested': return [
-      ...(facts.pilotExpiresAt !== undefined ? [] : [`If aegean doctor shows fullWorkflowReady false, authorise a pilot first: aegean authorize-pilot --run ${id} --limits FILE`]),
+      ...(facts.pilotExpiresAt !== undefined ? [] : [`If aegean doctor reports that the full workflow is not ready, authorise a pilot first: aegean authorize-pilot --run ${id} --limits FILE`]),
       `Draft the specification (one model call): ${resume}`,
     ];
     case 'spec-drafted': return [

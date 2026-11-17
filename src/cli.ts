@@ -2,6 +2,7 @@
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
+import { styleText } from 'node:util';
 import { doctor, configure, binaries, acceptRelease, stateRoot, hostConfig } from './application/runtime.js';
 import packageInfo from '../package.json' with { type: 'json' };
 import { enrol } from './application/enrol.js';
@@ -15,12 +16,13 @@ import { prepareRun } from './application/prepare.js';
 import { checkProject, agentContext } from './application/project-check.js';
 import { releaseInfo, authCommand, verifierCommand } from './application/operator.js';
 import { parsePilotLimits } from './domain/pilot-limits.js';
-import { validateArguments, recoveryHint } from './application/cli-arguments.js';
+import { validateArguments } from './application/cli-arguments.js';
 import { reserveHost } from './adapters/host-activity.js';
 import { OperatorLog, setOperatorLog, failureCode } from './adapters/operator-log.js';
 import { readBoundedEvidenceFile } from './adapters/acceptance-evidence.js';
 import { guide } from './application/guide.js';
 import { terminalUi, openEditor } from './adapters/terminal.js';
+import { outputMode, renderResult, renderError, errorPayload, toJson, type View } from './application/cli-output.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const flag = (args: string[], name: string): string | undefined => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
@@ -104,6 +106,23 @@ async function dispatch(args: string[], report: (line: string) => void = line =>
   } finally { setOperatorLog(undefined); log?.close(); await hostRelease?.(); }
 }
 
+/** The width and the colours of one output stream. Colour follows NO_COLOR, FORCE_COLOR and the terminal. */
+const view = (stream: NodeJS.WriteStream): View => ({
+  width: (stream.columns && stream.columns >= 20 ? stream.columns : 80) - 1,
+  paint: (style, text) => styleText(style, text, { stream }),
+});
+/** Text for an operator at a terminal; otherwise the JSON contract, unchanged. A result that cannot show as text still shows as JSON. */
+function print(result: unknown): void {
+  if (outputMode(args, process.stdout.isTTY === true) === 'text') {
+    try { console.log(renderResult(result, view(process.stdout))); return; }
+    catch (error) { console.error(`The result cannot show as text (${(error as Error).message}). The JSON form follows.`); }
+  }
+  const text = typeof result === 'string' ? result : toJson(result);
+  if (text !== undefined) console.log(text);
+}
+// A reader that closes early, as in "aegean status | head", must not turn a completed command into a crash.
+for (const stream of [process.stdout, process.stderr]) stream.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') throw error; });
+
 let args = process.argv.slice(2);
 // At a terminal, the command without arguments starts the guide. Other callers get the command list.
 if (!args.length && process.stdin.isTTY && process.stdout.isTTY) args = ['guide'];
@@ -116,10 +135,11 @@ try {
       execute: async command => { if (validateArguments(command)) throw new Error('the guide runs commands only'); return dispatch(command, line => ui.note(line)); } });
     if (outcome.interrupted) process.exitCode = 130;
   } else {
-    const result = await dispatch(args);
-    console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+    print(await dispatch(args));
   }
   if (controller.signal.aborted) process.exitCode = 130;
 } catch (error) {
-  console.error(JSON.stringify({ error: (error as Error).message, recovery: recoveryHint(args[0], (error as Error).message) })); process.exitCode = controller.signal.aborted ? 130 : 1;
+  const payload = errorPayload(error, args[0]);
+  console.error(outputMode(args, process.stderr.isTTY === true) === 'text' ? renderError(payload, view(process.stderr)) : JSON.stringify(payload));
+  process.exitCode = controller.signal.aborted ? 130 : 1;
 }

@@ -36,6 +36,8 @@ CLI → application services → domain rules
 
 `aegean guide` is one more caller of the command dispatch in `src/cli.ts`. `src/domain/guide.ts` owns its choices,
 `src/application/guide.ts` its sequence and `src/adapters/terminal.ts` its prompts. It has no separate route to an effect.
+`src/application/cli-output.ts` formats a command result as text for a terminal. It has no I/O. JSON stays the
+contract for pipes, files and `--json`; [Read command output](OPERATIONS.md#read-command-output) gives the rule.
 
 Domain code does not import application services or adapters. Tests guard this
 boundary. There is no general scheduler or background model polling.
