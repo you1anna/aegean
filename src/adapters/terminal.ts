@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { GuideStop, type Choice, type GuideUi, type TextOptions } from '../domain/guide.js';
+import { brandLines } from './brand.js';
 
 type Input = Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown };
 type Output = Writable & { isTTY?: boolean; columns?: number };
@@ -79,8 +80,11 @@ export function terminalUi(input: Input = process.stdin, output: Output = proces
   const fit = (text: string) => text.length > width() ? text.slice(0, Math.max(0, width() - 1)) + '…' : text;
   const marked = (mark: string, text: string) => print(`${mark} ${wrap(text, width() - 2).replaceAll('\n', '\n  ')}`);
   const ui: GuideUi = {
-    banner(title, lines) { print(`\n${paint('bold', title)}\n${paint('dim', wrap(lines.join('\n'), width()))}`); },
-    step(title) { print(`\n${paint(['bold', 'cyan'], title)}`); },
+    banner(title, lines) { print(`\n${brandLines(width(), output).join('\n')}\n\n${paint('bold', title)}\n${paint('dim', wrap(lines.join('\n'), width()))}`); },
+    step(title) {
+      const heading = fit(title), rule = Math.max(0, Math.min(width(), 64) - heading.length - 1);
+      print(`\n${paint(['bold', 'cyan'], heading)}${rule ? ` ${paint('dim', '─'.repeat(rule))}` : ''}`);
+    },
     say(text) { print(wrap(text, width())); },
     note(text) { print(paint('dim', wrap(text, width()))); },
     good(text) { marked(paint('green', '✔'), text); },
@@ -92,10 +96,11 @@ export function terminalUi(input: Input = process.stdin, output: Output = proces
       const frame = () => [
         `${paint('cyan', '?')} ${paint('bold', fit(question))}`,
         ...choices.map((choice, n) => {
-          const plain = fit(`  ${n + 1}. ${choice.label}${choice.hint ? `  (${choice.hint})` : ''}`);
-          return n === index ? paint('cyan', `❯${plain.slice(1)}`) : plain;
+          const plain = fit(`  ${n + 1}. ${choice.label}${choice.hint ? `  (${choice.hint})` : ''}`), end = `  ${n + 1}. ${choice.label}`.length;
+          const label = plain.slice(1, end), rest = plain.slice(end), hint = rest ? paint('dim', rest) : '';
+          return n === index ? `${paint(['bold', 'cyan'], `❯${label}`)}${hint}` : ` ${label}${hint}`;
         }),
-        paint('dim', fit('  Use the arrow keys or a number. Press Enter to select.')),
+        paint('dim', fit('  ↑/↓ or a number to move · Enter to select · Ctrl-C to stop')),
       ];
       let drawn = 0;
       const draw = () => { if (drawn) { moveCursor(output, 0, -drawn); cursorTo(output, 0); clearScreenDown(output); } const lines = frame(); drawn = lines.length; output.write(lines.join('\n') + '\n'); };

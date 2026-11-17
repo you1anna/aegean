@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { guide, type Guide } from '../src/application/guide.js';
 import { GuideStop, runChoices, checkFix, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
 import { terminalUi, completePath, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
+import { brandLines, colourDepth, MARK_WIDTH, WORDMARK } from '../src/adapters/brand.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
 import { PilotLimitsSchema } from '../src/domain/pilot-limits.js';
 import type { State } from '../src/domain/workflow.js';
@@ -228,6 +229,22 @@ test('the terminal selects with arrow keys or a number, applies defaults and sto
   t.keys('\x03'); await assert.rejects(t.ui.text('Path'), (error: unknown) => error instanceof GuideStop && error.interrupted);
   assert.equal(await t.ui.task('Work', async () => 5), 5); await assert.rejects(t.ui.task('Work', async () => { throw new Error('failed'); }), /failed/);
   assert.match(t.screen(), /✔ Work/); assert.match(t.screen(), /✖ Work/);
+});
+
+test('the banner shows the mark in the colours that the terminal supports and fits the width', () => {
+  const stream = (depth?: number) => Object.assign(new PassThrough(), { isTTY: true, ...(depth ? { getColorDepth: () => depth } : {}) });
+  const plain = brandLines(59, stream(1));
+  assert.equal(colourDepth(stream(1)), 1); assert.equal(colourDepth(stream(24)), 24);
+  assert.equal(plain.join('\n'), stripVTControlCharacters(plain.join('\n')), 'no escape code without colour');
+  assert.ok(plain.length > 5); assert.equal(plain.at(-1)!.trim(), WORDMARK); for (const line of plain) assert.ok(line.length <= 59, line);
+  const full = brandLines(59, stream(24)).join('\n');
+  assert.match(full, /\x1b\[38;2;240;140;72m/); assert.equal(stripVTControlCharacters(full), plain.join('\n'));
+  assert.match(brandLines(59, stream(8)).join('\n'), /\x1b\[38;5;\d+m/);
+  // Below the width of the mark, only the wordmark shows. The narrowest terminal gets the short name.
+  assert.deepEqual(brandLines(MARK_WIDTH, stream(1)), [`  ${WORDMARK}`]); assert.deepEqual(brandLines(20, stream(1)), ['AEGEAN']);
+  const t = terminal(); t.ui.banner('Aegean guide', ['One line.']); t.ui.step('Host'); t.ui.step('x'.repeat(80));
+  assert.match(t.screen(), /Λ {3}E {3}G[\s\S]*Aegean guide\nOne line\.\n\nHost ─+\n/);
+  for (const line of t.screen().split('\n')) assert.ok(line.length <= 59, line);
 });
 
 test('the terminal has no unattended mode and completes paths only from real folders', async () => {
