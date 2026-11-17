@@ -25,6 +25,35 @@ export function completePath(line: string): [string[], string] {
   } catch { return [[], line]; }
 }
 
+/**
+ * Breaks a long line at spaces. A list item keeps its indent on each new line. A word longer than the width stays whole.
+ * A command line (`$ ...`) stays on one line, so that a copy of it is complete.
+ */
+export function wrap(text: string, width: number): string {
+  return text.split('\n').map(line => {
+    const lead = /^\s*(?:[-*] |\d+\. )?/.exec(line)![0];
+    if (line.length <= width || lead.length > width / 2 || line.startsWith('$ ')) return line;
+    const indent = ' '.repeat(lead.length), lines: string[] = []; let current = '';
+    for (const word of line.slice(lead.length).split(' ')) {
+      if (current && indent.length + current.length + 1 + word.length > width) { lines.push(current); current = word; }
+      else current = current ? `${current} ${word}` : word;
+    }
+    return [...lines, current].map((part, n) => (n ? indent : lead) + part).join('\n');
+  }).join('\n');
+}
+
+/** Shows a text in the operator's pager (PAGER, or less). False means that the pager did not show it. */
+export async function openPager(text: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  return new Promise<boolean>(resolve => {
+    const child = spawn('/bin/sh', ['-c', env.PAGER || 'less'], { stdio: ['pipe', 'inherit', 'inherit'], env });
+    child.once('error', () => resolve(false));
+    child.once('exit', code => resolve(code === 0));
+    // The operator can close the pager before it reads all of the text.
+    child.stdin.on('error', () => undefined);
+    child.stdin.end(text);
+  });
+}
+
 /** Opens the operator's own editor on a private file or folder. Never use for candidate code. */
 export async function openEditor(path: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   const editor = env.VISUAL || env.EDITOR;
@@ -41,23 +70,25 @@ export async function openEditor(path: string, env: NodeJS.ProcessEnv = process.
  * Draws the guide on an interactive terminal. It has no unattended mode:
  * the guide leads to human decisions, and an agent must not operate it.
  */
-export function terminalUi(input: Input = process.stdin, output: Output = process.stdout): GuideUi {
+export function terminalUi(input: Input = process.stdin, output: Output = process.stdout, pager: (text: string) => Promise<boolean> = openPager): GuideUi {
   if (!input.isTTY || !output.isTTY) throw new Error('The guide requires the operator at an interactive terminal. Use aegean status for the next step, or aegean help for the commands');
   const paint = (colour: Colour, text: string) => styleText(colour, text, { stream: output });
   let spinner: { clear(): void; draw(): void } | undefined;
   const print = (text: string) => { spinner?.clear(); output.write(text + '\n'); spinner?.draw(); };
-  const fit = (text: string) => { const width = (output.columns && output.columns >= 20 ? output.columns : 80) - 1; return text.length > width ? text.slice(0, Math.max(0, width - 1)) + '…' : text; };
-  return {
-    banner(title, lines) { print(`\n${paint('bold', title)}\n${lines.map(line => paint('dim', line)).join('\n')}`); },
+  const width = () => (output.columns && output.columns >= 20 ? output.columns : 80) - 1;
+  const fit = (text: string) => text.length > width() ? text.slice(0, Math.max(0, width() - 1)) + '…' : text;
+  const marked = (mark: string, text: string) => print(`${mark} ${wrap(text, width() - 2).replaceAll('\n', '\n  ')}`);
+  const ui: GuideUi = {
+    banner(title, lines) { print(`\n${paint('bold', title)}\n${paint('dim', wrap(lines.join('\n'), width()))}`); },
     step(title) { print(`\n${paint(['bold', 'cyan'], title)}`); },
-    say: print,
-    note(text) { print(paint('dim', text)); },
-    good(text) { print(`${paint('green', '✔')} ${text}`); },
-    warn(text) { print(`${paint('yellow', '!')} ${text}`); },
-    bad(text) { print(`${paint('red', '✖')} ${text}`); },
-    async select<T extends string>(question: string, choices: Choice<T>[]): Promise<T> {
+    say(text) { print(wrap(text, width())); },
+    note(text) { print(paint('dim', wrap(text, width()))); },
+    good(text) { marked(paint('green', '✔'), text); },
+    warn(text) { marked(paint('yellow', '!'), text); },
+    bad(text) { marked(paint('red', '✖'), text); },
+    async select<T extends string>(question: string, choices: Choice<T>[], initial?: T): Promise<T> {
       if (!choices.length) throw new Error('a question needs at least one choice');
-      let index = 0, chosen = false;
+      let index = Math.max(0, choices.findIndex(choice => choice.value === initial)), chosen = false;
       const frame = () => [
         `${paint('cyan', '?')} ${paint('bold', fit(question))}`,
         ...choices.map((choice, n) => {
@@ -116,5 +147,13 @@ export function terminalUi(input: Input = process.stdin, output: Output = proces
       try { const value = await work(); end(paint('green', '✔')); return value; }
       catch (error) { end(paint('red', '✖')); throw error; }
     },
+    async page(title: string, text: string): Promise<void> {
+      const body = wrap(text.trimEnd(), width());
+      if (await pager(`${title}  (Space: next page, q: close)\n\n${body}\n`)) { ui.good(`Read ${title}`); return; }
+      // Without a pager the text stays on the screen until the operator answers.
+      print(`\n${paint('bold', title)}\n\n${body}\n`);
+      await ui.select(`End of ${title}`, [{ value: 'back', label: 'Go back' }]);
+    },
   };
+  return ui;
 }

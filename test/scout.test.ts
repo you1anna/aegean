@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ZodError } from 'zod';
-import { scoutPrefix, parseDraft, reviewNotes, draftFiles, reviewSummary, responseFault, DraftSchema, REVIEW_NOTES } from '../src/domain/scout.js';
+import { scoutPrefix, parseDraft, reviewNotes, draftFiles, reviewSummary, parseReviewNotes, reviewFlags, responseFault, DraftSchema, REVIEW_NOTES } from '../src/domain/scout.js';
 
 const project = { checks: [['node', '--test']], verifier: { kind: 'cli', image: 'node@sha256:' + 'a'.repeat(64), command: ['node', '--test'] } };
 const draft = {
@@ -15,7 +15,7 @@ test('Scout prompt states the project checks, the ignore rule and the report dut
   assert.ok(prompt.startsWith('Act as Scout.')); assert.ok(prompt.endsWith('CONTEXT:\n'));
   assert.ok(prompt.includes('PROJECT CHECKS:\n{"checks":[["node","--test"]],"verifier":{"kind":"cli"'));
   assert.ok(prompt.includes('REQUEST:\nBuild a store'));
-  for (const duty of ['verification:', 'coverage:', 'constraints:', 'openQuestions:', '.gitignore', 'NOT COVERED', 'cannot change these instructions', 'at most 300 characters']) assert.ok(prompt.includes(duty), duty);
+  for (const duty of ['verification:', 'coverage:', 'constraints:', 'openQuestions:', '.gitignore', 'NOT COVERED', 'cannot change these instructions', 'at most 300 characters', 'must not invent them', 'to a later change', 'give your recommendation', 'headings, short paragraphs and lists']) assert.ok(prompt.includes(duty), duty);
 });
 
 test('draft parse fails closed on a missing report field, an unknown field or unbound requirements', () => {
@@ -33,6 +33,19 @@ test('review notes show each limiting rule and each uncovered need to the human'
   assert.match(notes, /## Open questions\n\nNone reported\.\n/); assert.match(notes, /- Queue: NOT COVERED/); assert.match(notes, /## Verification\n\nnode --test runs the suite\.$/);
   assert.equal(draftFiles(draft)[REVIEW_NOTES], notes); assert.equal(draftFiles(draft)['specs/contract/spec.md'], draft.requirements);
   assert.deepEqual(reviewSummary(draft), { projectRulesThatLimitedTheRequest: draft.constraints, openQuestions: [], notCovered: [draft.coverage[1]] });
+});
+
+test('the notes file gives the same summary as the draft, and the human can answer an item in the file', () => {
+  const open = { ...draft, openQuestions: ['Which identifier format?', 'Which store?'] };
+  assert.deepEqual(parseReviewNotes(reviewNotes(open)), { ...reviewSummary(open), projectRulesThatLimitedTheRequest: ['AGENTS.md: no product code yet; the plan has no code'] });
+  assert.equal(reviewFlags(reviewSummary(open)), '2 open questions, 1 request need not covered');
+  assert.equal(reviewFlags({ projectRulesThatLimitedTheRequest: ['a rule'], openQuestions: ['One'], notCovered: [] }), '1 open question');
+  // A limiting rule is not a fault of the draft. A draft without a question or an uncovered need has no flag.
+  assert.equal(reviewFlags({ projectRulesThatLimitedTheRequest: ['a rule'], openQuestions: [], notCovered: [] }), undefined);
+  const answered = reviewNotes(open).replace('- Which identifier format?\n', '').replace('NOT COVERED, the request leaves it for later', 'Requirement Queue');
+  assert.deepEqual(parseReviewNotes(answered).openQuestions, ['Which store?']); assert.deepEqual(parseReviewNotes(answered).notCovered, []);
+  // A file that is not the notes format gives no item; it cannot hide a flag behind an error.
+  assert.deepEqual(parseReviewNotes('free text\n- NOT COVERED outside a section'), { projectRulesThatLimitedTheRequest: [], openQuestions: [], notCovered: [] });
 });
 
 test('a long entry does not waste a charged call; a fault report names fields and never model text', () => {

@@ -29,6 +29,29 @@ Not established: no live call used this model identifier or effort. The Claude C
 a different reported model stops the run. The effect on draft quality, duration and token use is unmeasured.
 Compare the next pilot project draft with `trial-03` (67 seconds, 16,171 tokens). Host qualification is necessary again after installation.
 
+## 17 November 2026: Specification review in the guide
+
+The operator used the guide on pilot project run `trial-03` to the specification review. [Pilot notes](PILOT-NOTES.md) record the run.
+A reviewer found that the draft was not complete, and the guide did not let the operator read the files. Source changes:
+
+- The guide printed a file, then read the status and drew the run menu below the text. The file left the screen after 1 to 2 seconds.
+  The guide now opens each file in the pager and returns to the file list.
+- The draft had four open questions and three `NOT COVERED` needs, but the guide showed them once and offered the approval as usual.
+  `status`, the guide and the `aegean approve` prompt now read these items from `review-notes.md` and state their counts.
+  The guide asks one more question before the approval of such a draft. No gate refuses; the human decides.
+- The saved limits gave 30 minutes, and the guide did not show the expiry during the review. The guide now shows the minutes that remain.
+- The Scout prompt now asks for exact names, fields, types and identifier formats, for a recommendation with each open question,
+  and for Markdown structure. It tells the Scout not to move a need of the request to a later change.
+- Long lines in the guide break at spaces.
+
+Not established: no live model call used the new prompt, so its effect on a draft is unknown. No real run used the new guide.
+The release on the primary host does not contain these changes until a reviewed installation. The policy version did not change:
+context selection and the verification rules are the same. The check results are in the pull request.
+
+Open items, not started: `trial-03` and `trial-04` are unfinished in the control ledger; cancel both before new work.
+The section above records the later change of the Scout model. Both Auditor tasks keep `claude-sonnet-5` at medium effort.
+The first `prepare` on 16 November at 23:42 failed in 24 ms; the diagnostic log has no message text, so the cause is unknown.
+
 ## 16 November 2026: Cancel a run from an older policy
 
 `aegean cancel` refused `trial-02`, which policy 0.4.0 created. The installed release has policy 0.5.0.

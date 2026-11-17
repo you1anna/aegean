@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guide, type Guide } from '../src/application/guide.js';
 import { GuideStop, runChoices, checkFix, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
-import { terminalUi, completePath, openEditor } from '../src/adapters/terminal.js';
+import { terminalUi, completePath, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
 import { PilotLimitsSchema } from '../src/domain/pilot-limits.js';
 import type { State } from '../src/domain/workflow.js';
@@ -32,6 +32,7 @@ function scripted(answers: (string | ((choices: Choice<string>[]) => string))[])
     },
     async text(question, options) { const value = next(question) as string || options?.initial || ''; assert.equal(options?.validate?.(value), undefined, question); return value; },
     task: (_label, work) => work(),
+    async page(title, text) { lines.push(`PAGE ${title}`, text); },
   };
   return { ui, lines, questions, text: () => lines.join('\n'), unused: answers };
 }
@@ -63,6 +64,9 @@ test('each live run state offers only its commands; later states and ended runs 
   assert.deepEqual(checkFix('claude-subscription')?.command, ['auth', 'login', 'claude']); assert.equal(checkFix('verifier-vm')?.terminal, false);
   for (const name of ['subscription-overflow', 'pilot-prerequisites', 'host-exclusions', 'release-acceptance']) assert.equal(checkFix(name), undefined, name);
   for (const fix of ['claude-subscription', 'codex-subscription', 'verifier-vm']) assert.equal(validateArguments(checkFix(fix)!.command), undefined);
+  // An incomplete draft shows its flags on the approval choice; a complete draft does not.
+  const approve = (flags?: string) => runChoices('spec-drafted', { ...facts, ...(flags ? { flags } : {}) }).find(choice => choice.value === 'approve')!.hint;
+  assert.equal(approve('2 open questions'), '2 open questions; you type the confirmation; aegean approve'); assert.equal(approve(), 'you type the confirmation; aegean approve');
 });
 
 test('the guide runs the documented command sequence to specification approval, then stops', async () => {
@@ -70,24 +74,25 @@ test('the guide runs the documented command sequence to specification approval, 
   const h = await harness([
     'new', 'yes', 'file', '/tmp/request.md',
     'authorise', 'enter', '', '6', '', '', '',
-    'draft', 'approve', choices => choices[0]!.value,
+    'draft', 'approve', 'no', 'approve', 'yes', choices => choices[0]!.value,
   ], args => {
     switch (args[0]) {
       case 'doctor': return readiness();
       case 'project': return projectCheck;
       case 'prepare': return { id, state: 'requested', reused: false };
       case 'authorize-pilot': pilot = true; return { authorized: true };
-      case 'resume': state = 'spec-drafted'; return { run: { id }, review: { projectRulesThatLimitedTheRequest: ['AGENTS.md: no code'], openQuestions: ['Which format?'], notCovered: [] } };
+      case 'resume': state = 'spec-drafted'; return { run: { id } };
       case 'approve': state = 'spec-approved'; return { authorized: true };
       case 'status': return args.length === 1 ? { runs: [{ id: 'run-other', host, state: 'spec-drafted' }, { id: 'run-foreign', host: 'another', state: 'building' }, { id: 'run-old', host, state: 'cancelled' }] }
-        : { id, state, ...(pilot ? { pilot: { expiresAt: new Date(2_000_000).toISOString() } } : {}), ...(state === 'requested' ? {} : { specification: '/state/spec/' }), next: [] };
+        : { id, state, ...(pilot ? { pilot: { expiresAt: new Date(2_000_000).toISOString() } } : {}), ...(state === 'requested' ? {} : { specification: '/state/spec/', spec: 'a'.repeat(64) }),
+          ...(state === 'spec-drafted' ? { review: { projectRulesThatLimitedTheRequest: ['AGENTS.md: no code'], openQuestions: ['Which format?'], notCovered: ['Queue: NOT COVERED'] } } : {}), next: [] };
       default: return new Error(`unexpected command ${args.join(' ')}`);
     }
   });
   try {
     const limits = join(h.state, 'pilot-limits.json');
     assert.deepEqual(h.commands(), ['doctor', 'status', 'project check', 'prepare --request /tmp/request.md', `status --run ${id}`,
-      `authorize-pilot --run ${id} --limits ${limits}`, `status --run ${id}`, `resume --run ${id}`, `status --run ${id}`, `approve --run ${id}`, `status --run ${id}`]);
+      `authorize-pilot --run ${id} --limits ${limits}`, `status --run ${id}`, `resume --run ${id}`, `status --run ${id}`, `status --run ${id}`, `approve --run ${id}`, `status --run ${id}`]);
     assert.deepEqual(h.outcome, { run: id, interrupted: false }); assert.deepEqual(h.unused, []);
     // The entered limits pass the owner schema and stay private.
     const saved = PilotLimitsSchema.parse(JSON.parse(await readFile(limits, 'utf8')));
@@ -95,6 +100,11 @@ test('the guide runs the documented command sequence to specification approval, 
     const text = h.text();
     for (const expected of ['$ aegean prepare --request /tmp/request.md', '1 unfinished run(s) belong to another host', 'README.md  10 bytes', 'AGENTS.md: no code', 'Which format?', 'Type the confirmation yourself', `aegean status --run ${id}`]) assert.ok(text.includes(expected), expected);
     assert.ok(!text.includes('$ aegean status --run'), 'status polls are not echoed');
+    // The first answer to an incomplete draft goes back and runs no approval. The lists appear once; the flags appear each time.
+    assert.equal(h.questions.filter(question => question === 'Do you want to approve the draft as it is?').length, 2);
+    assert.equal(text.split('The draft is not complete: 1 open question, 1 request need not covered. An approval accepts').length, 3);
+    assert.equal(text.split('Open questions that you must answer:').length, 2); assert.equal(text.split('The draft is not complete: 1 open question, 1 request need not covered. Correct').length, 3);
+    assert.match(text, /The pilot authorisation ends in 16 minutes, at \d\d:\d\d\. You cannot extend it\./); assert.ok(!text.includes('you can only cancel this run'));
   } finally { await h.cleanup(); }
 });
 
@@ -125,8 +135,28 @@ test('cancellation needs a second answer, and an expired pilot offers no resume'
     args => args[0] === 'doctor' ? readiness() : args.length === 1 ? { runs: [{ id, host, state: 'spec-drafted' }] } : args[0] === 'status' ? expired : new Error('unexpected'), { now: 1000 });
   try {
     assert.ok(!h.commands().some(command => /^(cancel|resume|approve|authorize-pilot)/.test(command)), h.commands().join('; '));
-    assert.match(h.text(), /expired\. It cannot be replaced/);
+    assert.match(h.text(), /expired\. It cannot be replaced/); assert.ok(!h.text().includes('The pilot authorisation ends in'));
   } finally { await h.cleanup(); }
+});
+
+test('the specification review warns before the authorisation ends and keeps each file open until the operator closes it', async () => {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), 'aegean-spec-')));
+  await writeFile(join(folder, 'review-notes.md'), '# Review notes\n'); await writeFile(join(folder, 'proposal.md'), 'Synthetic proposal\n');
+  const drafted = { id, state: 'spec-drafted', spec: 'a'.repeat(64), pilot: { expiresAt: new Date(1000 + 9 * 60_000 + 59_000).toISOString() }, specification: folder, next: [] };
+  const files: (string | undefined)[] = [];
+  const pick = (value: string) => (choices: Choice<string>[]) => { files.push(choices.map(choice => `${choice.value}${choice.hint ? `:${choice.hint}` : ''}`).join(' ')); return value; };
+  const h = await harness([id, 'read', pick('review-notes.md'), pick('proposal.md'), pick('design.md'), pick(''), 'stop'],
+    args => args[0] === 'doctor' ? readiness() : args.length === 1 ? { runs: [{ id, host, state: 'spec-drafted' }] } : args[0] === 'status' ? drafted : new Error('unexpected'), { now: 1000 });
+  try {
+    assert.match(h.text(), /The pilot authorisation ends in 9 minutes, at \d\d:\d\d\. You cannot extend it\. After that time you can only cancel this run\./);
+    assert.deepEqual(h.lines.filter(line => line.startsWith('PAGE ')), ['PAGE review-notes.md', 'PAGE proposal.md']); assert.ok(h.lines.includes('Synthetic proposal\n'));
+    assert.match(h.text(), /FAILED Cannot read design\.md/);
+    // A file that was read is marked. One status poll serves all the files; the menu returns only after "Go back".
+    assert.match(files[1]!, /^review-notes\.md:read proposal\.md /); assert.match(files[3]!, /^review-notes\.md:read proposal\.md:read specs/);
+    assert.deepEqual(h.commands(), ['doctor', 'status', `status --run ${id}`, `status --run ${id}`]);
+    // A complete draft has no flag and no second question before the approval.
+    assert.ok(!h.text().includes('The draft is not complete'));
+  } finally { await h.cleanup(); await rm(folder, { recursive: true, force: true }); }
 });
 
 test('an interrupted command stops the guide with the interruption result', async () => {
@@ -154,13 +184,33 @@ test('a written request stays private; an unchanged template prepares nothing', 
   } finally { await written.cleanup(); }
 });
 
-function terminal() {
+function terminal(pager: (text: string) => Promise<boolean> = async () => false) {
   const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => undefined });
   const output = Object.assign(new PassThrough(), { isTTY: true, columns: 60 });
   let written = ''; output.on('data', chunk => { written += chunk; });
   const keys = (text: string) => setImmediate(() => input.write(text));
-  return { ui: terminalUi(input, output), keys, screen: () => stripVTControlCharacters(written) };
+  return { ui: terminalUi(input, output, pager), keys, screen: () => stripVTControlCharacters(written) };
 }
+
+test('long text breaks at spaces with the list indent; a pager shows a file, and without one the file waits for an answer', async () => {
+  assert.equal(wrap('  - one two three four', 12), '  - one two\n    three\n    four'); assert.equal(wrap('short\n\n1. a b', 80), 'short\n\n1. a b');
+  assert.equal(wrap('/a/very/long/path/that/has/no/space next', 10), '/a/very/long/path/that/has/no/space\nnext'); assert.equal(wrap(`${' '.repeat(8)}a b c`, 10), `${' '.repeat(8)}a b c`); assert.equal(wrap('$ aegean status --run ID', 10), '$ aegean status --run ID');
+  const long = `- ${'word '.repeat(30).trim()}`;
+  const t = terminal(); t.ui.warn(long); t.ui.say(long);
+  for (const line of t.screen().split('\n')) assert.ok(line.length <= 59, line);
+  assert.match(t.screen(), /! - word[^\n]*\n {4}word/); assert.match(t.screen(), /\n- word[^\n]*\n {2}word/);
+  // The fallback prints the file and then waits. The menu of the guide cannot replace the text before the answer.
+  let answered = false; t.keys('\r');
+  await t.ui.page('proposal.md', long).then(() => { answered = true; });
+  assert.ok(answered); assert.match(t.screen(), /proposal\.md\n\n- word[\s\S]*End of proposal\.md/);
+  let paged = ''; const p = terminal(async text => { paged = text; return true; });
+  await p.ui.page('design.md', long);
+  assert.match(paged, /^design\.md {2}\(Space: next page, q: close\)\n\n- word/); for (const line of paged.split('\n')) assert.ok(line.length <= 59, line);
+  assert.match(p.screen(), /✔ Read design\.md/); assert.ok(!p.screen().includes('- word'));
+  assert.equal(await openPager('text', { PAGER: '/bin/cat >/dev/null' }), true); assert.equal(await openPager('text', { PAGER: 'exit 3' }), false);
+  assert.equal(await openPager('x'.repeat(500_000), { PAGER: '/usr/bin/true' }), true);
+  p.keys('\r'); assert.equal(await p.ui.select('Which?', [{ value: 'a', label: 'First' }, { value: 'b', label: 'Second' }], 'b'), 'b');
+});
 
 test('the terminal selects with arrow keys or a number, applies defaults and stops on Ctrl-C', async () => {
   const choices = [{ value: 'a', label: 'First' }, { value: 'b', label: 'Second', hint: 'a hint' }, { value: 'c', label: 'Third' }];
@@ -204,7 +254,7 @@ test('the guide drives the real commands to a drafted specification; the command
       if (result.code !== 0) throw new Error(JSON.parse(result.stderr.trim().split('\n').at(-1)!).error);
       return JSON.parse(result.stdout);
     };
-    const first = scripted(['yes', 'file', join(f.dir, 'request.md'), 'draft', 'read', 'review-notes.md', 'stop']);
+    const first = scripted(['yes', 'file', join(f.dir, 'request.md'), 'draft', 'read', 'review-notes.md', '', 'stop']);
     const outcome = await guide({ ui: first.ui, execute, edit: async () => false, state: f.state, signal: new AbortController().signal, now: Date.now });
     const run = await f.current();
     assert.equal(run.state, 'spec-drafted'); assert.deepEqual(outcome, { run: run.id, interrupted: false });
@@ -212,8 +262,10 @@ test('the guide drives the real commands to a drafted specification; the command
     assert.match(first.text(), /fixture\/project at revision [a-f0-9]{12}/); assert.match(first.text(), /aegean\.json|app\.cjs/);
     assert.match(first.text(), /Synthetic open question/); assert.match(first.text(), /# Review notes/);
     // A second session finds the unfinished run, makes no model call and leaves the approval to the terminal prompt.
-    const second = scripted([run.id, choices => { assert.deepEqual(values(choices), ['read', 'edit', 'record', 'approve', 'stop', 'cancel']); return 'approve'; }, 'stop']);
+    const second = scripted([run.id, choices => { assert.deepEqual(values(choices), ['read', 'edit', 'record', 'approve', 'stop', 'cancel']); return 'approve'; }, 'yes', 'stop']);
     await guide({ ui: second.ui, execute, edit: async () => false, state: f.state, signal: new AbortController().signal, now: Date.now });
+    // The status command reads the flags from the notes file; a new session shows them without a model call.
+    assert.match(second.text(), /Synthetic open question/); assert.match(second.text(), /The draft is not complete: 1 open question\./);
     assert.match(second.text(), /FAILED Human decision requires the operator at an interactive terminal/);
     assert.equal((await f.current()).state, 'spec-drafted'); assert.equal((await f.events()).filter(event => event.role).length, 1);
   } finally { await f.cleanup(); }

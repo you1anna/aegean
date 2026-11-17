@@ -27,7 +27,8 @@ test('local approvals, exact publication, implementation and contract revisions 
     ok(await f.start()); assert.equal((await f.current()).state, 'spec-drafted');
     assert.equal((await f.events()).some(e => e.effect === 'pr-create'), false);
     const piped = await f.cli(['approve', '--run', (await f.current()).id]); assert.notEqual(piped.code, 0); assert.match(piped.stderr, /interactive terminal/);
-    ok(await decision(f, 'approve')); await f.scenario({ verifierFailOnce: true }); ok(await f.resume()); assert.equal((await f.current()).state, 'human-merge-review');
+    // The approval prompt states the open question of the synthetic draft.
+    ok(await decision(f, 'approve', {}, `if(!summary.includes('The draft is not complete: 1 open question. Read review-notes.md')) throw new Error('the summary lacks the review flags')`)); await f.scenario({ verifierFailOnce: true }); ok(await f.resume()); assert.equal((await f.current()).state, 'human-merge-review');
     assert.equal((await f.current()).repairs, 1); await f.scenario({});
     const local = await f.local(); await writeFile(join(local.worktree, 'note.txt'), 'implementation revision'); await f.realGit(['add', '.'], local.worktree); await f.realGit(['commit', '-m', 'revision'], local.worktree);
     ok(await decision(f, 'revise', { scope: 'implementation' }));

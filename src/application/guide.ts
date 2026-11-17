@@ -5,7 +5,8 @@ import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { atomicJson } from '../adapters/files.js';
 import { expandHome } from '../adapters/terminal.js';
 import { PilotLimitsSchema, parsePilotLimits } from '../domain/pilot-limits.js';
-import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, runChoices, type Choice, type GuideUi } from '../domain/guide.js';
+import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
+import { reviewFlags, type ReviewSummary } from '../domain/scout.js';
 import type { State } from '../domain/workflow.js';
 import { recoveryHint } from './cli-arguments.js';
 import type { Readiness } from './runtime.js';
@@ -25,9 +26,8 @@ export interface GuideOutcome { run?: string; interrupted: boolean }
 interface Listing { runs: { id: string; host: string; state: string }[] }
 interface ProjectCheck { base: string; project: { repository: string }; agentContext: { files: { path: string; bytes: number; required: boolean }[]; omitted: string[]; bytes: number; limitBytes: number } }
 interface Prepared { id: string; reused: boolean }
-interface Review { projectRulesThatLimitedTheRequest: string[]; openQuestions: string[]; notCovered: string[] }
-interface Resumed { blocked?: string; action?: string; pr?: number; review?: Review }
-interface RunStatus { state: State; reason?: string; error?: string; pilot?: { expiresAt: string }; specification?: string; next?: string[] }
+interface Resumed { blocked?: string; action?: string; pr?: number }
+interface RunStatus { state: State; reason?: string; error?: string; spec?: string; pilot?: { expiresAt: string }; specification?: string; review?: ReviewSummary; next?: string[] }
 type Mode = { label: string; echo?: boolean } | 'terminal';
 
 const stop = { value: 'stop', label: 'Stop here' } as const;
@@ -158,7 +158,8 @@ async function savedLimits(g: Guide, path: string) {
 
 async function authorise(g: Guide, id: string): Promise<void> {
   const own = join(g.state, 'pilot-limits.json'), saved = await savedLimits(g, own);
-  g.ui.say('The limits apply to this run only. One run has one authorisation; you cannot replace it.');
+  g.ui.say('The limits apply to this run only. One run has one authorisation; you cannot replace or extend it.');
+  g.ui.say('The authorisation must stay valid during your specification review and each later stage. An expired run can only be cancelled.');
   g.ui.note('Token allowances stay in the project aegean.json. The authorisation shows them.');
   const choices: Choice<'use' | 'enter' | 'file' | 'back'>[] = [
     ...(saved ? [{ value: 'use', label: 'Use the saved limits', hint: LIMIT_FIELDS.map(field => `${field.key} ${saved[field.key]}`).join(', ') } as const] : []),
@@ -180,23 +181,31 @@ async function authorise(g: Guide, id: string): Promise<void> {
   if (await command(g, ['authorize-pilot', '--run', id, '--limits', path], 'terminal')) g.ui.good('The pilot is authorised. No model call occurred.');
 }
 
-function describe(g: Guide, status: RunStatus, facts: { pilot: boolean; pilotExpired: boolean; acceptedRelease: boolean }, review?: Review): void {
+/** Shows the run. The complete text appears once for each state and specification revision; later it is short. */
+function describe(g: Guide, status: RunStatus, facts: RunFacts, expiry: number | undefined, complete: boolean): void {
   if (facts.pilotExpired) { for (const line of status.next ?? []) g.ui.warn(line); return; }
+  if (expiry !== undefined && !ENDED.includes(status.state)) {
+    const minutes = Math.floor((expiry - g.now()) / 60_000);
+    const text = `The pilot authorisation ends in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, at ${new Date(expiry).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}. You cannot extend it.`;
+    if (minutes < 15) g.ui.warn(`${text} After that time you can only cancel this run.`); else g.ui.note(text);
+  }
   const list = (title: string, items: string[]) => { if (items.length) { g.ui.warn(title); for (const item of items) g.ui.say(`  - ${item}`); } };
   switch (status.state) {
     case 'requested':
-      if (status.pilot) g.ui.note(`The pilot authorisation expires at ${status.pilot.expiresAt}.`);
-      else if (!facts.acceptedRelease) g.ui.say('This release has no full acceptance. A pilot authorisation with limits is necessary before the first model call.');
+      if (!status.pilot && !facts.acceptedRelease) g.ui.say('This release has no full acceptance. A pilot authorisation with limits is necessary before the first model call.');
       break;
     case 'spec-drafted':
-      g.ui.say(`Specification folder: ${status.specification ?? 'not available on this host'}`);
-      if (review) {
-        list('Project rules that limited the request:', review.projectRulesThatLimitedTheRequest);
-        list('Open questions that you must answer:', review.openQuestions);
-        list('Needs that the draft does not cover:', review.notCovered);
+      if (complete) {
+        g.ui.say(`Specification folder: ${status.specification ?? 'not available on this host'}`);
+        if (status.review) {
+          list('Project rules that limited the request:', status.review.projectRulesThatLimitedTheRequest);
+          list('Open questions that you must answer:', status.review.openQuestions);
+          list('Needs that the draft does not cover:', status.review.notCovered);
+        }
+        g.ui.note('The Scout wrote the review notes. They are not verification evidence. Read them before you approve.');
+        g.ui.note('Edit only the specification folder. If the request or the project guidance is wrong, cancel the run.');
       }
-      g.ui.note('The Scout wrote the review notes. They are not verification evidence. Read them before you approve.');
-      g.ui.note('Edit only the specification folder. If the request or the project guidance is wrong, cancel the run.');
+      if (facts.flags) g.ui.warn(`The draft is not complete: ${facts.flags}. Correct the specification files, or cancel the run and correct the request.`);
       break;
     case 'paused': g.ui.warn(`The run paused: ${status.reason ?? 'no reason recorded; inspect the private diagnostic log'}`); break;
     case 'spec-approved': case 'tests-staged': case 'building': case 'verifying': case 'reviewing': case 'repair':
@@ -207,16 +216,31 @@ function describe(g: Guide, status: RunStatus, facts: { pilot: boolean; pilotExp
   }
 }
 
+/** Shows the specification files one at a time. The cursor moves to the next file after each one. */
+async function read(g: Guide, folder: string): Promise<void> {
+  const seen = new Set<string>(); let initial: string = SPEC_FILES[0];
+  for (;;) {
+    const file = await g.ui.select<string>('Which file do you want to read?', [...SPEC_FILES.map(name => ({ value: name, label: name, ...(seen.has(name) ? { hint: 'read' } : {}) })), { value: '', label: 'Go back' }], initial);
+    if (!file) return;
+    let text: string;
+    try { text = (await readBoundedEvidenceFile(join(folder, file), 200_000)).toString('utf8'); }
+    catch (error) { g.ui.bad(`Cannot read ${file}: ${(error as Error).message}`); continue; }
+    await g.ui.page(file, text);
+    seen.add(file); initial = SPEC_FILES[SPEC_FILES.indexOf(file as typeof SPEC_FILES[number]) + 1] ?? '';
+  }
+}
+
 async function runLoop(g: Guide, id: string, readiness: Readiness): Promise<void> {
-  let review: Review | undefined;
+  let described: string | undefined;
   for (;;) {
     const status = await command<RunStatus>(g, ['status', '--run', id], { label: 'Read the run', echo: false });
     if (!status || status.error) { if (status?.error) g.ui.bad(`${status.error}: ${id}`); await retry(g); continue; }
     g.ui.step(`Run ${id.slice(-8)}: ${status.state}`);
     const expiry = status.pilot ? Date.parse(status.pilot.expiresAt) : undefined;
-    const facts = { pilot: Boolean(status.pilot), pilotExpired: expiry !== undefined && expiry <= g.now(), acceptedRelease: readiness.fullWorkflowReady, specification: Boolean(status.specification) };
-    const choices = runChoices(status.state, facts);
-    describe(g, status, facts, review); review = undefined;
+    const flags = status.review && reviewFlags(status.review);
+    const facts: RunFacts = { pilot: Boolean(status.pilot), pilotExpired: expiry !== undefined && expiry <= g.now(), acceptedRelease: readiness.fullWorkflowReady, specification: Boolean(status.specification), ...(flags ? { flags } : {}) };
+    const choices = runChoices(status.state, facts), revision = `${status.state} ${status.spec ?? ''}`;
+    describe(g, status, facts, expiry, revision !== described); described = revision;
     if (!choices.length) {
       if (ENDED.includes(status.state)) g.ui.say(`This run is ${status.state}${status.reason ? `: ${status.reason}` : ''}. For new work, run: aegean guide`);
       else { g.ui.say('The guide ends at the specification approval. The next steps for this run are:'); for (const line of status.next ?? []) g.ui.say(`  - ${line}`); }
@@ -230,21 +254,16 @@ async function runLoop(g: Guide, id: string, readiness: Readiness): Promise<void
       const result = await command<Resumed>(g, ['resume', '--run', id], { label });
       if (result?.blocked) g.ui.warn(result.blocked);
       if (result?.pr && result.action) g.ui.say(`Pull request ${result.pr}: ${result.action}`);
-      review = result?.review;
     }
-    if (action === 'read' && status.specification) {
-      const file = await g.ui.select<string>('Which file?', [...SPEC_FILES.map(name => ({ value: name, label: name })), { value: '', label: 'Go back' }]);
-      if (file) {
-        try { g.ui.say(`\n${(await readBoundedEvidenceFile(join(status.specification, file), 200_000)).toString('utf8').trimEnd()}\n`); }
-        catch (error) { g.ui.bad(`Cannot read ${file}: ${(error as Error).message}`); }
-      }
-    }
+    if (action === 'read' && status.specification) await read(g, status.specification);
     if (action === 'edit' && status.specification) {
       try { if (!await g.edit(status.specification)) g.ui.say(`No editor is set in VISUAL or EDITOR. Open this folder: ${status.specification}`); }
       catch (error) { g.ui.bad((error as Error).message); }
       g.ui.note('After you save the files, select "Record my edits to the specification".');
     }
     if (action === 'approve') {
+      if (flags) g.ui.warn(`The draft is not complete: ${flags}. An approval accepts the specification as it is.`);
+      if (flags && await g.ui.select('Do you want to approve the draft as it is?', [{ value: 'no', label: 'No, go back' }, { value: 'yes', label: 'Yes, continue to the approval' }]) === 'no') continue;
       g.ui.note('Aegean now shows the request and the exact specification change. Read them. Type the confirmation yourself.');
       if (await command(g, ['approve', '--run', id], 'terminal')) g.ui.good('The specification is approved. The approval names this exact revision.');
     }

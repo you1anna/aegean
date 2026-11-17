@@ -10,7 +10,8 @@ import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { digest, transition, type Event, type Run } from '../domain/workflow.js';
 import type { ExecutionBudget } from '../domain/budgets.js';
 import { hostConfig, stateRoot, doctor } from './runtime.js';
-import { loadLocalRun, type LocalRun } from './run-record.js';
+import { loadLocalRun, localReview, type LocalRun } from './run-record.js';
+import { reviewFlags, REVIEW_NOTES } from '../domain/scout.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 import { buildSpecArtifact, buildPublicationArtifact, buildRevisionArtifact, persistLocalDecision, frozenProject, validateLocalPublication, type LocalDecisionArtifact } from './decisions.js';
 import { pilotArtifact, persistPilot, executionAuthorization, savedPilot, repeatedPilot, type PilotArtifact } from './pilot.js';
@@ -88,7 +89,10 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       const request = (await readBoundedEvidenceFile(local.sourceRequest, 60_000)).toString('utf8');
       const patch = action === 'pilot' ? '' : await candidateGitChecked(['diff', local.base, action === 'revise' ? 'HEAD' : action === 'approve' ? run.specCommit! : run.commit!], { cwd: local.worktree, maxBytes: 200_000, signal });
       const tokenPolicy = action === 'pilot' ? (await frozenProject(local,run,{allowMissingWorktree:true})).modelExecution?.budget : undefined;
-      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
+      // The approval reads the committed specification; the check above proves that the folder equals that revision.
+      const flags = action === 'approve' ? await localReview(local).then(review => review && reviewFlags(review)) : undefined;
+      const incomplete = flags ? `\nThe draft is not complete: ${flags}. Read ${REVIEW_NOTES} in the changes above. An approval accepts the specification as it is.\n` : '';
+      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${incomplete}${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
       if (Buffer.byteLength(summary) > 300_000) throw new Error('decision review exceeds bounded capacity');
       return { artifact, run, summary, authorized: false };
     });
