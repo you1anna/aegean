@@ -12,9 +12,12 @@ export interface GuideUi {
   good(text: string): void;
   warn(text: string): void;
   bad(text: string): void;
-  select<T extends string>(question: string, choices: Choice<T>[]): Promise<T>;
+  /** The cursor starts on the choice with the initial value, or on the first choice. */
+  select<T extends string>(question: string, choices: Choice<T>[], initial?: T): Promise<T>;
   text(question: string, options?: TextOptions): Promise<string>;
   task<T>(label: string, work: () => Promise<T>): Promise<T>;
+  /** Shows a long text. It returns only after the operator closes the text. */
+  page(title: string, text: string): Promise<void>;
 }
 /** The operator left the guide. A run keeps its recorded state. */
 export class GuideStop extends Error { constructor(readonly interrupted = false) { super('guide stopped'); } }
@@ -25,7 +28,7 @@ export const REQUEST_TEMPLATE = '# Goal\n\n\n# Limits\n\n\n# Tests of success\n\
 
 /** Start values for the limits questions. The policy owns each maximum; the operator reviews each value. */
 export const LIMIT_FIELDS = [
-  { key: 'expiresInMinutes', question: 'Minutes until the authorisation expires (1 to 1440)', initial: 120 },
+  { key: 'expiresInMinutes', question: 'Minutes until the authorisation expires; include your review time (1 to 1440)', initial: 120 },
   { key: 'maxModelCalls', question: `Model calls (1 to ${POLICY.maxModelCalls})`, initial: POLICY.maxModelCalls },
   { key: 'activeMinutes', question: `Active minutes (1 to ${POLICY.activeTimeoutMs / 60_000})`, initial: POLICY.activeTimeoutMs / 60_000 },
   { key: 'maxRepairs', question: `Code repairs (0 to ${POLICY.maxRepairs})`, initial: POLICY.maxRepairs },
@@ -41,7 +44,7 @@ export function checkFix(name: string): { label: string; command: string[]; term
 }
 
 export type RunAction = 'authorise' | 'draft' | 'read' | 'edit' | 'record' | 'approve' | 'continue' | 'cancel' | 'stop';
-export interface RunFacts { pilot: boolean; pilotExpired: boolean; acceptedRelease: boolean; specification: boolean }
+export interface RunFacts { pilot: boolean; pilotExpired: boolean; acceptedRelease: boolean; specification: boolean; /** The open questions and uncovered needs of the draft, in a few words. */ flags?: string }
 
 /**
  * The choices that the guide offers for a run state, most likely first.
@@ -63,7 +66,7 @@ export function runChoices(state: State, facts: RunFacts): Choice<RunAction>[] {
         { value: 'edit', label: 'Open the specification folder in my editor' } as const,
       ] : []),
       { value: 'record', label: 'Record my edits to the specification', hint: 'aegean resume' },
-      { value: 'approve', label: 'Approve this specification', hint: 'you type the confirmation; aegean approve' },
+      { value: 'approve', label: 'Approve this specification', hint: `${facts.flags ? `${facts.flags}; ` : ''}you type the confirmation; aegean approve` },
       stop, cancel,
     ];
     case 'paused': return [{ value: 'continue', label: 'The cause is corrected: continue the run', hint: 'aegean resume' }, stop, cancel];

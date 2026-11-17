@@ -160,6 +160,8 @@ Keep credentials, prompts, private suites and run records outside Git.
 A pilot limits file contains `schemaVersion`, `expiresInMinutes`, `maxModelCalls`, `activeMinutes`, `maxRepairs` and `maxRevisions`.
 Unknown fields and mixed file/individual flags are rejected. Expiry cannot exceed 24 hours.
 Authorisation freezes effective values and the file digest; later file edits do not expand a run.
+`expiresInMinutes` must include your time to review the specification and the time for each later stage.
+You cannot extend an authorisation. After the expiry, you can only cancel the run, and a charged call is not refunded.
 Token allowances remain in the project's `modelExecution.budget`. Strict token caps are unsupported.
 
 ## Configure and approve billing policy
@@ -260,6 +262,16 @@ The guide does these steps in sequence:
 6. It starts the Scout draft. Then it shows the review summary and the specification folder.
 7. At the specification review, you can read each file, open the folder in your editor, record your edits, approve or cancel.
 
+For each run, the guide shows the minutes that remain in the pilot authorisation. Below 15 minutes, this line is a warning.
+
+The guide opens a specification file in your pager (`PAGER`, or `less`). Press `q` to close the file.
+The file list then shows the next file, and it marks each file that you opened.
+If the pager cannot start, the guide prints the file and waits for your answer.
+
+If the review notes contain an open question or a `NOT COVERED` need, the guide shows a warning that the draft is not complete.
+The approval choice shows the counts, and the guide asks one more question before the approval prompt.
+To remove an item, correct the specification, then remove the question or change the coverage entry in `review-notes.md`, and record the edit.
+
 The guide runs the same commands as the sections below, and it prints each command before the command runs.
 It adds no permission and replaces no check. You type each authorisation and approval confirmation yourself.
 After the specification approval, the first choice stops the guide. The later stages use the commands in this document.
@@ -268,7 +280,8 @@ The guide keeps two private files under `~/.local/state/aegean/`: the requests t
 Press Ctrl-C to stop the guide. The run keeps its state, and `aegean guide` continues it.
 The guide needs an interactive terminal. An agent must not operate it; a pipe or a script gets a failure and no effect.
 
-Tested: the synthetic suite and one pseudo-terminal session on a synthetic project. No real project or live model call used the guide.
+Tested: the synthetic suite and pseudo-terminal sessions with synthetic text. One real pilot project run used the earlier guide, to the specification review.
+No real run used the pager, the remaining-time line or the warning for a draft that is not complete.
 
 ### Prepare the project and the request
 
@@ -342,6 +355,9 @@ Read `review-notes.md` in that folder first. It contains:
 
 The Scout writes these notes. They are not verification evidence. If a project rule or the request is wrong, cancel the run.
 Then correct the project on main and prepare a new run.
+
+While the run is `spec-drafted`, `aegean status --run ID` gives a `review` field. It reads the open questions and the `NOT COVERED` entries from `review-notes.md` as the file is now.
+The `aegean approve` prompt states their counts after the specification change. Aegean does not refuse the approval; the decision stays with you.
 
 If a model answer does not have the required format, the run pauses and the call stays charged.
 The pause reason names the fault and the fields, for example `invalid response (fields: coverage)`. It never contains model text.
