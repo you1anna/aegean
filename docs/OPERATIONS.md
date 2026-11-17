@@ -251,6 +251,7 @@ aegean guide
 
 `aegean` without arguments at a terminal also starts the guide. The guide asks a question for each step.
 Select an answer with the arrow keys or a number, then press Enter. You do not copy a command or a run ID.
+The guide uses colour if the terminal supports it. To show plain text, set `NO_COLOR=1`.
 
 The guide does these steps in sequence:
 
