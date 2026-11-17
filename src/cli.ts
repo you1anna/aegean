@@ -135,7 +135,8 @@ try {
       execute: async command => { if (validateArguments(command)) throw new Error('the guide runs commands only'); return dispatch(command, line => ui.note(line)); } });
     if (outcome.interrupted) process.exitCode = 130;
   } else {
-    print(await dispatch(args));
+    // The output format is not part of a command. Subcommands such as auth status read their words by position.
+    print(await dispatch(args.filter(arg => arg !== '--json')));
   }
   if (controller.signal.aborted) process.exitCode = 130;
 } catch (error) {

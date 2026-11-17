@@ -240,12 +240,15 @@ function renderer({ width, paint }: View) {
   };
 }
 
-/** A command result as text for a terminal. Each fact of the JSON form is in the text. */
+/**
+ * A command result as text for a terminal. Each fact of the JSON form is in the text. Script output keeps
+ * each line, without its control characters: it can contain text from Git, Docker or a shell.
+ */
 export function renderResult(result: unknown, view: View): string {
   const render = renderer(view);
   if (typeof result === 'string') {
     const parsed = parseResultText(result);
-    return parsed.value === undefined ? result : [parsed.lead, render(parsed.value)].filter(Boolean).join('\n');
+    return parsed.value === undefined ? clean(result, true) : [clean(parsed.lead, true), render(parsed.value)].filter(Boolean).join('\n');
   }
   const value = toPlain(result);
   return value === undefined ? `${view.paint('green', '✔')} Done` : render(value);

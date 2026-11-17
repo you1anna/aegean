@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { command } from '../src/adapters/process.js';
 import { outputMode, toPlain, toJson, clean, label, splitCommand, parseResultText, renderResult, renderError, errorPayload, type View, type Paint } from '../src/application/cli-output.js';
 import { validateArguments, commandHelp } from '../src/application/cli-arguments.js';
@@ -149,6 +151,8 @@ test('script output is parsed when it holds JSON and is shown unchanged otherwis
   for (const text of ['plain text\n', '42', '"quoted"', 'null', '{broken', 'prefix {"a":1}', '', '\n\n']) assert.deepEqual(parseResultText(text), { lead: text });
   assert.equal(renderResult('warning: kept\n{"fullWorkflowReady":false}', plain), 'warning: kept\nFull workflow ready  no');
   assert.equal(renderResult('done\n', plain), 'done\n');
+  assert.equal(renderResult('pulled\x1b]0;title\x07 image\r\nready\x1b[2J\n', plain), 'pulled image\nready\n', 'script text keeps its lines without control characters');
+  assert.equal(renderResult('warn\x1b[31m red\n{"ok":true}', plain), 'warn red\nOk  yes');
 });
 
 test('any thrown value gives an error message and recovery advice', () => {
@@ -180,6 +184,17 @@ test('through a pipe, the command line keeps the JSON contract for results and f
   const version = await cli(['--version']);
   assert.equal(version.code, 0, version.stderr); assert.equal(version.stdout, `${JSON.stringify(JSON.parse(version.stdout), null, 2)}\n`);
   assert.deepEqual(JSON.parse((await cli(['--version', '--json'])).stdout), JSON.parse(version.stdout));
+  const outside = await mkdtemp(join(tmpdir(), 'aegean-output-'));
+  try {
+    const project = (args: string[]) => command(process.execPath, [resolve('dist/src/cli.js'), ...args], { cwd: outside, timeoutMs: 10000 });
+    const plainCheck = await project(['project', 'check']);
+    assert.equal(plainCheck.code, 1);
+    for (const args of [['project', 'check', '--json'], ['project', '--json', 'check']]) {
+      const result = await project(args);
+      assert.equal(result.code, 1); assert.equal(result.stderr, plainCheck.stderr, `--json changes the command: ${args.join(' ')}`);
+    }
+    assert.doesNotMatch((await project(['auth', 'status', '--json'])).stderr, /Usage: aegean auth/, 'auth status --json reads the status, not a provider named --json');
+  } finally { await rm(outside, { recursive: true, force: true }); }
   const failed = await cli(['status', '--run', 'nope']);
   assert.equal(failed.code, 1); assert.equal(failed.stdout, '');
   assert.deepEqual(JSON.parse(failed.stderr), { error: 'invalid run identifier', recovery: 'Copy the complete run identifier from aegean status.' });
