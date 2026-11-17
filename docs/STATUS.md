@@ -16,6 +16,19 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 17 November 2026: Scout model
+
+The Scout policy now requests `claude-sonnet-5-5` at high effort. Before this change it used `claude-sonnet-5` at medium effort.
+The Scout makes one call for each run, and its draft is the contract for each later stage. Both Auditor tasks and the Builder are unchanged.
+
+- [toolchain.json](../toolchain.json) owns the setting. The policy version is `0.6.0`, so that a run from the earlier model setting has a different policy name.
+- `minProjectStandard` stays `0.4.0`. A project with standard `0.5.0` needs no edit.
+- A run that policy `0.5.0` created is cancel-only on a release with this change.
+
+Not established: no live call used this model identifier or effort. The Claude CLI must accept `claude-sonnet-5-5` and report the same model;
+a different reported model stops the run. The effect on draft quality, duration and token use is unmeasured.
+Compare the next pilot project draft with `trial-03` (67 seconds, 16,171 tokens). Host qualification is necessary again after installation.
+
 ## 16 November 2026: Cancel a run from an older policy
 
 `aegean cancel` refused `trial-02`, which policy 0.4.0 created. The installed release has policy 0.5.0.
