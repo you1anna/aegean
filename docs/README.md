@@ -30,7 +30,7 @@ aegean info --json
 aegean doctor --require prerequisites
 ```
 
-Read `fullWorkflowReady` and each reported check. Use the operations guide path
+Read the full workflow readiness (`fullWorkflowReady` in JSON) and each reported check. Use the operations guide path
 in the result for that installed version. A source checkout can describe changes
 that the installed release does not yet contain.
 

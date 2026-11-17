@@ -36,6 +36,14 @@ export const LIMIT_FIELDS = [
   { key: 'maxRevisions', question: `Human revisions (0 to ${POLICY.maxRevisions})`, initial: POLICY.maxRevisions },
 ] as const;
 
+/**
+ * The meaning of one host check result. A release that is not accepted is information, not a host fault:
+ * a pilot authorisation covers one run without it.
+ */
+export function checkLevel(check: { name: string; ok: boolean }): 'pass' | 'fail' | 'info' {
+  return check.ok ? 'pass' : check.name === 'release-acceptance' ? 'info' : 'fail';
+}
+
 /** A failed host check that one installed command can correct. Other checks need the operations guide. */
 export function checkFix(name: string): { label: string; command: string[]; terminal: boolean } | undefined {
   if (name === 'claude-subscription') return { label: 'Log in to Claude', command: ['auth', 'login', 'claude'], terminal: true };

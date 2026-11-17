@@ -5,7 +5,7 @@ import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { atomicJson } from '../adapters/files.js';
 import { expandHome } from '../adapters/terminal.js';
 import { PilotLimitsSchema, parsePilotLimits } from '../domain/pilot-limits.js';
-import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
+import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, checkLevel, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
 import { reviewFlags, type ReviewSummary } from '../domain/scout.js';
 import type { State } from '../domain/workflow.js';
 import { recoveryHint } from './cli-arguments.js';
@@ -56,12 +56,13 @@ async function host(g: Guide): Promise<Readiness> {
     const report = await command<Readiness>(g, ['doctor'], { label: 'Check the host' });
     if (!report) { await retry(g); continue; }
     for (const check of report.checks) {
-      if (check.ok) g.ui.good(`${check.name}: ${check.detail}`);
-      else if (check.name === 'release-acceptance') g.ui.note(`  release-acceptance: this release is not accepted. A pilot authorisation covers one run.`);
+      const level = checkLevel(check);
+      if (level === 'pass') g.ui.good(`${check.name}: ${check.detail}`);
+      else if (level === 'info') g.ui.note(`  ${check.name}: this release is not accepted. A pilot authorisation covers one run.`);
       else g.ui.bad(`${check.name}: ${check.detail}`);
     }
     if (report.prerequisitesReady) return report;
-    const failed = report.checks.filter(check => !check.ok && check.name !== 'release-acceptance');
+    const failed = report.checks.filter(check => checkLevel(check) === 'fail');
     const fixes = failed.flatMap(check => checkFix(check.name) ?? []);
     g.ui.warn(`${failed.length} host ${failed.length === 1 ? 'check' : 'checks'} failed. A pilot authorisation and a model call need each check to pass.`);
     g.ui.note(`The operations guide gives the procedure for each check: ${report.operations}`);

@@ -140,6 +140,24 @@ Stop refuses active or uncertain resources and retained containers. Inspect the 
 `doctor --require full` also requires release acceptance. Default `doctor --json` reports state without a readiness exit check.
 Use `aegean COMMAND --help` to inspect command arguments. Unknown and duplicate options fail before effects.
 
+### Read command output
+
+Each command except `aegean guide` selects its output format from the destination:
+
+- At a terminal, the command writes text. Fields are labels in words: `fullWorkflowReady` shows as
+  "Full workflow ready". Dates show in UTC and durations in minutes and seconds.
+  Host checks show ✔ (pass), ✖ (fail) or ! (information only).
+  An `error` or `blocked` field comes first. The `next` steps come last, with each command on its own line.
+- To a pipe or a file, the command writes JSON.
+- With `--json`, the command writes JSON at a terminal too.
+
+A failure follows the same rule on standard error. At a terminal, it shows the message and the recovery advice.
+Otherwise it writes one line of JSON with the `error` and `recovery` fields. The format never changes the exit code.
+
+Use `--json` in scripts and agent instructions, and when you report a problem. A program that runs a
+command under a terminal emulator otherwise gets text. The text form removes terminal control characters
+from results. It shows up to 200 items of a list; the JSON form has all of them.
+
 ## Configuration files
 
 | File | Purpose |
