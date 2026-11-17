@@ -26,4 +26,8 @@ export const SuiteSchema = z.object({
   cases: z.array(z.object({ input: z.string().max(8192), stdout: z.string().max(8192), exit: z.number().int().min(0).max(125), requirement: z.string().regex(/^R\d{3}$/) }).strict()).min(1).max(100),
 }).strict();
 export type Suite = z.infer<typeof SuiteSchema>;
-export const ReviewSchema = z.object({ outcome: z.enum(['pass', 'repair', 'escalate']), findings: z.array(z.string().max(1000)).max(20) }).strict();
+/** The independent reviewer names the owner of each finding; the workflow routes the run from these owners. */
+export const FINDING_OWNERS = ['builder', 'spec', 'factory'] as const;
+export type FindingOwner = typeof FINDING_OWNERS[number];
+export const ReviewSchema = z.object({ outcome: z.enum(['pass', 'repair', 'escalate']), findings: z.array(z.object({ owner: z.enum(FINDING_OWNERS), finding: z.string().max(1000) }).strict()).max(20) }).strict();
+export type Review = z.infer<typeof ReviewSchema>;

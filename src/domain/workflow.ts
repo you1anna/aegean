@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { ModelPolicySchema } from './model-policy.js';
-import { ApproverSchema, type Approver } from './config.js';
+import { ApproverSchema, FINDING_OWNERS, type Approver, type FindingOwner } from './config.js';
 
 export const digest = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex');
 export interface PolicyPins { policy: string; maxModelCalls: number; maxRepairs: number; maxRevisions: number; maxInfrastructureRetries: number; activeTimeoutMs: number; models: unknown }
@@ -12,6 +12,14 @@ export function policyFromToolchain(pins: PolicyPins) {
 export const policyIdentityFor = (pins: PolicyPins): string => digest(JSON.stringify(policyFromToolchain(pins)));
 export const POLICY = policyFromToolchain(toolchain);
 export const POLICY_IDENTITY = policyIdentityFor(toolchain);
+/** Fixed reasons for a stop that a check or a finding owner caused. Guidance and tests match them exactly. */
+export const STOP_REASONS = {
+  baseline: 'every protected test already passed on the base commit',
+  spec: 'independent review found a specification fault',
+  factory: 'independent review found an Aegean fault',
+} as const;
+/** Protected suite results on the base commit, counted by test case. */
+export interface BaselineCounts { suite: string; cases: number; passed: number }
 export type State = 'requested' | 'spec-drafted' | 'spec-approved' | 'tests-staged' | 'building' | 'verifying' | 'reviewing' | 'repair' | 'human-merge-review' | 'merged' | 'archived' | 'paused' | 'escalated' | 'cancelled';
 export interface Run {
   schemaVersion: 2; id: string; host: string; repository: string; policy: string; policyIdentity: string;
@@ -29,10 +37,11 @@ export type Event = BaseEvent & (
   | { type: 'draft'; spec: string; specCommit?: string; activeMs?: number }
   | { type: 'approve'; spec: string; specCommit?: string; actor: 'human'; approvalRef: string }
   | { type: 'stage-tests'; spec: string; suite: string; activeMs: number }
-  | { type: 'begin-build' }
+  | { type: 'baseline-inconclusive'; suite: string; reason: string; activeMs: number }
+  | { type: 'begin-build'; baseline?: BaselineCounts; activeMs?: number }
   | { type: 'candidate'; commit: string; activeMs: number }
   | { type: 'verification'; commit: string; spec: string; suite: string; outcome: 'pass' | 'fail' | 'inconclusive'; receipt: string; activeMs: number }
-  | { type: 'review'; commit: string; outcome: 'pass' | 'repair' | 'escalate'; activeMs: number }
+  | { type: 'review'; commit: string; outcome: 'pass' | 'repair' | 'escalate'; findings: Record<FindingOwner, number>; activeMs: number }
   | { type: 'authorize-publication'; commit: string; spec: string; suite: string; receipt: string; actor: 'human'; approvalRef: string }
   | { type: 'revise'; commit: string; scope: 'implementation' | 'contract'; actor: 'human'; approvalRef: string; spec?: string; specCommit?: string }
   | { type: 'merged'; commit: string; mergeCommit: string; actor: 'human' }
@@ -53,6 +62,12 @@ function requireState(run: Run, ...states: State[]): void {
 }
 function hash(value: string, length = 64): void {
   if (!new RegExp(`^[a-f0-9]{${length}}$`).test(value)) throw new Error('invalid artifact hash');
+}
+function allowInfrastructureRetry(run: Run): boolean {
+  if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) {
+    run.state = 'escalated'; run.reason = 'infrastructure retries exhausted'; return false;
+  }
+  run.infrastructureRetries++; return true;
 }
 export function transition(previous: Run, event: Event): Run {
   if (event.type !== 'cancel') assertRunPolicy(previous);
@@ -80,8 +95,22 @@ export function transition(previous: Run, event: Event): Run {
       requireState(run, 'spec-approved');
       if (event.spec !== run.spec) throw new Error('stale spec for suite');
       hash(event.suite); run.suite = event.suite; run.state = 'tests-staged'; break;
+    case 'baseline-inconclusive':
+      requireState(run, 'tests-staged');
+      if (!run.suite || event.suite !== run.suite) throw new Error('stale base commit evidence');
+      if (allowInfrastructureRetry(run)) {
+        run.resumeState = 'tests-staged'; run.state = 'paused'; run.reason = event.reason;
+      }
+      break;
     case 'begin-build':
       requireState(run, 'tests-staged', 'repair');
+      if (run.state === 'tests-staged') {
+        const baseline = event.baseline;
+        if (!baseline || baseline.suite !== run.suite) throw new Error('building requires base commit results for the staged suite');
+        if (!Number.isSafeInteger(baseline.cases) || !Number.isSafeInteger(baseline.passed) || baseline.cases < 1 || baseline.passed < 0 || baseline.passed > baseline.cases) throw new Error('invalid base commit results');
+        // A test that passes before the change cannot show that the change works.
+        if (baseline.passed === baseline.cases) { run.state = 'escalated'; run.reason = STOP_REASONS.baseline; break; }
+      } else if (event.baseline !== undefined) throw new Error('a repair uses the base commit results of its staged suite');
       if (run.state === 'repair' && run.receipt) run.repairReceipt = run.receipt;
       run.state = 'building'; delete run.verification; delete run.receipt; delete run.reviewCommit; delete run.publicationRef; break;
     case 'candidate':
@@ -91,17 +120,22 @@ export function transition(previous: Run, event: Event): Run {
       if (event.spec !== run.spec || event.suite !== run.suite || event.commit !== run.commit) throw new Error('stale verification evidence');
       hash(event.receipt);
       if (event.outcome === 'inconclusive') {
-        if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) { run.state = 'escalated'; run.reason = 'infrastructure retries exhausted'; }
-        else run.infrastructureRetries++;
+        allowInfrastructureRetry(run);
       } else { run.verification = event.outcome; run.receipt = event.receipt; run.state = 'reviewing'; }
       break;
-    case 'review':
+    case 'review': {
       requireState(run, 'reviewing');
       if (!run.commit || event.commit !== run.commit) throw new Error('stale review commit');
-      if (event.outcome === 'pass' && run.verification === 'pass') { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
+      const owners = event.findings;
+      if (!owners || typeof owners !== 'object' || Object.keys(owners).length !== FINDING_OWNERS.length || FINDING_OWNERS.some(owner => !Number.isSafeInteger(owners[owner]) || owners[owner] < 0)) throw new Error('review requires a finding count for each owner');
+      // A fault in the specification or in Aegean goes to the human; it never becomes a Builder repair.
+      if (owners.spec > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.spec; }
+      else if (owners.factory > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.factory; }
+      else if (event.outcome === 'pass' && run.verification === 'pass' && owners.builder === 0) { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
       else if (event.outcome !== 'escalate' && run.repairs < POLICY.maxRepairs) { run.repairs++; run.state = 'repair'; }
       else { run.state = 'escalated'; run.reason = event.outcome === 'escalate' ? 'independent review escalation' : 'repair attempts exhausted'; }
       break;
+    }
     case 'authorize-publication':
       requireState(run, 'human-merge-review');
       if (event.actor !== 'human' || !event.approvalRef || !run.commit || run.verification !== 'pass' || run.reviewCommit !== run.commit || !run.spec || !run.suite || !run.receipt || event.commit !== run.commit || event.spec !== run.spec || event.suite !== run.suite || event.receipt !== run.receipt) throw new Error('publication approval must bind exact verified and reviewed evidence');

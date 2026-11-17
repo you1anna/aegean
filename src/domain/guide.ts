@@ -1,5 +1,6 @@
 import { POLICY, type State } from './workflow.js';
 import { REVIEW_NOTES } from './scout.js';
+import { ALLOWED_PATHS } from './allowed-paths.js';
 
 /** Terminal port of the interactive guide. An adapter draws it; tests script it. */
 export interface Choice<T extends string> { value: T; label: string; hint?: string }
@@ -23,7 +24,7 @@ export interface GuideUi {
 export class GuideStop extends Error { constructor(readonly interrupted = false) { super('guide stopped'); } }
 
 export const ENDED: readonly string[] = ['archived', 'cancelled', 'escalated'];
-export const SPEC_FILES = [REVIEW_NOTES, 'proposal.md', 'specs/contract/spec.md', 'design.md', 'tasks.md'] as const;
+export const SPEC_FILES = [REVIEW_NOTES, 'proposal.md', 'specs/contract/spec.md', ALLOWED_PATHS, 'design.md', 'tasks.md'] as const;
 export const REQUEST_TEMPLATE = '# Goal\n\n\n# Limits\n\n\n# Tests of success\n\n';
 
 /** Start values for the limits questions. The policy owns each maximum; the operator reviews each value. */

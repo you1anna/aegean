@@ -16,6 +16,43 @@ Last host inspection: **15 November 2026**.
 | Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
 | secondary Mac | Installation and acceptance remain unverified. |
 
+## 17 November 2026: Checks before the first real build
+
+Three checks apply before a real run reaches the Builder. All three are in source, with synthetic tests only.
+[Architecture](ARCHITECTURE.md#checks-around-the-build) owns the design; [operations](OPERATIONS.md#verification-and-publication) owns the procedure.
+
+- **Base commit check.** Before the first build, the verifier runs the protected tests on the base commit. If every test passes, the run stops.
+  The verifier receipt now records a result for each protected test case.
+- **Allowed paths.** The Scout writes `allowed-paths.txt` in the specification. A candidate that changes another path fails verification and gets a repair that names the paths.
+  `aegean revise --scope implementation` refuses a human edit to another path. Approval and contract revision refuse a missing or invalid file.
+- **Finding owners.** The reviewer gives each finding the owner `builder`, `spec` or `factory`. A `spec` or `factory` finding stops the run with no repair.
+  The reviewer now gets the public verification feedback. The Builder gets only `builder` findings.
+
+The policy version is `0.7.0`: the Scout output, the review output and the verification rules changed.
+`minProjectStandard` stays `0.4.0`; `aegean.json` has the same meaning. A run from policy `0.6.0` is cancel-only on a release with this change.
+The control ledger schema did not change, so an older release can still read the ledger after a rollback.
+
+These policy choices remain subject to human review: a suite that passes completely on the base commit stops the run;
+a specification fault stops the run instead of a contract revision in the same run; a scope breach uses one Builder repair.
+
+`aegean guide` offers `allowed-paths.txt` with the other specification files at review.
+
+The PR review found two gate defects. Finding owners now take precedence over a `pass` review outcome;
+a finding prevents publication review. Inconclusive base commit checks now use the existing infrastructure retry budget.
+Regression tests cover repeated failure, recovery, stale suite evidence and repeated events. The control ledger schema is unchanged.
+After these fixes, `npm ci`, `./scripts/dev check` and `./scripts/dev test` passed with the pinned Node runtime.
+The full suite passed 230 TypeScript tests and 22 script tests in 821 seconds. Documentation links and `git diff --check` passed.
+The test suite required local Unix sockets outside the tool sandbox. These checks use synthetic services; native release acceptance remains unverified.
+
+CI now permits 25 minutes, not 15. The first CI run of this change stopped at the 15-minute limit; each test that ran had passed.
+The last `main` run needed 11 minutes 12 seconds for the tests. This branch reached the same test 1.5 times later, so the projected need is about 17 minutes.
+
+Not established: no live model call and no installation used these changes. The effect on real drafts and runs is unmeasured.
+Host qualification is necessary again after installation.
+The Scout sees only a few project files and no file tree, so its allowed paths can be too narrow. Each breach then uses a repair; the human must check the list at approval.
+A model can give a finding the wrong owner. A wrong `spec` or `factory` owner stops a run that a repair could have completed.
+The check results are in the pull request.
+
 ## 17 November 2026: Scout model
 
 The Scout policy now requests `claude-sonnet-5-5` at high effort. Before this change it used `claude-sonnet-5` at medium effort.

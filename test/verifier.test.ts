@@ -40,6 +40,8 @@ test('verifier separates candidate rejection/limits, cancellation and infrastruc
     for (const [scenario,outcome,reason] of [['pass','pass','passed'],['fail','fail','protected-requirement-failed'],['timeout','fail','candidate-timeout'],['daemon-timeout','inconclusive','execution-unknown'],['output-limit','fail','candidate-output-limit'],['aborted','cancelled','operator-cancelled'],['image','inconclusive','image-unavailable'],['daemon','inconclusive','container-infrastructure'],['exit125','fail','protected-requirement-failed']]) {
       mode=scenario!; const receipt=await verify(repo,commit,project,suite,undefined,execute);
       assert.equal(receipt.outcome,outcome,mode); assert.equal(receipt.reason,reason,mode);
+      // One result for each protected case that ran, in suite order. The public check runs first and has none.
+      assert.deepEqual(receipt.caseResults,{pass:['pass'],fail:['fail'],exit125:['fail']}[mode] ?? [],mode);
       assert.doesNotMatch(JSON.stringify(receipt),/hidden-(input|expected|actual)/);
     }
     assert.ok(removed>0);

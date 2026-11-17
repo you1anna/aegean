@@ -1,3 +1,4 @@
+import { STOP_REASONS } from '../src/domain/workflow.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nextSteps, listSteps } from '../src/domain/next-steps.js';
@@ -23,6 +24,11 @@ test('every run state has operator guidance that names an exact command or an en
   assert.match(nextSteps({ id, state: 'human-merge-review', publicationRef: 'ref' })[0]!, /merge the pull request yourself/);
   assert.match(nextSteps({ id, state: 'paused', reason: 'scout: quota' })[0]!, /scout: quota/);
   assert.match(nextSteps({ id, state: 'escalated', reason: 'repair attempts exhausted' })[0]!, /cannot continue: repair attempts exhausted/);
+  // A stop by a check or a finding owner names the private file that holds the evidence.
+  assert.deepEqual(nextSteps({ id, state: 'escalated', reason: STOP_REASONS.spec, repairs: 1 }, { runFolder: '/state/runs/r' }).slice(0, 2), [`The run stopped and cannot continue: ${STOP_REASONS.spec}`, 'Read the review findings in /state/runs/r/review-1.json']);
+  assert.match(nextSteps({ id, state: 'escalated', reason: STOP_REASONS.factory, repairs: 0 }, { runFolder: '/r' }).join('\n'), /review-0\.json/);
+  assert.match(nextSteps({ id, state: 'escalated', reason: STOP_REASONS.baseline }, { runFolder: '/r' }).join('\n'), /base commit results in \/r\/baseline\.json/);
+  assert.doesNotMatch(nextSteps({ id, state: 'escalated', reason: 'repair attempts exhausted' }, { runFolder: '/r' }).join('\n'), /\/r\//);
   for (const state of ['cancelled', 'archived'] as const) assert.match(nextSteps({ id, state })[0]!, /aegean prepare --request FILE/);
   assert.match(listSteps(['cancelled', 'archived'])[0]!, /No run is active/); assert.match(listSteps([])[0]!, /No run is active/);
   assert.match(listSteps(['cancelled', 'spec-drafted'])[0]!, /status --run ID/);

@@ -356,6 +356,11 @@ Read `review-notes.md` in that folder first. It contains:
 The Scout writes these notes. They are not verification evidence. If a project rule or the request is wrong, cancel the run.
 Then correct the project on main and prepare a new run.
 
+Also read `allowed-paths.txt` in the same folder. It lists each path that the Builder may create, change or delete.
+An entry that ends with `/` allows each file below that directory. Lines that start with `#` are comments.
+Verification fails if the candidate changes a path that the file does not allow. The Scout sees only a few project files,
+so check that the list includes the test files and the files that the project checks read or write. Edit the file before approval if the list is wrong.
+
 While the run is `spec-drafted`, `aegean status --run ID` gives a `review` field. It reads the open questions and the `NOT COVERED` entries from `review-notes.md` as the file is now.
 The `aegean approve` prompt states their counts after the specification change. Aegean does not refuse the approval; the decision stays with you.
 
@@ -384,9 +389,33 @@ See [model use and token allowances](MODEL-USAGE.md) for fields, enforcement lim
 The Auditor creates protected tests before the Builder writes code. Verification
 and a fresh independent review must pass before publication approval.
 
-Repair feedback contains only public requirement identifiers and their approved
-text. Suite schema 2 refers to public `### Requirement:` headings. Hidden inputs,
-expected results, actual outputs and arbitrary Auditor prose stay private.
+Before the first build, the verifier runs the protected tests once on the unchanged base commit.
+The run folder records the result in `baseline.json`. `aegean status --run ID` shows it in the `baseline` field,
+and the publication summary repeats it. A requirement whose tests already passed on the base commit has no evidence that the change works.
+If every protected test passes on the base commit, the run stops before the Builder starts.
+An inconclusive check uses the same infrastructure retry budget as candidate verification.
+If a retry remains, the run pauses; correct the verifier, then resume. The Auditor is not called again.
+If no retry remains, the run stops with `infrastructure retries exhausted`.
+
+Verification first compares the changed paths with `allowed-paths.txt`. A change to another path fails
+verification before the protected tests run. The Builder then gets a repair that names those paths.
+
+Repair feedback contains public requirement identifiers and their approved text, the paths outside
+`allowed-paths.txt`, and the review findings that the reviewer assigns to the Builder. Suite schema 2 refers to
+public `### Requirement:` headings. Hidden inputs, expected results, actual outputs and test Auditor text stay private.
+
+The independent reviewer gives each finding one owner. The owner decides what happens next:
+
+| Owner | Meaning | Result |
+| --- | --- | --- |
+| `builder` | A defect in the code that the Builder can correct within the contract. | A repair, until the repair limit. |
+| `spec` | The approved contract is wrong, incomplete or contradicts itself. | The run stops: `independent review found a specification fault`. |
+| `factory` | A fault in Aegean, for example a protected test or the verifier. | The run stops: `independent review found an Aegean fault`. |
+
+A stopped run uses no repair. `aegean status --run ID` names the review file with the findings.
+The finding owner takes precedence over the review outcome, including `pass`. Publication review requires no findings.
+For a specification fault, correct the request or the project guidance, then prepare a new run.
+For an Aegean fault, record it in [pilot notes](PILOT-NOTES.md) and correct Aegean through a reviewed pull request before a new run.
 
 Required context that exceeds its limit pauses the run. Optional Scout source has an explicit omission record.
 A diff over 200,000 bytes pauses the run; partial review cannot produce a pass.
@@ -410,6 +439,8 @@ aegean revise --run ID --scope contract
 ```
 
 Choose one scope for the actual revision. Implementation changes require fresh verification and review.
+An implementation revision can change only the paths in `allowed-paths.txt`; Aegean refuses another path.
+To change another path, add it to `allowed-paths.txt` and use `--scope contract`.
 Contract changes also require new specification approval and a new protected suite.
 Revisions retain all consumed time, calls and tokens.
 

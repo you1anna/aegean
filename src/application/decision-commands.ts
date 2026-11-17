@@ -12,6 +12,7 @@ import type { ExecutionBudget } from '../domain/budgets.js';
 import { hostConfig, stateRoot, doctor } from './runtime.js';
 import { loadLocalRun, localReview, type LocalRun } from './run-record.js';
 import { reviewFlags, REVIEW_NOTES } from '../domain/scout.js';
+import { baselineText } from './build-checks.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 import { buildSpecArtifact, buildPublicationArtifact, buildRevisionArtifact, persistLocalDecision, frozenProject, validateLocalPublication, type LocalDecisionArtifact } from './decisions.js';
 import { pilotArtifact, persistPilot, executionAuthorization, savedPilot, repeatedPilot, type PilotArtifact } from './pilot.js';
@@ -92,7 +93,8 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       // The approval reads the committed specification; the check above proves that the folder equals that revision.
       const flags = action === 'approve' ? await localReview(local).then(review => review && reviewFlags(review)) : undefined;
       const incomplete = flags ? `\nThe draft is not complete: ${flags}. Read ${REVIEW_NOTES} in the changes above. An approval accepts the specification as it is.\n` : '';
-      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${incomplete}${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
+      const baseline = action === 'publish' ? await baselineText(dir, run.suite) : undefined;
+      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${incomplete}${baseline ? `\n${baseline}\n\n` : ''}${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
       if (Buffer.byteLength(summary) > 300_000) throw new Error('decision review exceeds bounded capacity');
       return { artifact, run, summary, authorized: false };
     });

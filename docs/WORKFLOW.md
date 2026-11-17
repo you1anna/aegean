@@ -28,8 +28,14 @@ revision, so implementation and tests refer to the same requirements.
 The Auditor uses Claude Code to prepare protected tests from the approved
 specification. The Builder uses Codex to write code in an isolated worktree.
 
-The verifier runs the tests and records the results. The Auditor reviews the
-candidate code in a fresh context. Repair attempts have a fixed limit.
+Before the Builder starts, the verifier runs the tests on the unchanged code. A test that
+already passes there cannot show that the change works; if every test passes, the run stops.
+The approved specification also lists the paths that the Builder may change.
+
+The verifier then checks the changed paths, runs the tests on the candidate and records the
+results. The Auditor reviews the candidate code in a fresh context and gives each finding an owner.
+A code defect goes back to the Builder; repair attempts have a fixed limit. A fault in the
+specification or in Aegean stops the run for you, with no repair.
 
 This stage requires release acceptance or an authorised pilot with passing native prerequisites. Full delivery remains under evaluation;
 see [supported use](README.md#supported-use) before a run.

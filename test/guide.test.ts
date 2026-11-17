@@ -151,6 +151,8 @@ test('the specification review warns before the authorisation ends and keeps eac
     assert.match(h.text(), /The pilot authorisation ends in 9 minutes, at \d\d:\d\d\. You cannot extend it\. After that time you can only cancel this run\./);
     assert.deepEqual(h.lines.filter(line => line.startsWith('PAGE ')), ['PAGE review-notes.md', 'PAGE proposal.md']); assert.ok(h.lines.includes('Synthetic proposal\n'));
     assert.match(h.text(), /FAILED Cannot read design\.md/);
+    // The allowed paths are part of the approval, so the guide offers them with the requirements.
+    assert.match(files[0]!, /specs\/contract\/spec\.md allowed-paths\.txt design\.md/);
     // A file that was read is marked. One status poll serves all the files; the menu returns only after "Go back".
     assert.match(files[1]!, /^review-notes\.md:read proposal\.md /); assert.match(files[3]!, /^review-notes\.md:read proposal\.md:read specs/);
     assert.deepEqual(h.commands(), ['doctor', 'status', `status --run ${id}`, `status --run ${id}`]);
