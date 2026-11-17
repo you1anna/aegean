@@ -37,8 +37,8 @@ the whole suite. Ctrl-C stops a local quick check; it holds no workflow lease or
 VM resources, and rebuilding is its recovery path.
 
 The full suite runs one file at a time and limits individual tests to five
-minutes. CI also has a fifteen-minute job deadline. Local runs have no aggregate
-deadline. Fixture subprocesses keep their own timeouts and cleanup logic.
+minutes. The [CI workflow](../.github/workflows/checks.yml) defines the job deadline.
+Local runs have no aggregate deadline. Fixture subprocesses keep their own timeouts and cleanup logic.
 Coordinator fixtures use isolated temporary state and real local Git repositories.
 The Git shim calls Git directly for routine operations and keeps the synthetic
 origin check and push fault injection. Compare elapsed time and CPU time with

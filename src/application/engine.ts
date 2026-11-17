@@ -293,7 +293,12 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
         });
         const receipt = JSON.parse(baselineRun.stdout) as Receipt;
         const decision = await recordBaseline(dir, run.suite!, local.base, suite, receipt);
-        if ('pause' in decision) { await update(nowEvent('pause', { reason: decision.pause, activeMs: receipt.durationMs })); break; }
+        if ('pause' in decision) {
+          await update(decision.infrastructureFailure
+            ? nowEvent('baseline-inconclusive', { suite: run.suite!, reason: decision.pause, activeMs: receipt.durationMs })
+            : nowEvent('pause', { reason: decision.pause, activeMs: receipt.durationMs }));
+          break;
+        }
         await update(nowEvent('begin-build', { baseline: decision.counts, activeMs: receipt.durationMs }));
       } else if (run.state === 'repair') await update(nowEvent('begin-build'));
       if (run.state === 'building') {

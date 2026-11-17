@@ -215,10 +215,33 @@ test('a review finding goes to its owner: the Builder repairs, the specification
   assert.equal(factoryFault.state, 'escalated'); assert.equal(factoryFault.reason, STOP_REASONS.factory); assert.equal(factoryFault.repairs, 0);
   const unexplained = review(verifiedRun(false), 'pass', none);
   assert.equal(unexplained.state, 'repair');
-  const advisory = review(verifiedRun(true), 'pass', { ...none, spec: 1 });
-  assert.equal(advisory.state, 'human-merge-review');
+  for (const [owner, reason] of [['spec', STOP_REASONS.spec], ['factory', STOP_REASONS.factory]] as const) {
+    const fault = review(verifiedRun(true), 'pass', { ...none, [owner]: 1 });
+    assert.equal(fault.state, 'escalated'); assert.equal(fault.reason, reason); assert.equal(fault.repairs, 0);
+    assert.equal(fault.reviewCommit, undefined);
+  }
+  assert.equal(review(verifiedRun(true), 'pass', { ...none, builder: 1 }).state, 'repair');
   assert.equal(review(verifiedRun(true), 'escalate', none).reason, 'independent review escalation');
   for (const findings of [undefined, { builder: 1, spec: 0 }, { ...none, builder: -1 }, { ...none, extra: 0 }]) {
     assert.throws(() => transition(verifiedRun(false), event('review', { commit, outcome: 'repair', findings, activeMs: 1 })), /finding count/);
   }
+});
+
+test('base commit infrastructure failures share the retry budget and retain an idempotent recovery checkpoint', () => {
+  const fail = () => event('baseline-inconclusive', { suite, reason: 'base verifier unavailable', activeMs: 7 });
+  const first = fail();
+  let run = transition(staged(), first);
+  assert.equal(run.state, 'paused'); assert.equal(run.resumeState, 'tests-staged');
+  assert.equal(run.infrastructureRetries, 1); assert.equal(run.repairs, 0); assert.equal(run.activeMs, 7);
+  assert.deepEqual(transition(run, first), run);
+  run = transition(run, event('resume'));
+  assert.throws(() => transition(run, { ...fail(), suite: digest('stale') } as Event), /stale/);
+  const retried = transition(run, fail());
+  assert.equal(retried.state, 'escalated'); assert.equal(retried.reason, 'infrastructure retries exhausted');
+  assert.equal(retried.activeMs, 14); assert.equal(retried.repairs, 0);
+  assert.throws(() => transition(retried, event('resume')), /terminal/);
+  let candidate = transition(build(run), event('candidate', { commit, activeMs: 0 }));
+  candidate = transition(candidate, event('verification', { commit, spec, suite, outcome: 'inconclusive', receipt: digest('infra'), activeMs: 0 }));
+  assert.equal(candidate.state, 'escalated');
+  assert.throws(() => transition(build(staged()), fail()), /state/);
 });

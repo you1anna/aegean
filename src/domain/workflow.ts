@@ -37,6 +37,7 @@ export type Event = BaseEvent & (
   | { type: 'draft'; spec: string; specCommit?: string; activeMs?: number }
   | { type: 'approve'; spec: string; specCommit?: string; actor: 'human'; approvalRef: string }
   | { type: 'stage-tests'; spec: string; suite: string; activeMs: number }
+  | { type: 'baseline-inconclusive'; suite: string; reason: string; activeMs: number }
   | { type: 'begin-build'; baseline?: BaselineCounts; activeMs?: number }
   | { type: 'candidate'; commit: string; activeMs: number }
   | { type: 'verification'; commit: string; spec: string; suite: string; outcome: 'pass' | 'fail' | 'inconclusive'; receipt: string; activeMs: number }
@@ -61,6 +62,12 @@ function requireState(run: Run, ...states: State[]): void {
 }
 function hash(value: string, length = 64): void {
   if (!new RegExp(`^[a-f0-9]{${length}}$`).test(value)) throw new Error('invalid artifact hash');
+}
+function allowInfrastructureRetry(run: Run): boolean {
+  if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) {
+    run.state = 'escalated'; run.reason = 'infrastructure retries exhausted'; return false;
+  }
+  run.infrastructureRetries++; return true;
 }
 export function transition(previous: Run, event: Event): Run {
   if (event.type !== 'cancel') assertRunPolicy(previous);
@@ -88,6 +95,13 @@ export function transition(previous: Run, event: Event): Run {
       requireState(run, 'spec-approved');
       if (event.spec !== run.spec) throw new Error('stale spec for suite');
       hash(event.suite); run.suite = event.suite; run.state = 'tests-staged'; break;
+    case 'baseline-inconclusive':
+      requireState(run, 'tests-staged');
+      if (!run.suite || event.suite !== run.suite) throw new Error('stale base commit evidence');
+      if (allowInfrastructureRetry(run)) {
+        run.resumeState = 'tests-staged'; run.state = 'paused'; run.reason = event.reason;
+      }
+      break;
     case 'begin-build':
       requireState(run, 'tests-staged', 'repair');
       if (run.state === 'tests-staged') {
@@ -106,8 +120,7 @@ export function transition(previous: Run, event: Event): Run {
       if (event.spec !== run.spec || event.suite !== run.suite || event.commit !== run.commit) throw new Error('stale verification evidence');
       hash(event.receipt);
       if (event.outcome === 'inconclusive') {
-        if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) { run.state = 'escalated'; run.reason = 'infrastructure retries exhausted'; }
-        else run.infrastructureRetries++;
+        allowInfrastructureRetry(run);
       } else { run.verification = event.outcome; run.receipt = event.receipt; run.state = 'reviewing'; }
       break;
     case 'review': {
@@ -116,9 +129,9 @@ export function transition(previous: Run, event: Event): Run {
       const owners = event.findings;
       if (!owners || typeof owners !== 'object' || Object.keys(owners).length !== FINDING_OWNERS.length || FINDING_OWNERS.some(owner => !Number.isSafeInteger(owners[owner]) || owners[owner] < 0)) throw new Error('review requires a finding count for each owner');
       // A fault in the specification or in Aegean goes to the human; it never becomes a Builder repair.
-      if (event.outcome === 'pass' && run.verification === 'pass') { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
-      else if (owners.spec > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.spec; }
+      if (owners.spec > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.spec; }
       else if (owners.factory > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.factory; }
+      else if (event.outcome === 'pass' && run.verification === 'pass' && owners.builder === 0) { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
       else if (event.outcome !== 'escalate' && run.repairs < POLICY.maxRepairs) { run.repairs++; run.state = 'repair'; }
       else { run.state = 'escalated'; run.reason = event.outcome === 'escalate' ? 'independent review escalation' : 'repair attempts exhausted'; }
       break;

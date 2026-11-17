@@ -199,6 +199,22 @@ test('a change outside the allowed paths fails verification before the suite and
   }finally{await f.cleanup();}
 });
 
+test('repeated inconclusive base commit checks exhaust the retry budget before any Builder call', async () => {
+  const f = await fixture(); try {
+    await f.start(); await f.scenario({ approved: true, baselineInfraAlways: true });
+    const first = await f.resume(); assert.equal(first.code, 0, first.stderr);
+    assert.equal((await f.current()).state, 'paused');
+    const second = await f.resume(); assert.equal(second.code, 0, second.stderr);
+    const run = await f.current();
+    assert.equal(run.state, 'escalated'); assert.equal(run.reason, 'infrastructure retries exhausted');
+    assert.equal(run.infrastructureRetries, 1); assert.equal(run.repairs, 0);
+    assert.equal((await f.events()).filter(e => e.role === 'builder').length, 0);
+    assert.equal((await f.events()).filter(e => e.role === 'auditor-tests').length, 1);
+    assert.equal((await f.events()).filter(e => e.effect === 'verify').length, 2);
+    assert.deepEqual((await f.ledger()).owners, {});
+  } finally { await f.cleanup(); }
+});
+
 test('a specification finding stops the run with no repair, and only Builder findings reach the Builder', async () => {
   const f=await fixture();try{
     await f.start();await f.scenario({approved:true,verifierFail:true,reviewOutcome:'repair',reviewFindings:[{owner:'builder',finding:'Print ok, not wrong'}]});
@@ -209,7 +225,7 @@ test('a specification finding stops the run with no repair, and only Builder fin
     assert.match(String(review!.prompt),/A spec or factory finding stops the run/);
   }finally{await f.cleanup();}
   const g=await fixture();try{
-    await g.start();await g.scenario({approved:true,verifierFail:true,reviewOutcome:'repair',reviewFindings:[{owner:'builder',finding:'Print ok'},{owner:'spec',finding:'R001 contradicts the request'}]});
+    await g.start();await g.scenario({approved:true,reviewOutcome:'pass',reviewFindings:[{owner:'spec',finding:'R001 contradicts the request'}]});
     const resumed=await g.resume();assert.equal(resumed.code,0,resumed.stderr);
     const run=await g.current();assert.equal(run.state,'escalated');assert.equal(run.reason,STOP_REASONS.spec);assert.equal(run.repairs,0);
     assert.equal((await g.events()).filter(e=>e.role==='builder').length,1);assert.deepEqual((await g.ledger()).owners,{});

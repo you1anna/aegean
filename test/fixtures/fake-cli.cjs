@@ -139,7 +139,7 @@ if (tool === 'claude' || tool === 'codex') {
   else if (args.includes('run')) {
     // Run the exported code, so that the base commit and the candidate give their real output.
     log({effect:'verify'});
-    if (scenario.baselineInfraOnce && once('baseline-infra')) process.exit(125);
+    if (scenario.baselineInfraAlways || (scenario.baselineInfraOnce && once('baseline-infra'))) process.exit(125);
     const entry=args.indexOf('--entrypoint');const source=/src=([^,]+)/.exec(args.find(arg=>arg.startsWith('type=bind,')))[1];
     const executed=cp.spawnSync(args[entry+1]==='node'?process.execPath:args[entry+1],args.slice(entry+3),{cwd:source,input:fs.readFileSync(0),encoding:'utf8',timeout:10000});
     const passing=executed.status===0&&executed.stdout.trim()==='ok';

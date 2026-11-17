@@ -37,6 +37,13 @@ a specification fault stops the run instead of a contract revision in the same r
 
 `aegean guide` offers `allowed-paths.txt` with the other specification files at review.
 
+The PR review found two gate defects. Finding owners now take precedence over a `pass` review outcome;
+a finding prevents publication review. Inconclusive base commit checks now use the existing infrastructure retry budget.
+Regression tests cover repeated failure, recovery, stale suite evidence and repeated events. The control ledger schema is unchanged.
+After these fixes, `npm ci`, `./scripts/dev check` and `./scripts/dev test` passed with the pinned Node runtime.
+The full suite passed 230 TypeScript tests and 22 script tests in 821 seconds. Documentation links and `git diff --check` passed.
+The test suite required local Unix sockets outside the tool sandbox. These checks use synthetic services; native release acceptance remains unverified.
+
 CI now permits 25 minutes, not 15. The first CI run of this change stopped at the 15-minute limit; each test that ran had passed.
 The last `main` run needed 11 minutes 12 seconds for the tests. This branch reached the same test 1.5 times later, so the projected need is about 17 minutes.
 

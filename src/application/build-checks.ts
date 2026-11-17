@@ -10,7 +10,7 @@ import type { Suite } from '../domain/config.js';
 
 export const BASELINE = 'baseline.json';
 interface BaselineRecord { schemaVersion: 1; suite: string; base: string; receipt: string; outcome: Receipt['outcome']; reason: string; summary: BaselineSummary }
-export type BaselineDecision = { counts: BaselineCounts } | { pause: string };
+export type BaselineDecision = { counts: BaselineCounts } | { pause: string; infrastructureFailure?: true };
 
 export async function allowedPaths(specDir: string): Promise<string[]> {
   return parseAllowedPaths((await readBoundedEvidenceFile(join(specDir, ALLOWED_PATHS), 65_536)).toString('utf8'));
@@ -37,7 +37,7 @@ export async function recordBaseline(dir: string, suiteDigest: string, base: str
   await atomicJson(path, { schemaVersion: 1, suite: suiteDigest, base, receipt: digest(JSON.stringify(receipt)), outcome: receipt.outcome, reason: receipt.reason, summary } satisfies BaselineRecord);
   if (receipt.retainedResources) return { pause: `Verifier cleanup failed during the base commit check; the resources are recorded in ${path}; restore Docker before resume` };
   if (receipt.outcome === 'cancelled') return { pause: 'Base commit check cancelled by operator' };
-  if (receipt.outcome === 'inconclusive') return { pause: `Base commit check inconclusive (${receipt.reason}); restore the verifier, then resume` };
+  if (receipt.outcome === 'inconclusive') return { pause: `Base commit check inconclusive (${receipt.reason}); restore the verifier, then resume`, infrastructureFailure: true };
   if (!complete) return { pause: `The base commit cannot run in the verifier (${receipt.reason}); inspect ${path}` };
   return { counts: { suite: suiteDigest, cases: summary.cases, passed: summary.passed } };
 }

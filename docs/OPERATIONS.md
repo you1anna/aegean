@@ -393,7 +393,9 @@ Before the first build, the verifier runs the protected tests once on the unchan
 The run folder records the result in `baseline.json`. `aegean status --run ID` shows it in the `baseline` field,
 and the publication summary repeats it. A requirement whose tests already passed on the base commit has no evidence that the change works.
 If every protected test passes on the base commit, the run stops before the Builder starts.
-If the check is inconclusive, the run pauses; correct the verifier, then resume. The Auditor is not called again.
+An inconclusive check uses the same infrastructure retry budget as candidate verification.
+If a retry remains, the run pauses; correct the verifier, then resume. The Auditor is not called again.
+If no retry remains, the run stops with `infrastructure retries exhausted`.
 
 Verification first compares the changed paths with `allowed-paths.txt`. A change to another path fails
 verification before the protected tests run. The Builder then gets a repair that names those paths.
@@ -411,6 +413,7 @@ The independent reviewer gives each finding one owner. The owner decides what ha
 | `factory` | A fault in Aegean, for example a protected test or the verifier. | The run stops: `independent review found an Aegean fault`. |
 
 A stopped run uses no repair. `aegean status --run ID` names the review file with the findings.
+The finding owner takes precedence over the review outcome, including `pass`. Publication review requires no findings.
 For a specification fault, correct the request or the project guidance, then prepare a new run.
 For an Aegean fault, record it in [pilot notes](PILOT-NOTES.md) and correct Aegean through a reviewed pull request before a new run.
 
