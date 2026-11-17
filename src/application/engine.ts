@@ -32,7 +32,7 @@ import { committedSpecDigest } from '../adapters/spec-artifact.js';
 import { containedBuilder, reconcileBuilder } from './builder.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 
-import { loadLocalRun, suiteRelativePath } from './run-record.js';
+import { loadLocalRun, suiteRelativePath, specificationFolder, localReview } from './run-record.js';
 import { frozenProject, validateLocalSpecApproval, validateLocalPublication } from './decisions.js';
 const nowEvent = (type: Event['type'], fields: Record<string, unknown> = {}): Event => ({ id: randomUUID(), at: Date.now(), type, ...fields } as Event);
 async function recordContext(path: string, value: unknown): Promise<void> {
@@ -69,8 +69,11 @@ export async function status(id?: string): Promise<unknown> {
   catch (error) { usage = { available: false, reason: (error as Error).message }; }
   // Guidance reads local facts only; a run owned by another host has none here.
   const pilot = await savedPilot(dir).then(saved => saved && { expiresAt: saved.artifact.expiresAt, budget: saved.artifact.budget }, () => undefined);
-  const specification = run.spec ? await loadLocalRun(dir).then(local => join(local.worktree, 'openspec/changes', id) + '/', () => undefined) : undefined;
-  return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}) }) };
+  const local = run.spec ? await loadLocalRun(dir).catch(() => undefined) : undefined;
+  const specification = local && specificationFolder(local) + '/';
+  // Before approval the notes can still change; after approval they are history.
+  const review = local && run.state === 'spec-drafted' ? await localReview(local) : undefined;
+  return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), ...(review ? { review } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}) }) };
 }
 export async function cancel(id: string, root: string): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
@@ -182,7 +185,7 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
     if (await readFile(join(local.worktree, 'aegean.json'), 'utf8') !== originalProject) throw new Error('project configuration changed after run creation');
     project = await frozenProject(local, run);
     assertSupportedImage(project);
-    const specDir = join(local.worktree, 'openspec/changes', id);
+    const specDir = specificationFolder(local);
     if (run.spec && !['spec-drafted', 'merged', 'archived'].includes(run.state) && await treeDigest(specDir) !== run.spec) throw new Error('approved specification changed; restore it or cancel and request a new approval');
     const readiness = await doctor(root); ordinaryReady = readiness.fullWorkflowReady;
     if (!['human-merge-review', 'merged', 'archived'].includes(run.state)) {

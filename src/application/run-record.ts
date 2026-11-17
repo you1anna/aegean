@@ -3,6 +3,7 @@ import { basename, isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { stateRoot } from './runtime.js';
+import { parseReviewNotes, REVIEW_NOTES, type ReviewSummary } from '../domain/scout.js';
 
 const absolute = z.string().max(4096).refine(path => isAbsolute(path) && resolve(path) === path && !/[\0\r\n]/.test(path));
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
@@ -31,6 +32,15 @@ export async function loadLocalRun(dir: string): Promise<LocalRun> {
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   await readBoundedEvidenceFile(local.sourceRequest, 60_000);
   return local;
+}
+
+/** The folder of the drafted specification in the run worktree. */
+export const specificationFolder = (local: Pick<LocalRun, 'worktree' | 'id'>): string => join(local.worktree, 'openspec/changes', local.id);
+
+/** The review summary from the notes file as it is now. Nothing when the folder or the file is not on this host. */
+export async function localReview(local: Pick<LocalRun, 'worktree' | 'id'>): Promise<ReviewSummary | undefined> {
+  try { return parseReviewNotes((await readBoundedEvidenceFile(join(specificationFolder(local), REVIEW_NOTES), 200_000)).toString('utf8')); }
+  catch { return undefined; }
 }
 
 /** Each approved contract keeps its own immutable protected suite. */

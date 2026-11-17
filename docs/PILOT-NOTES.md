@@ -26,6 +26,22 @@ here is fixed through the normal branch and PR, then linked from its entry.
 - Follow-up: <issue, commit or PR>
 ```
 
+## trial-03 — pilot project — 16 November 2026
+
+- Host and release: primary host, `0.1.0-1d675fce0213` (source `46d1238`, policy 0.5.0); first real run with `aegean guide`
+- Request: a data model; structure, storage and technology left to the Scout
+- Reached: `spec-drafted` at 23:47 UTC, by `aegean resume` from the guide; local approval mode, no push
+- Outcome: blocked at specification review; a reviewer advised cancellation. The run was not cancelled when this entry was written
+- Usage: Scout 67 seconds; 16,171 tokens reported (10,148 input, 6,023 output, 3,293 cached); 1 of 6 pilot calls;
+  `claude-sonnet-5`, medium effort, requested and reported
+- Limits: 30 minutes, 6 calls, 20 active minutes; the authorisation ended at 00:13 UTC, 26 minutes after the draft
+- Records: retained locally outside Git; identifiers in this document are anonymised.
+- Findings: the Scout context had 5 files (12,065 bytes); the draft named eight record types without fields, left the identifier
+  format open and moved the section 6 fields to a later change (4 open questions, 3 `NOT COVERED` entries);
+  the guide pushed each opened file off the screen; the guide did not show the expiry at the review;
+  an earlier `prepare` failed in 24 ms with no recorded cause; `trial-04` stays `requested` from an older release
+- Follow-up: [STATUS](STATUS.md), 17 November section
+
 ## trial-02 — pilot project — 16 November 2026
 
 - Host and release: primary host, `0.1.0-bc78bef49e53`
