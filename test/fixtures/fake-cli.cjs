@@ -44,7 +44,7 @@ if (tool === 'claude' || tool === 'codex') {
   const role = tool === 'codex' ? 'builder' : prompt.includes('Act as Scout') ? 'scout' : prompt.includes('acceptance-test Auditor') ? 'auditor-tests' : 'auditor-review';
   const model = args[args.indexOf('--model')+1];
   const usage = { input_tokens:10, output_tokens:5, cache_read_input_tokens:0, cache_creation_input_tokens:0 };
-  log({ role, model, effort: tool === 'claude' ? args[args.indexOf('--effort')+1] : args.find(value => value.startsWith('model_reasoning_effort=')), ...(role === 'builder' ? { prompt } : {}) });
+  log({ role, model, effort: tool === 'claude' ? args[args.indexOf('--effort')+1] : args.find(value => value.startsWith('model_reasoning_effort=')), ...(role === 'builder' || role === 'auditor-review' ? { prompt } : {}) });
   if (scenario.quotaRole === role) { output({ type: tool === 'claude' ? 'result' : 'turn.completed', model, usage }); fail('synthetic subscription quota exhausted'); }
   if (scenario.hangRole === role) { setInterval(() => {}, 1000); }
   else if (role === 'builder') {
@@ -56,6 +56,7 @@ if (tool === 'claude' || tool === 'codex') {
     // Scratch now lives in the VM tmpfs /tmp, never in candidate capture.
     if (scenario.builderScratch) log({ effect:'builder-scratch-in-vm' });
     if (scenario.builderChangesConfig) script += 'fs.appendFileSync("aegean.json", " ");';
+    if (scenario.builderOutsideScope) script += 'fs.writeFileSync("extra.txt", "outside the allowed paths\\n");';
     const request = {jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'execute',arguments:{args:['node','-e',script],input:''}}};
     if (scenario.builderRepeatedOutput) {
       for (let index = 0; index < 10; index++) {
@@ -73,7 +74,7 @@ if (tool === 'claude' || tool === 'codex') {
     if(execution.code!==0||execution.interrupted) fail('fixture VM command failed: '+execution.stderr);
     output(JSON.stringify({ type:'turn.completed', model, usage: scenario.missingUsage === role ? undefined : usage }) + '\n');
   } else {
-    const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output', verification:'The check command runs the CLI and compares its output.', coverage:['Return ok: Requirement Output'], constraints:[], openQuestions:['Synthetic open question'] } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:'pass', findings:[] };
+    const data = role === 'scout' ? { proposal:'## Why\nSynthetic fixture\n## What Changes\nReturn ok', requirements:'## ADDED Requirements\n### Requirement: Output\nThe CLI SHALL output ok.\n#### Scenario: Run\n- **WHEN** invoked\n- **THEN** output ok', design:'Synthetic design', tasks:'- [ ] Implement output', verification:'The check command runs the CLI and compares its output.', coverage:['Return ok: Requirement Output'], constraints:[], openQuestions:['Synthetic open question'], allowedPaths:['app.cjs', 'large.js'] } : role === 'auditor-tests' ? { schemaVersion:2, spec:run().spec, cases:[{ input:'', stdout:'ok', exit:0, requirement:'R001' }] } : { outcome:scenario.reviewOutcome ?? 'pass', findings:scenario.reviewFindings ?? [] };
     output({ type: 'result', model, result: scenario.malformedRole === role ? 'malformed JSON' : JSON.stringify(data), usage: scenario.missingUsage === role ? undefined : usage });
   }
 } else if (tool === 'gh') {
@@ -135,7 +136,16 @@ if (tool === 'claude' || tool === 'codex') {
     // A collector snapshot can exceed a pipe buffer. Let Node drain both streams.
     process.exitCode = result.status ?? 1;
   }
-  else if (args.includes('run')) { log({effect:'verify'}); output((scenario.verifierFail || (scenario.verifierFailOnce && !args.includes('--check') && once('verifier-failure'))) ? 'wrong' : 'ok'); }
+  else if (args.includes('run')) {
+    // Run the exported code, so that the base commit and the candidate give their real output.
+    log({effect:'verify'});
+    if (scenario.baselineInfraOnce && once('baseline-infra')) process.exit(125);
+    const entry=args.indexOf('--entrypoint');const source=/src=([^,]+)/.exec(args.find(arg=>arg.startsWith('type=bind,')))[1];
+    const executed=cp.spawnSync(args[entry+1]==='node'?process.execPath:args[entry+1],args.slice(entry+3),{cwd:source,input:fs.readFileSync(0),encoding:'utf8',timeout:10000});
+    const passing=executed.status===0&&executed.stdout.trim()==='ok';
+    if (scenario.verifierFail || (passing && scenario.verifierFailOnce && !args.includes('--check') && once('verifier-failure'))) output('wrong');
+    else { process.stdout.write(executed.stdout ?? ''); process.exitCode = executed.status ?? 1; }
+  }
   else if (!args.includes('inspect') && !args.includes('rm')) fail('unexpected synthetic Docker operation');
 } else if (tool === 'openspec') {
   if (args[0] === 'archive') {

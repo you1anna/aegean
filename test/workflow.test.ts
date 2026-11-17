@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, transition, digest, POLICY, POLICY_IDENTITY, policyIdentityFor, policyFromToolchain, type Run, type Event } from '../src/domain/workflow.js';
+import { createRun, transition, digest, POLICY, POLICY_IDENTITY, policyIdentityFor, policyFromToolchain, STOP_REASONS, type Run, type Event } from '../src/domain/workflow.js';
 import { ProjectSchema } from '../src/domain/config.js';
 import toolchain from '../toolchain.json' with { type: 'json' };
 
@@ -11,6 +11,9 @@ const frozen = { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest(
 const start = () => createRun('run-1', 'host-a', 'owner/repo', POLICY.version, 100, frozen);
 const event = (type: Event['type'], data: Record<string, unknown> = {}): Event =>
   ({ id: crypto.randomUUID(), at: 101, type, ...data } as Event);
+const none = { builder: 0, spec: 0, factory: 0 };
+const baseline = { suite, cases: 2, passed: 1 };
+const build = (run: Run) => transition(run, event('begin-build', { baseline }));
 function staged(): Run {
   let run = transition(start(), event('draft', { spec }));
   run = transition(run, event('approve', { spec, actor: 'human', approvalRef: 'https://github.com/o/r/pull/1#issuecomment-1' }));
@@ -32,10 +35,10 @@ test('approval is bound to the published specification commit', () => {
   assert.throws(() => transition(run, event('approve', { spec, actor: 'human', approvalRef: 'receipt', specCommit: 'b'.repeat(40) })), /published commit/);
 });
 function reviewed(run: Run, passed: boolean): Run {
-  run = transition(run, event('begin-build'));
+  run = transition(run, event('begin-build', run.state === 'tests-staged' ? { baseline, activeMs: 5 } : {}));
   run = transition(run, event('candidate', { commit, activeMs: 10 }));
   run = transition(run, event('verification', { commit, spec, suite, outcome: passed ? 'pass' : 'fail', receipt: digest('receipt'), activeMs: 10 }));
-  return transition(run, event('review', { commit, outcome: passed ? 'pass' : 'repair', activeMs: 10 }));
+  return transition(run, event('review', { commit, outcome: passed ? 'pass' : 'repair', findings: none, activeMs: 10 }));
 }
 test('human approval and independent suite are required before building', () => {
   assert.throws(() => transition(start(), event('begin-build')), /state/);
@@ -45,7 +48,7 @@ test('human approval and independent suite are required before building', () => 
   assert.equal(staged().state, 'tests-staged');
 });
 test('stale commit, spec and suite cannot produce a passing gate', () => {
-  let run = transition(staged(), event('begin-build'));
+  let run = build(staged());
   run = transition(run, event('candidate', { commit, activeMs: 1 }));
   for (const stale of [{ commit: 'b'.repeat(40) }, { spec: digest('new') }, { suite: digest('new') }]) {
     assert.throws(() => transition(run, event('verification', { commit, spec, suite, outcome: 'pass', receipt: digest('receipt'), activeMs: 1, ...stale })), /stale/);
@@ -64,7 +67,7 @@ test('two repairs are allowed and a third failure escalates', () => {
   assert.throws(() => transition(run, event('begin-build')), /state/);
 });
 test('infrastructure failure is inconclusive and bounded separately', () => {
-  let run = transition(staged(), event('begin-build'));
+  let run = build(staged());
   run = transition(run, event('candidate', { commit, activeMs: 1 }));
   const fail = () => event('verification', { commit, spec, suite, outcome: 'inconclusive', receipt: digest('infra'), activeMs: 1 });
   run = transition(run, fail());
@@ -123,7 +126,7 @@ test('implementation revision invalidates exact candidate evidence and requires 
   assert.throws(() => transition(run, event('verification', { commit, spec, suite, outcome: 'pass', receipt: digest('old'), activeMs: 0 })), /stale/);
   run = transition(run, event('verification', { commit: changed, spec, suite, outcome: 'pass', receipt: digest('new'), activeMs: 1 }));
   assert.throws(() => transition(run, event('authorize-publication', { commit: changed, spec, suite, receipt: run.receipt, actor: 'human', approvalRef: 'premature' })), /state/);
-  run = transition(run, event('review', { commit: changed, outcome: 'pass', activeMs: 1 }));
+  run = transition(run, event('review', { commit: changed, outcome: 'pass', findings: none, activeMs: 1 }));
   assert.equal(run.reviewCommit, changed);
   assert.throws(() => transition(run, event('authorize-publication', { commit, spec, suite, receipt: previous.receipt, actor: 'human', approvalRef: 'old' })), /exact/);
   run = transition(run, event('authorize-publication', { commit: changed, spec, suite, receipt: run.receipt, actor: 'human', approvalRef: 'new-publication' }));
@@ -146,7 +149,7 @@ test('a revised descendant that reverses verified behavior cannot inherit earlie
   const prior = reviewed(staged(), true); const descendant = 'f'.repeat(40);
   let run = transition(prior, event('revise', { commit: descendant, scope: 'implementation', actor: 'human', approvalRef: 'human-reversal-review' }));
   run = transition(run, event('verification', { commit: descendant, spec, suite, outcome: 'fail', receipt: digest('failed reversed behavior'), activeMs: 0 }));
-  run = transition(run, event('review', { commit: descendant, outcome: 'pass', activeMs: 0 }));
+  run = transition(run, event('review', { commit: descendant, outcome: 'pass', findings: none, activeMs: 0 }));
   assert.equal(run.state, 'repair'); assert.equal(run.reviewCommit, undefined);
   assert.throws(() => transition(run, event('authorize-publication', { commit: descendant, spec, suite, receipt: prior.receipt, actor: 'human', approvalRef: 'old-pass' })), /state/);
   assert.throws(() => transition(run, event('merged', { commit: descendant, mergeCommit: 'e'.repeat(40), actor: 'human' })), /state/);
@@ -165,7 +168,7 @@ test('revision rejects unchanged candidates, missing approved suites, wrong acto
   for (let revision = 1; revision <= POLICY.maxRevisions; revision++) {
     const current = run.commit!;
     run = transition(run, event('verification', { commit: current, spec, suite, outcome: 'pass', receipt: digest(`receipt-${revision}`), activeMs: 0 }));
-    run = transition(run, event('review', { commit: current, outcome: 'pass', activeMs: 0 }));
+    run = transition(run, event('review', { commit: current, outcome: 'pass', findings: none, activeMs: 0 }));
     if (revision < POLICY.maxRevisions) run = transition(run, revise('c'.repeat(40)));
   }
   assert.equal(run.revisions, 2); assert.throws(() => transition(run, revise('d'.repeat(40))), /revision.*budget|revisions.*exhausted/);
@@ -174,9 +177,48 @@ test('revision rejects unchanged candidates, missing approved suites, wrong acto
   assert.equal(exhausted.state, 'paused'); assert.equal(exhausted.resumeState, 'verifying'); assert.equal(exhausted.repairs, POLICY.maxRepairs);
 });
 test('active time limit pauses work without losing its recovery state', () => {
-  let run = transition(staged(), event('begin-build'));
+  let run = build(staged());
   run = transition(run, event('candidate', { commit, activeMs: 3600001 }));
   assert.equal(run.state, 'paused');
   assert.equal(run.resumeState, 'verifying');
   assert.throws(() => transition(run, event('resume')), /budget/);
+});
+
+test('building requires base commit results for the staged suite and stops when every test already passes', () => {
+  assert.throws(() => transition(staged(), event('begin-build')), /base commit results/);
+  assert.throws(() => transition(staged(), event('begin-build', { baseline: { ...baseline, suite: digest('stale suite') } })), /base commit results/);
+  for (const invalid of [{ cases: 0, passed: 0 }, { cases: 2, passed: 3 }, { cases: 2, passed: -1 }, { cases: 1.5, passed: 0 }]) {
+    assert.throws(() => transition(staged(), event('begin-build', { baseline: { suite, ...invalid } })), /invalid base commit results/);
+  }
+  const building = transition(staged(), event('begin-build', { baseline, activeMs: 7 }));
+  assert.equal(building.state, 'building'); assert.equal(building.activeMs, 7);
+  const vacuous = transition(staged(), event('begin-build', { baseline: { suite, cases: 2, passed: 2 }, activeMs: 7 }));
+  assert.equal(vacuous.state, 'escalated'); assert.equal(vacuous.reason, STOP_REASONS.baseline); assert.equal(vacuous.repairs, 0); assert.equal(vacuous.activeMs, 7);
+  const repairing = reviewed(staged(), false);
+  assert.equal(repairing.state, 'repair');
+  assert.throws(() => transition(repairing, event('begin-build', { baseline })), /repair/);
+  assert.equal(transition(repairing, event('begin-build')).state, 'building');
+});
+
+function verifiedRun(passed: boolean): Run {
+  let run = build(staged());
+  run = transition(run, event('candidate', { commit, activeMs: 1 }));
+  return transition(run, event('verification', { commit, spec, suite, outcome: passed ? 'pass' : 'fail', receipt: digest('receipt'), activeMs: 1 }));
+}
+test('a review finding goes to its owner: the Builder repairs, the specification and Aegean stop the run', () => {
+  const review = (run: Run, outcome: string, findings: Record<string, number>) => transition(run, event('review', { commit, outcome, findings, activeMs: 1 }));
+  const builder = review(verifiedRun(false), 'repair', { ...none, builder: 2 });
+  assert.equal(builder.state, 'repair'); assert.equal(builder.repairs, 1);
+  const specFault = review(verifiedRun(false), 'repair', { ...none, builder: 1, spec: 1, factory: 1 });
+  assert.equal(specFault.state, 'escalated'); assert.equal(specFault.reason, STOP_REASONS.spec); assert.equal(specFault.repairs, 0);
+  const factoryFault = review(verifiedRun(false), 'repair', { ...none, builder: 1, factory: 1 });
+  assert.equal(factoryFault.state, 'escalated'); assert.equal(factoryFault.reason, STOP_REASONS.factory); assert.equal(factoryFault.repairs, 0);
+  const unexplained = review(verifiedRun(false), 'pass', none);
+  assert.equal(unexplained.state, 'repair');
+  const advisory = review(verifiedRun(true), 'pass', { ...none, spec: 1 });
+  assert.equal(advisory.state, 'human-merge-review');
+  assert.equal(review(verifiedRun(true), 'escalate', none).reason, 'independent review escalation');
+  for (const findings of [undefined, { builder: 1, spec: 0 }, { ...none, builder: -1 }, { ...none, extra: 0 }]) {
+    assert.throws(() => transition(verifiedRun(false), event('review', { commit, outcome: 'repair', findings, activeMs: 1 })), /finding count/);
+  }
 });

@@ -13,6 +13,10 @@ export interface Receipt {
   schemaVersion: 1; commit: string; spec: string; suite: string; image: string;
   outcome: 'pass' | 'fail' | 'inconclusive' | 'cancelled'; passed: number; failed: number;
   requirements: string[]; reason: string; durationMs: number;
+  /** One result for each protected case that ran, in suite order. Public checks have none. */
+  caseResults: ('pass' | 'fail')[];
+  /** Paths outside the approved allowed paths; only for the reason outside-allowed-paths. */
+  outsidePaths?: string[];
   retainedResources?: { container: string; candidate: string };
 }
 export type VerifierResource = NonNullable<Receipt['retainedResources']>;
@@ -59,7 +63,7 @@ export async function verify(repo: string, commit: string, project: Project, sui
   const started = Date.now();
   const shared = toolchain.verifier.candidateRoot; await mkdir(shared, { recursive: true, mode: 0o700 });
   const dir = await mkdtemp(join(shared, 'candidate-')); await chmod(dir, 0o755);
-  const receipt: Receipt = { schemaVersion: 1, commit, spec: suite.spec, suite: digest(JSON.stringify(suite)), image: project.verifier.image, outcome: 'pass', passed: 0, failed: 0, requirements: [], reason: 'passed', durationMs: 0 };
+  const receipt: Receipt = { schemaVersion: 1, commit, spec: suite.spec, suite: digest(JSON.stringify(suite)), image: project.verifier.image, outcome: 'pass', passed: 0, failed: 0, requirements: [], reason: 'passed', durationMs: 0, caseResults: [] };
   let retainExport = false;
   try {
     if (signal?.aborted) { receipt.outcome = 'cancelled'; receipt.reason = 'operator-cancelled'; return receipt; }
@@ -84,7 +88,8 @@ export async function verify(repo: string, commit: string, project: Project, sui
           const timedOut = ran && (actual.Running === true || Date.parse(actual.FinishedAt ?? '') - started >= 15000);
           const candidateLimit = (r.termination === 'timeout' && timedOut) || (r.termination === 'output-limit' && ran);
           receipt.outcome = candidateLimit ? 'fail' : 'inconclusive'; receipt.reason = candidateLimit ? r.termination === 'timeout' ? 'candidate-timeout' : 'candidate-output-limit' : 'execution-unknown';
-          if (candidateLimit) receipt.failed++; break;
+          if (candidateLimit) { receipt.failed++; if (c.requirement) receipt.caseResults.push('fail'); }
+          break;
         }
         let exit = r.code;
         if ([125, 126, 127].includes(r.code)) {
@@ -94,7 +99,9 @@ export async function verify(repo: string, commit: string, project: Project, sui
           if (state.code !== 0 || actual.Status !== 'exited' || actual.Error || !Number.isInteger(actual.ExitCode)) { receipt.outcome = 'inconclusive'; receipt.reason = 'container-infrastructure'; break; }
           exit = actual.ExitCode!;
         }
-        if (exit === c.exit && (c.stdout === undefined || r.stdout.trimEnd() === c.stdout.trimEnd())) receipt.passed++;
+        const passed = exit === c.exit && (c.stdout === undefined || r.stdout.trimEnd() === c.stdout.trimEnd());
+        if (c.requirement) receipt.caseResults.push(passed ? 'pass' : 'fail');
+        if (passed) receipt.passed++;
         else { receipt.failed++; if (c.requirement) receipt.requirements.push(c.requirement); receipt.reason = c.requirement ? 'protected-requirement-failed' : 'public-check-failed'; receipt.outcome = 'fail'; }
       } finally {
         retainExport = !await removeContainer(name, execute);

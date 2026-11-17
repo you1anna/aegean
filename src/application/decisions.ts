@@ -10,6 +10,10 @@ import { ApproverSchema, ProjectSchema, ReviewSchema, SuiteSchema, assertSupport
 import { assertRunPolicy, digest, POLICY, type Run } from '../domain/workflow.js';
 import { hostConfig } from './runtime.js';
 import { privateRunDirectory, suiteRelativePath, type LocalRun } from './run-record.js';
+import { allowedPaths, pathsOutsideScope } from './build-checks.js';
+import { ALLOWED_PATHS } from '../domain/allowed-paths.js';
+
+const validAllowedPaths = (folder: string) => allowedPaths(folder).catch(error => { throw new Error(`${ALLOWED_PATHS} in the specification is missing or invalid: ${(error as Error).message}`); });
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/); const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const scope = {
@@ -60,6 +64,7 @@ async function artifactScope(root: string, dir: string, local: LocalRun, run: Ru
 export async function buildSpecArtifact(root: string, dir: string, local: LocalRun, run: Run): Promise<SpecArtifact> {
   const scope = await artifactScope(root, dir, local, run); const path = `openspec/changes/${run.id}`;
   if (await committedSpecDigest(local.worktree, scope.specCommit, path) !== scope.spec || await treeDigest(join(local.worktree, path)) !== scope.spec) throw new Error('specification differs from its frozen committed artifact');
+  await validAllowedPaths(join(local.worktree, path));
   return SpecArtifactSchema.parse({ ...scope, kind: 'spec-approval' });
 }
 
@@ -89,6 +94,12 @@ export async function buildRevisionArtifact(root: string, dir: string, local: Lo
   if (nextSpec !== await treeDigest(join(local.worktree, path))) throw new Error('revision specification differs from its committed tree');
   if (revisionScope === 'implementation' && nextSpec !== run.spec) throw new Error('contract changed; use an explicit contract revision');
   if (revisionScope === 'contract' && nextSpec === run.spec) throw new Error('contract revision requires a changed specification');
+  await validAllowedPaths(join(local.worktree, path));
+  if (revisionScope === 'implementation') {
+    // A human edit outside the approved paths is a change of scope. It goes back to the human, never to a Builder repair.
+    const outside = await pathsOutsideScope(local.worktree, local.base, commit, join(local.worktree, path), run.id);
+    if (outside.length) throw new Error(`the revision changes paths that ${ALLOWED_PATHS} does not allow: ${outside.slice(0, 5).join(', ')}; add them to ${ALLOWED_PATHS}, then use --scope contract`);
+  }
   return RevisionArtifactSchema.parse({ ...scope, kind: 'revision', scope: revisionScope, previousCommit: run.commit, commit, nextSpec, nextSpecCommit: revisionScope === 'contract' ? commit : scope.specCommit, revisions: run.revisions, maxRevisions: POLICY.maxRevisions, activeMs: run.activeMs, repairs: run.repairs });
 }
 

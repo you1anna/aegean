@@ -1,8 +1,16 @@
-import type { Run } from './workflow.js';
+import { STOP_REASONS, type Run } from './workflow.js';
 import { REVIEW_NOTES } from './scout.js';
 
-export interface StepFacts { pilotExpiresAt?: number; specification?: string }
-type Guided = Pick<Run, 'id' | 'state'> & Partial<Pick<Run, 'reason' | 'publicationRef'>>;
+export interface StepFacts { pilotExpiresAt?: number; specification?: string; runFolder?: string }
+type Guided = Pick<Run, 'id' | 'state'> & Partial<Pick<Run, 'reason' | 'publicationRef' | 'repairs'>>;
+
+/** The private file that holds the evidence for a stop by a check or a finding owner. */
+function stopEvidence(run: Guided, folder: string | undefined): string[] {
+  if (!folder) return [];
+  if (run.reason === STOP_REASONS.baseline) return [`Read the base commit results in ${folder}/baseline.json`];
+  if (run.reason === STOP_REASONS.spec || run.reason === STOP_REASONS.factory) return [`Read the review findings in ${folder}/review-${run.repairs ?? 0}.json`];
+  return [];
+}
 
 /** Operator guidance only. It grants no permission and replaces no gate. */
 export function nextSteps(run: Guided, facts: StepFacts = {}, now = Date.now()): string[] {
@@ -28,7 +36,7 @@ export function nextSteps(run: Guided, facts: StepFacts = {}, now = Date.now()):
       : [`Review the candidate, then publish it: aegean publish --run ${id}`, `To change the candidate, edit it, then run: aegean revise --run ${id} --scope implementation|contract`];
     case 'merged': return [`Archive the specification: ${resume}`];
     case 'paused': return [`Correct the cause of the pause: ${run.reason ?? 'unknown; inspect the private diagnostic log'}`, `Then continue: ${resume}`, `Or stop the run: aegean cancel --run ${id}`];
-    case 'escalated': return [`The run stopped and cannot continue: ${run.reason ?? 'no reason recorded'}`, 'Read "Recovery" in the operations guide before new work.'];
+    case 'escalated': return [`The run stopped and cannot continue: ${run.reason ?? 'no reason recorded'}`, ...stopEvidence(run, facts.runFolder), 'Read "Recovery" in the operations guide before new work.'];
     case 'cancelled': case 'archived': return ['This run is complete. For new work, run in the project repository: aegean prepare --request FILE'];
   }
 }

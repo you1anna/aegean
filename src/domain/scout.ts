@@ -1,4 +1,5 @@
 import { z, ZodError } from 'zod';
+import { ALLOWED_PATHS, formatAllowedPaths, parseAllowedPaths } from './allowed-paths.js';
 
 const note = z.string().min(1).max(2000);
 export const DraftSchema = z.object({
@@ -7,6 +8,7 @@ export const DraftSchema = z.object({
   coverage: z.array(note).min(1).max(80),
   constraints: z.array(note).max(40),
   openQuestions: z.array(note).max(40),
+  allowedPaths: z.array(z.string().min(1).max(200)).min(1).max(100),
 }).strict();
 export type Draft = z.infer<typeof DraftSchema>;
 export interface ProjectChecks { checks: string[][]; verifier: { kind: string; image: string; command: string[] } }
@@ -25,6 +27,7 @@ export function scoutPrefix(request: string, project: ProjectChecks): string {
     '- coverage: array of strings. Write one entry for each need in the REQUEST and for each need in a context section that the REQUEST names. Give the need, then the requirement that covers it, or NOT COVERED and the reason. Do not move a need that the REQUEST names to a later change; cover it, or report it as NOT COVERED.',
     '- constraints: array of strings. Write one entry for each repository rule that limits the REQUEST or conflicts with it. Give the file, the rule and its effect on the plan. Obey the rule and report it. Use [] if there is none.',
     '- openQuestions: array of strings. List only a decision that the human must make before approval, and give your recommendation with it. Decide each other matter yourself and give the reason in design. Use [] if there is none.',
+    '- allowedPaths: array of strings. List each repository path that the Builder may create, change or delete. Include the test files and each file that the project checks read or write. End a directory with / to allow each file below it. Use paths relative to the repository root. Do not list aegean.json or .git. Aegean refuses a candidate that changes another path.',
     'Write at most 300 characters in each array entry and at most 10 sentences in verification.',
     'Obey the ignore rules in .gitignore: do not put a committed deliverable in an ignored path.',
     'Do not implement.',
@@ -38,6 +41,8 @@ export function scoutPrefix(request: string, project: ProjectChecks): string {
 export function parseDraft(value: unknown): Draft {
   const draft = DraftSchema.parse(value);
   if (!/^#{2,4} Requirement: \S/m.test(draft.requirements) || !/^#{3,5} Scenario: \S/m.test(draft.requirements)) throw new Error('draft requirements need OpenSpec Requirement and Scenario headings');
+  if (draft.allowedPaths.some(path => /[\r\n]/.test(path) || path.trim().startsWith('#'))) throw new Error('allowed path must be one path without a line break or comment');
+  parseAllowedPaths(draft.allowedPaths.join('\n'));
   return draft;
 }
 
@@ -57,7 +62,7 @@ export function reviewNotes(draft: Draft): string {
 }
 
 export function draftFiles(draft: Draft): Record<string, string> {
-  return { 'proposal.md': draft.proposal, 'design.md': draft.design, 'tasks.md': draft.tasks, 'specs/contract/spec.md': draft.requirements, [REVIEW_NOTES]: reviewNotes(draft) };
+  return { 'proposal.md': draft.proposal, 'design.md': draft.design, 'tasks.md': draft.tasks, 'specs/contract/spec.md': draft.requirements, [REVIEW_NOTES]: reviewNotes(draft), [ALLOWED_PATHS]: formatAllowedPaths(draft.allowedPaths) };
 }
 
 /** Short operator summary; the complete notes stay in the specification folder. */
@@ -86,5 +91,7 @@ export function reviewFlags(review: ReviewSummary): string | undefined {
 export function responseFault(error: unknown): string {
   if (error instanceof ZodError) return `fields: ${[...new Set(error.issues.map(issue => String(issue.path[0] ?? 'root')))].sort().join(', ').slice(0, 200)}`;
   if (error instanceof SyntaxError) return 'not valid JSON';
-  return /Requirement and Scenario headings/.test((error as Error)?.message ?? '') ? 'requirements lack Requirement and Scenario headings' : 'unusable content';
+  const message = (error as Error)?.message ?? '';
+  if (/Requirement and Scenario headings/.test(message)) return 'requirements lack Requirement and Scenario headings';
+  return /^allowed path/.test(message) ? 'allowedPaths has an invalid entry' : 'unusable content';
 }

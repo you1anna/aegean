@@ -72,8 +72,34 @@ See [bounded CLI progress](BOUNDED-CLI-PROGRESS.md) for verification and release
 The [operations guide](OPERATIONS.md#run-lifecycle) describes local decisions and explicit comment approval. Use the installed release's guide for live operations.
 
 Protected tests expose public requirement identifiers to repair feedback. The
-Builder receives the approved requirement text, not hidden cases, expected
-results, raw output or arbitrary Auditor prose.
+Builder receives the approved requirement text and the review findings that the
+independent reviewer assigns to the Builder. It does not receive hidden cases,
+expected results, raw output, test Auditor text, or findings for the
+specification or for Aegean.
+
+### Checks around the build
+
+Three checks are code, not agent judgement:
+
+- **Base commit check.** Before the first build, the verifier runs the protected
+  tests once on the unchanged base commit. A test that passes there cannot show
+  that the change works. If every test passes, the run stops before the Builder
+  starts. Otherwise the result for each requirement is shown at publication.
+- **Allowed paths.** The specification contains `allowed-paths.txt`, which the
+  human approves with the rest of the specification. Verification fails before
+  the protected tests run if the candidate changes another path. The Builder
+  gets those paths in its repair. A human implementation revision that changes
+  another path is refused; the human widens the list with a contract revision.
+- **Finding owners.** The reviewer gives each finding one owner: `builder`,
+  `spec` or `factory` (Aegean itself). Only Builder findings become a repair.
+  A `spec` or `factory` finding stops the run and uses no repair. The reviewer
+  gets the same public verification feedback as the Builder, so that it can
+  decide the owner.
+
+A stopped run is `escalated`; to continue, the human prepares a new run. A
+contract correction inside the same run needs a new run state. Older releases
+cannot read a new state in the shared control ledger, so this change does not
+add one.
 
 Response schemas check structure, not correctness. Deterministic tests, negative
 controls and independent review serve separate purposes. An agent's success

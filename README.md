@@ -17,7 +17,8 @@ You decide whether to merge the pull request.
 2. **Build.** The Builder writes code in an isolated worktree against the approved
    specification.
 3. **Check.** A separate Auditor creates protected tests and reviews the code.
-   The verifier runs the tests and records the results.
+   The verifier runs the tests on the unchanged code first, then on the candidate,
+   and records the results.
 4. **Review.** You inspect the code diff and results, approve the push and decide
    whether to merge.
 

@@ -10,7 +10,9 @@ import { parseDraft, draftFiles, reviewSummary, responseFault } from '../domain/
 import { nextSteps, listSteps } from '../domain/next-steps.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { SuiteSchema, ReviewSchema, assertSupportedImage } from '../domain/config.js';
-import { publicRequirements, repairFeedback } from '../domain/feedback.js';
+import { builderFindings, findingCounts, publicRequirements, repairFeedback } from '../domain/feedback.js';
+import { ALLOWED_PATHS } from '../domain/allowed-paths.js';
+import { allowedPaths, pathsOutsideScope, scopeReceipt, recordBaseline, baselineText } from './build-checks.js';
 import { GitLedger, assertOwned as assertLedgerOwned } from '../adapters/ledger.js';
 import { checked, type Result } from '../adapters/process.js';
 import { atomicJson, readJson, treeDigest } from '../adapters/files.js';
@@ -73,7 +75,8 @@ export async function status(id?: string): Promise<unknown> {
   const specification = local && specificationFolder(local) + '/';
   // Before approval the notes can still change; after approval they are history.
   const review = local && run.state === 'spec-drafted' ? await localReview(local) : undefined;
-  return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), ...(review ? { review } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}) }) };
+  const baseline = run.schemaVersion === 2 ? await baselineText(dir, run.suite).catch(() => undefined) : undefined;
+  return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), ...(review ? { review } : {}), ...(baseline ? { baseline } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}), runFolder: dir }) };
 }
 export async function cancel(id: string, root: string): Promise<unknown> {
   if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
@@ -217,6 +220,7 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
         ...((await candidateGit(['ls-files', '--others', '--exclude-standard', '-z'], { cwd: local.worktree })).stdout.split('\0')),
       ].filter(Boolean);
       if (paths.some(path => !path.startsWith(specPath))) throw new Error('spec revision contains changes outside its OpenSpec directory; preserve them separately');
+      await allowedPaths(specDir).catch(error => { throw new Error(`${ALLOWED_PATHS} in the specification is missing or invalid: ${(error as Error).message}`); });
       await treeDigest(specDir);
       await candidateGitChecked(['add', '--force', '--', specPath], { cwd: local.worktree });
       const specCommit = await saveCandidate(local.worktree, 'docs: revise Aegean change contract');
@@ -277,20 +281,34 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
     while (['tests-staged', 'repair', 'building', 'verifying', 'reviewing'].includes(run.state)) {
       if (signal.aborted) throw new Error('cancelled by operator');
       await assertOwned(); await authorization();
-      if (run.state === 'tests-staged' || run.state === 'repair') await update(nowEvent('begin-build'));
+      if (run.state === 'tests-staged') {
+        const suite = SuiteSchema.parse(await readJson(suitePath));
+        if (digest(JSON.stringify(suite)) !== run.suite) throw new Error('protected suite changed after staging');
+        const limits = await authorization();
+        const deadline = AbortSignal.any([signal, AbortSignal.timeout(limits.remainingMs)]);
+        // The protected tests run once on the unchanged base. Public checks do not run here.
+        const baselineRun = await budgetedExecution(dir, `baseline-${run.revisions}-${run.events.length}`, limits.remainingMs, async () => {
+          const value = await verify(local.worktree, local.base, { ...project, checks: [] }, suite, deadline, undefined, resource => recordVerifierResource(dir, resource));
+          return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
+        });
+        const receipt = JSON.parse(baselineRun.stdout) as Receipt;
+        const decision = await recordBaseline(dir, run.suite!, local.base, suite, receipt);
+        if ('pause' in decision) { await update(nowEvent('pause', { reason: decision.pause, activeMs: receipt.durationMs })); break; }
+        await update(nowEvent('begin-build', { baseline: decision.counts, activeMs: receipt.durationMs }));
+      } else if (run.state === 'repair') await update(nowEvent('begin-build'));
       if (run.state === 'building') {
         await ledger.claimBuilder(id, host.host, local.generation);
         let feedback = '';
         if (run.repairReceipt) {
           const lastReview = ReviewSchema.parse(await readJson(join(dir, `review-${run.repairs - 1}.json`)));
-          feedback = '\nIndependent review findings: ' + JSON.stringify(lastReview.findings);
+          feedback = '\nIndependent review findings: ' + JSON.stringify(builderFindings(lastReview));
           const receipt = await readJson(join(dir, 'repair-feedback.json')) as Receipt;
           if (receipt.spec !== run.spec || receipt.suite !== run.suite || receipt.commit !== run.commit || digest(JSON.stringify(receipt)) !== run.repairReceipt) throw new Error('repair feedback does not match verified evidence');
-          feedback += '\nPublic acceptance feedback: ' + JSON.stringify(repairFeedback(receipt.reason, receipt.requirements, await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8')));
+          feedback += '\nPublic acceptance feedback: ' + JSON.stringify(repairFeedback(receipt.reason, receipt.requirements, await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8'), receipt.outsidePaths));
         }
         const timeout = Math.max(1, POLICY.activeTimeoutMs - run.activeMs);
-        const contract = (await Promise.all(['proposal.md', 'design.md', 'tasks.md', 'specs/contract/spec.md'].map(async path => `\nFILE ${path}\n${(await readBoundedEvidenceFile(join(specDir, path), POLICY.models.roles.builder.inputBytes).catch(error => { throw new Error(`required Builder context ${path} exceeds ${POLICY.models.roles.builder.inputBytes} bytes or is unreadable: ${error.message}`); })).toString('utf8')}`))).join('');
-        const prefix = `Implement only the approved OpenSpec change ${id}. Read its proposal, design, requirements and tasks. Keep the contract, aegean.json and agent configuration unchanged. Do not access hidden tests or credentials. Public test commands: ${JSON.stringify(project.checks)}.${feedback}\nAPPROVED CONTRACT:\n${contract}`;
+        const contract = (await Promise.all(['proposal.md', 'design.md', 'tasks.md', 'specs/contract/spec.md', ALLOWED_PATHS].map(async path => `\nFILE ${path}\n${(await readBoundedEvidenceFile(join(specDir, path), POLICY.models.roles.builder.inputBytes).catch(error => { throw new Error(`required Builder context ${path} exceeds ${POLICY.models.roles.builder.inputBytes} bytes or is unreadable: ${error.message}`); })).toString('utf8')}`))).join('');
+        const prefix = `Implement only the approved OpenSpec change ${id}. Read its proposal, design, requirements and tasks. Change only the paths that ${ALLOWED_PATHS} allows; verification fails for a change to another path. Keep the contract, aegean.json and agent configuration unchanged. Do not access hidden tests or credentials. Public test commands: ${JSON.stringify(project.checks)}.${feedback}\nAPPROVED CONTRACT:\n${contract}`;
         const source = await sourceContext(local.worktree, project.modelExecution!.task, POLICY.models.roles.builder.inputBytes - Buffer.byteLength(prefix) - 256, false);
         await recordContext(join(dir, 'contexts', `builder-${run.repairs}-${run.events.length}-source.json`), { ...source, text: undefined });
         const prompt = prefix + source.text;
@@ -313,10 +331,14 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
         if (digest(JSON.stringify(suite)) !== run.suite) throw new Error('protected suite changed after staging');
         const limits = await authorization();
         const verificationDeadline = AbortSignal.any([signal, AbortSignal.timeout(limits.remainingMs)]);
-        const verified = await budgetedExecution(dir, `verification-${run.revisions}-${run.repairs}-${run.infrastructureRetries}-${run.events.length}`, limits.remainingMs, async () => {
-          const value = await verify(local.worktree, run!.commit!, project, suite, verificationDeadline, undefined, resource => recordVerifierResource(dir, resource));
-          return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
-        });
+        // A change outside the approved allowed paths fails before the protected suite runs.
+        const scopeStarted = Date.now();
+        const outside = await pathsOutsideScope(local.worktree, local.base, run.commit!, specDir, id, verificationDeadline);
+        const verified = outside.length ? { stdout: JSON.stringify(scopeReceipt(run.commit!, suite.spec, run.suite!, project.verifier.image, outside, Date.now() - scopeStarted)) }
+          : await budgetedExecution(dir, `verification-${run.revisions}-${run.repairs}-${run.infrastructureRetries}-${run.events.length}`, limits.remainingMs, async () => {
+            const value = await verify(local.worktree, run!.commit!, project, suite, verificationDeadline, undefined, resource => recordVerifierResource(dir, resource));
+            return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
+          });
         const receipt = JSON.parse(verified.stdout) as Receipt;
         await atomicJson(receiptPath, receipt);
         await observeRun(root, dir, run, 'real-pilot', 'protected-verification', receipt.outcome === 'pass' ? 'pass' : receipt.outcome === 'fail' ? 'fail' : 'unknown', receipt);
@@ -334,11 +356,25 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
         }
         const diff = diffResult.stdout;
         const timeout = Math.max(1, Math.min(900000, POLICY.activeTimeoutMs - run.activeMs));
-        const prompt = `Act as a fresh independent code reviewer. Return ONLY JSON {outcome:"pass"|"repair"|"escalate",findings:string[]}. Identify actionable defects and security/scope risks. Deterministic verification was ${run.verification}.\nCONTRACT:\n${await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8')}\nDIFF:\n${diff}`;
+        const contractText = await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8');
+        const verified = await readJson(join(dir, 'repair-feedback.json')) as Receipt;
+        if (digest(JSON.stringify(verified)) !== run.receipt) throw new Error('review evidence does not match the verified receipt');
+        const evidence = run.verification === 'fail' ? repairFeedback(verified.reason, verified.requirements, contractText, verified.outsidePaths) : [];
+        const prompt = [
+          'Act as a fresh independent code reviewer. Return ONLY JSON {outcome:"pass"|"repair"|"escalate",findings:[{owner:"builder"|"spec"|"factory",finding:string}]}.',
+          'Identify actionable defects and security risks. Give each finding one owner:',
+          '- builder: a defect in the code that the Builder can correct within the approved contract.',
+          '- spec: the contract is wrong, incomplete or contradicts itself, so no correct code can satisfy it.',
+          '- factory: a fault in Aegean itself, for example a protected test or the verifier that checks the wrong thing.',
+          'A spec or factory finding stops the run, and the Builder gets no repair. Use these owners only when the evidence shows that the Builder cannot correct the fault.',
+          `Deterministic verification was ${run.verification}.${evidence.length ? `\nPUBLIC VERIFICATION FEEDBACK:\n${evidence.join('\n')}` : ''}`,
+          `CONTRACT:\n${contractText}`,
+          `DIFF:\n${diff}`,
+        ].join('\n');
         const result = await model('auditor-review', prompt, timeout, (limit, deadline, profile) => claudeRole(bins.claude, prompt, dir, limit, deadline, profile), r => ReviewSchema.parse(parseJsonAnswer(claudeText(r))));
         if (!result) break;
         const review = result.value; await atomicJson(join(dir, `review-${run.repairs}.json`), review);
-        await update(nowEvent('review', { commit: run.commit, outcome: review.outcome, activeMs: result.durationMs }));
+        await update(nowEvent('review', { commit: run.commit, outcome: review.outcome, findings: findingCounts(review), activeMs: result.durationMs }));
       }
     }
     if (run.state === 'human-merge-review') {
@@ -349,7 +385,8 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
         const patch = join(dir, 'candidate-review.patch');
         await writeFile(patch, await candidateGitChecked(['diff', `${local.base}...${run.commit}`], { cwd: local.worktree, maxBytes: 200000 }));
         const reviewPath = join(dir, 'publication-review.md');
-        await writeFile(reviewPath, `# Candidate publication review\n\nCommit: ${run.commit}\nSpec: ${run.spec}\nSuite: ${run.suite}\nVerification receipt: ${run.receipt}\n\nReview the local candidate at ${local.worktree} and diff at ${patch}.\nPublication can trigger repository CI, credentials, runners and deployment integrations.\nAuthorize this exact candidate only after reviewing that exposure:\n\n${approvalCommand}\n\nPost that comment on https://github.com/${project.repository}/pull/${local.pr}, then resume. This is separate from final merge approval.\n`);
+        const baseline = await baselineText(dir, run.suite);
+        await writeFile(reviewPath, `# Candidate publication review\n\nCommit: ${run.commit}\nSpec: ${run.spec}\nSuite: ${run.suite}\nVerification receipt: ${run.receipt}\n\n${baseline ? `${baseline}\n\n` : ''}Review the local candidate at ${local.worktree} and diff at ${patch}.\nPublication can trigger repository CI, credentials, runners and deployment integrations.\nAuthorize this exact candidate only after reviewing that exposure:\n\n${approvalCommand}\n\nPost that comment on https://github.com/${project.repository}/pull/${local.pr}, then resume. This is separate from final merge approval.\n`);
         const receipt = await commandReceipt(project.repository, local.pr!, run.approver, approvalCommand, run.updatedAt, signal);
         if (!receipt) return { run, pr: local.pr, action: `Human publication review required: ${reviewPath}`, approvalCommand };
         await update(nowEvent('authorize-publication', { commit: run.commit, spec: run.spec, suite: run.suite, receipt: run.receipt, actor: 'human', approvalRef: receipt }));

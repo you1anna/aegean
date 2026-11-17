@@ -4,7 +4,7 @@
   "openspec": "2.0.0",
   "codex": "0.167.2",
   "claude": ">=2.1.322 <3.0.0",
-  "policy": "0.6.0",
+  "policy": "0.7.0",
   "minProjectStandard": "0.4.0",
   "supportedHosts": [
     "darwin-arm64",

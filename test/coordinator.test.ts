@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, access, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fixture } from './helpers/coordinator.js';
+import { STOP_REASONS } from '../src/domain/workflow.js';
 import { randomUUID } from 'node:crypto';
 
 test('recovery refuses an initializing lock and cancellation retains ownership until verifier cleanup', async () => {
@@ -160,4 +161,58 @@ test('interrupted Builder stops, preserves approval/suite and releases execution
     assert.equal((await f.ledger()).builder,null);assert.deepEqual((await f.ledger()).repositories,{});
     const stopped=await f.cli(['cancel','--run',id]);assert.equal(stopped.code,0,stopped.stderr);assert.deepEqual((await f.ledger()).owners,{});
   }finally{if(running){running.child.kill('SIGINT');await running.done;}await f.cleanup();}
+});
+
+test('a protected suite that already passes on the base commit stops the run before any Builder call', async () => {
+  const f=await fixture();try{
+    await writeFile(join(f.repo,'app.cjs'),'console.log("ok");\n');await f.realGit(['add','app.cjs']);await f.realGit(['commit','-m','already ok']);await f.realGit(['push','origin','main']);
+    await f.start();await f.scenario({approved:true});const resumed=await f.resume();assert.equal(resumed.code,0,resumed.stderr);
+    const run=await f.current();assert.equal(run.state,'escalated');assert.equal(run.reason,STOP_REASONS.baseline);assert.equal(run.repairs,0);
+    assert.equal((await f.events()).filter(e=>e.role==='builder').length,0);assert.deepEqual((await f.ledger()).owners,{});
+    const record=JSON.parse(await readFile(join(f.state,'runs',run.id,'baseline.json'),'utf8'));
+    assert.equal(record.suite,run.suite);assert.deepEqual(record.summary.alreadyPassing,['R001']);
+    const status=JSON.parse((await f.cli(['status','--run',run.id])).stdout);assert.match(status.next.join('\n'),/baseline\.json/);
+  }finally{await f.cleanup();}
+});
+
+test('an inconclusive base commit check pauses, and resume repeats it without a second Auditor call', async () => {
+  const f=await fixture();try{
+    await f.start();await f.scenario({approved:true,baselineInfraOnce:true});const paused=await f.resume();assert.equal(paused.code,0,paused.stderr);
+    const run=await f.current();assert.equal(run.state,'paused');assert.equal(run.resumeState,'tests-staged');assert.match(run.reason!,/Base commit check inconclusive \(container-infrastructure\)/);
+    assert.equal((await f.events()).filter(e=>e.role==='builder').length,0);
+    await f.scenario({approved:true});const resumed=await f.resume();assert.equal(resumed.code,0,resumed.stderr);
+    assert.equal((await f.current()).state,'human-merge-review');assert.equal((await f.current()).suite,run.suite);
+    assert.equal((await f.events()).filter(e=>e.role==='auditor-tests').length,1);
+    const record=JSON.parse(await readFile(join(f.state,'runs',run.id,'baseline.json'),'utf8'));assert.deepEqual(record.summary.seenFailing,['R001']);
+  }finally{await f.cleanup();}
+});
+
+test('a change outside the allowed paths fails verification before the suite and returns to the Builder with the paths', async () => {
+  const f=await fixture();try{
+    await f.start();await f.scenario({approved:true,builderOutsideScope:true});const resumed=await f.resume();assert.equal(resumed.code,0,resumed.stderr);
+    const prompts=(await f.events()).filter(e=>e.role==='builder').map(e=>String(e.prompt));
+    assert.equal(prompts.length,3);assert.match(prompts[0]!,/FILE allowed-paths\.txt[\s\S]*app\.cjs/);
+    assert.match(prompts[1]!,/allowed-paths\.txt does not allow: \[\\"extra\.txt\\"\]/);
+    // Only the base commit check ran the protected suite; each candidate failed the allowed paths check first.
+    assert.equal((await f.events()).filter(e=>e.effect==='verify').length,1);
+    assert.equal((await f.current()).state,'escalated');assert.equal((await f.current()).reason,'repair attempts exhausted');
+  }finally{await f.cleanup();}
+});
+
+test('a specification finding stops the run with no repair, and only Builder findings reach the Builder', async () => {
+  const f=await fixture();try{
+    await f.start();await f.scenario({approved:true,verifierFail:true,reviewOutcome:'repair',reviewFindings:[{owner:'builder',finding:'Print ok, not wrong'}]});
+    await f.resume();const repaired=(await f.events()).filter(e=>e.role==='builder').map(e=>String(e.prompt));
+    assert.match(repaired[1]!,/Independent review findings: \["Print ok, not wrong"\]/);
+    const review=(await f.events()).find(e=>e.role==='auditor-review');
+    assert.match(String(review!.prompt),/PUBLIC VERIFICATION FEEDBACK:\nProtected acceptance found a public requirement violation\.\nR001: Output/);
+    assert.match(String(review!.prompt),/A spec or factory finding stops the run/);
+  }finally{await f.cleanup();}
+  const g=await fixture();try{
+    await g.start();await g.scenario({approved:true,verifierFail:true,reviewOutcome:'repair',reviewFindings:[{owner:'builder',finding:'Print ok'},{owner:'spec',finding:'R001 contradicts the request'}]});
+    const resumed=await g.resume();assert.equal(resumed.code,0,resumed.stderr);
+    const run=await g.current();assert.equal(run.state,'escalated');assert.equal(run.reason,STOP_REASONS.spec);assert.equal(run.repairs,0);
+    assert.equal((await g.events()).filter(e=>e.role==='builder').length,1);assert.deepEqual((await g.ledger()).owners,{});
+    const status=JSON.parse((await g.cli(['status','--run',run.id])).stdout);assert.match(status.next.join('\n'),/review-0\.json/);
+  }finally{await g.cleanup();}
 });

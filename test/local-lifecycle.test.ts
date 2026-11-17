@@ -31,6 +31,11 @@ test('local approvals, exact publication, implementation and contract revisions 
     ok(await decision(f, 'approve', {}, `if(!summary.includes('The draft is not complete: 1 open question. Read review-notes.md')) throw new Error('the summary lacks the review flags')`)); await f.scenario({ verifierFailOnce: true }); ok(await f.resume()); assert.equal((await f.current()).state, 'human-merge-review');
     assert.equal((await f.current()).repairs, 1); await f.scenario({});
     const local = await f.local(); await writeFile(join(local.worktree, 'note.txt'), 'implementation revision'); await f.realGit(['add', '.'], local.worktree); await f.realGit(['commit', '-m', 'revision'], local.worktree);
+    // A human edit outside allowed-paths.txt goes back to the human; it never becomes a Builder repair.
+    const outside = await decision(f, 'revise', { scope: 'implementation' }); assert.notEqual(outside.code, 0); assert.match(outside.stderr, /allowed-paths\.txt does not allow: note\.txt; add them to allowed-paths\.txt, then use --scope contract/);
+    assert.equal((await f.current()).state, 'human-merge-review');
+    await f.realGit(['reset', '--hard', 'HEAD~1'], local.worktree);
+    await writeFile(join(local.worktree, 'app.cjs'), (await readFile(join(local.worktree, 'app.cjs'), 'utf8')) + '// implementation revision\n'); await f.realGit(['add', '.'], local.worktree); await f.realGit(['commit', '-m', 'revision'], local.worktree);
     ok(await decision(f, 'revise', { scope: 'implementation' }));
     const revised = await f.current(); assert.equal(revised.state, 'verifying'); assert.equal(revised.receipt, undefined); assert.equal(revised.publicationRef, undefined);
     ok(await f.resume()); assert.equal((await f.current()).state, 'human-merge-review');
