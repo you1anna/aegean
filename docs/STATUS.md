@@ -37,6 +37,9 @@ a specification fault stops the run instead of a contract revision in the same r
 
 `aegean guide` offers `allowed-paths.txt` with the other specification files at review.
 
+CI now permits 25 minutes, not 15. The first CI run of this change stopped at the 15-minute limit; each test that ran had passed.
+The last `main` run needed 11 minutes 12 seconds for the tests. This branch reached the same test 1.5 times later, so the projected need is about 17 minutes.
+
 Not established: no live model call and no installation used these changes. The effect on real drafts and runs is unmeasured.
 Host qualification is necessary again after installation.
 The Scout sees only a few project files and no file tree, so its allowed paths can be too narrow. Each breach then uses a repair; the human must check the list at approval.
