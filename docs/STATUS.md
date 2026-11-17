@@ -35,7 +35,10 @@ The control ledger schema did not change, so an older release can still read the
 These policy choices remain subject to human review: a suite that passes completely on the base commit stops the run;
 a specification fault stops the run instead of a contract revision in the same run; a scope breach uses one Builder repair.
 
+`aegean guide` offers `allowed-paths.txt` with the other specification files at review.
+
 Not established: no live model call and no installation used these changes. The effect on real drafts and runs is unmeasured.
+Host qualification is necessary again after installation.
 The Scout sees only a few project files and no file tree, so its allowed paths can be too narrow. Each breach then uses a repair; the human must check the list at approval.
 A model can give a finding the wrong owner. A wrong `spec` or `factory` owner stops a run that a repair could have completed.
 The check results are in the pull request.
