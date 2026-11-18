@@ -1,40 +1,45 @@
-# Aegean guides
+# Documentation
 
-[Overview](../README.md) · [Workflow](WORKFLOW.md) · [Contribute](../CONTRIBUTING.md)
+[Overview](../README.md) · [Workflow](WORKFLOW.md) · [Architecture](ARCHITECTURE.md) · [Contribute](../CONTRIBUTING.md)
+
+## Understand Aegean
+
+| Guide | What it explains |
+| --- | --- |
+| [Workflow](WORKFLOW.md) | The stages, artifacts and human decisions. |
+| [Architecture](ARCHITECTURE.md) | Components, agent context, test isolation and design trade-offs. |
+| [Testing](TESTING.md) | Source checks and the evidence behind the controls. |
+| [Status](STATUS.md) | Recorded results and open release gates. |
+
+## Use Aegean
 
 | Task | Guide |
 | --- | --- |
-| Understand the roles and review steps | [Workflow](WORKFLOW.md) |
-| Prepare an approved installation | [Installation](OPERATIONS.md#install-on-either-mac) |
-| Inspect authentication and the verifier | [Host commands](OPERATIONS.md#host-commands) |
-| Check project configuration | [Configuration files](OPERATIONS.md#configuration-files) |
-| Prepare a project and write a request | [Project and request](OPERATIONS.md#prepare-the-project-and-the-request) |
-| Draft and approve a specification with guided questions | [Interactive guide](OPERATIONS.md#use-the-interactive-guide) |
-| Start and review a run | [Run lifecycle](OPERATIONS.md#run-lifecycle) |
-| Inspect a run and its evidence | [Run records](OPERATIONS.md#run-records-and-debugging) |
-| Recover interrupted work | [Recovery](OPERATIONS.md#recovery) |
-| Change the code or documentation | [Contribute](../CONTRIBUTING.md) |
+| Install a reviewed release | [Installation](OPERATIONS.md#install-on-either-mac) |
+| Inspect login and verifier readiness | [Host commands](OPERATIONS.md#host-commands) |
+| Configure an eligible project | [Configuration files](OPERATIONS.md#configuration-files) |
+| Prepare a request | [Project and request](OPERATIONS.md#prepare-the-project-and-the-request) |
+| Draft and approve a specification | [Interactive guide](OPERATIONS.md#use-the-interactive-guide) |
+| Verify and publish a candidate | [Verification and publication](OPERATIONS.md#verification-and-publication) |
+| Inspect evidence or recover a run | [Run records](OPERATIONS.md#run-records-and-debugging) · [Recovery](OPERATIONS.md#recovery) |
 
 ## Supported use
 
-Controlled trials currently support specification drafting and review. Implementation
-requires release acceptance or an authorised pilot with passing native prerequisites.
-The complete delivery workflow remains under evaluation.
-The initial adapter targets command-line changes on macOS.
+- **Observed:** specification drafts reached human review in controlled trials.
+- **Under evaluation:** complete delivery, including a real build, protected verification and publication.
+- **Initial scope:** command-line changes on macOS. Implementation needs release acceptance or an authorised pilot with passing native prerequisites.
 
-Before installation or a run, read the [operating requirements](OPERATIONS.md).
-If Aegean is already installed, inspect its readiness:
+If Aegean is installed, inspect its release and readiness:
 
 ```sh
 aegean info --json
 aegean doctor --require prerequisites
 ```
 
-Read the full workflow readiness (`fullWorkflowReady` in JSON) and each reported check. Use the operations guide path
-in the result for that installed version. A source checkout can describe changes
-that the installed release does not yet contain.
+Read `fullWorkflowReady` and each reported check. Use the operations guide reported by that installation.
+A source checkout can describe changes that the installed release does not contain.
 
-## Technical reference
+## Develop Aegean
 
-The [engineering guide](ENGINEERING.md) links to architecture, technical decisions,
-release evidence and trial records.
+Use [Contribute](../CONTRIBUTING.md) for source changes and documentation rules.
+The [engineering reference](ENGINEERING.md) links to model policy, approved decisions and historical records.

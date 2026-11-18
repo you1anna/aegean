@@ -1,55 +1,57 @@
 # Workflow
 
-[Overview](../README.md) · [Guides](README.md)
+[Overview](../README.md) · [Architecture](ARCHITECTURE.md) · [Guides](README.md)
 
-Aegean separates specification, implementation and verification. You approve the
-scope before implementation and review the code and test results before publication.
+Each stage produces an artifact or a decision for the next stage.
+The coordinator controls the sequence; agents cannot approve their own work.
+
+| Stage | Who acts | Result |
+| --- | --- | --- |
+| Specify | Scout, then human | An approved OpenSpec contract and allowed paths. |
+| Prepare tests | Test Auditor, then verifier | A protected suite and its results on the unchanged base commit. |
+| Implement | Builder | A candidate commit within the approved scope. |
+| Verify and review | Verifier, then a fresh Auditor call | Test evidence and findings against that candidate. |
+| Publish | Human, then coordinator | Approval for the exact candidate, then a pull request. |
+| Merge | Human | A separate decision to accept the change. |
 
 ## 1. Draft the specification
 
-Describe the problem, the expected behaviour and the constraints. The Scout uses
-Claude Code to draft an OpenSpec specification with requirements and success criteria.
+Describe the problem, expected behaviour and constraints. The Scout drafts the requirements, design and tasks.
+It receives the request and [selected committed project files](OPERATIONS.md#prepare-the-project-and-the-request).
 
-The Scout reads the request, the project checks and a fixed set of committed project files.
-It cannot read other files on your computer. The operations guide lists
-[what the Scout reads](OPERATIONS.md#prepare-the-project-and-the-request).
-
-Review the specification before implementation. Resolve missing requirements or
-unwanted changes at this stage. Start with the review notes in the draft: they list the
-project rules that limited the request, the open questions and each need that the draft omits.
+Read `review-notes.md` first. Resolve open questions and omitted requirements before approval.
+Check that `allowed-paths.txt` includes each file the change needs.
 
 ## 2. Approve the scope
 
-Request revisions where needed. Your approval identifies an exact specification
-revision, so implementation and tests refer to the same requirements.
+Your approval binds an exact specification revision. The Builder and test author use that same contract.
+A later contract change needs new approval and new protected tests.
 
 ## 3. Build and check the code
 
-The Auditor uses Claude Code to prepare protected tests from the approved
-specification. The Builder uses Codex to write code in an isolated worktree.
+This stage requires release acceptance or an authorised pilot with passing native prerequisites.
+See [supported use](README.md#supported-use).
 
-Before the Builder starts, the verifier runs the tests on the unchanged code. A test that
-already passes there cannot show that the change works; if every test passes, the run stops.
-The approved specification also lists the paths that the Builder may change.
+1. The test Auditor derives protected cases from the contract, without implementation context.
+2. The verifier runs them on the base commit. If every case passes, the run stops before implementation.
+3. The Builder changes the candidate through a restricted tool bridge.
+4. The verifier checks allowed paths, public checks and protected cases.
+5. A fresh Auditor call reviews the contract, candidate diff and public verification feedback.
 
-The verifier then checks the changed paths, runs the tests on the candidate and records the
-results. The Auditor reviews the candidate code in a fresh context and gives each finding an owner.
-A code defect goes back to the Builder; repair attempts have a fixed limit. A fault in the
-specification or in Aegean stops the run for you, with no repair.
+| Finding owner | Next step |
+| --- | --- |
+| Builder | Repair within the contract, subject to the repair limit. |
+| Specification | Stop for a corrected request and a new run. |
+| Aegean | Stop for a fix to Aegean before a new run. |
 
-This stage requires release acceptance or an authorised pilot with passing native prerequisites. Full delivery remains under evaluation;
-see [supported use](README.md#supported-use) before a run.
+The [isolation diagram](ARCHITECTURE.md#protected-verification) shows what stays private during these checks.
 
 ## 4. Review and publish
 
-Inspect the code diff, test results and review findings. Approve publication only
-when you are satisfied with the change. Aegean checks that approval before the push.
+Inspect the diff, test results and findings. Your publication approval binds the exact candidate and its evidence.
+Aegean then pushes the candidate. You decide separately whether to merge the pull request. Aegean never merges it.
 
-You then decide whether to merge the pull request. Aegean never supplies your
-approval or merges on your behalf.
+## Run the workflow
 
-## Operating instructions
-
-For the first two stages, `aegean guide` asks a question for each step; see the [interactive guide](OPERATIONS.md#use-the-interactive-guide).
-For commands, approval steps and recovery, use the [operations guide](OPERATIONS.md).
-For roles and trust boundaries, read the [architecture](ARCHITECTURE.md).
+Use [the interactive guide](OPERATIONS.md#use-the-interactive-guide) through specification approval.
+Use [the operating instructions](OPERATIONS.md#verification-and-publication) for verification, publication and revisions.

@@ -1,26 +1,102 @@
 # Architecture
 
-[Documentation](README.md) · [Operations](OPERATIONS.md) · [Status](STATUS.md)
+[Overview](../README.md) · [Workflow](WORKFLOW.md) · [Testing](TESTING.md) · [Status](STATUS.md)
 
-Aegean separates decisions, implementation and evidence. A small coordinator
-controls the workflow; each model receives only the context and tools for its role.
-This page describes the design and its limits. [Status](STATUS.md) records what
-trials proved.
+Aegean separates the contract, implementation and evidence. A deterministic coordinator controls each transition and external action.
+Models propose artifacts; code checks the gates; the human approves scope, publication and merge.
+
+This page describes the source design. [Status](STATUS.md) records what trials established.
+
+## System components
+
+```mermaid
+flowchart LR
+    accTitle: Aegean system components
+    accDescr: Human approvals enter the coordinator. It calls model roles, invokes the verifier, records ownership and checkpoints in the control ledger, and publishes approved candidates to GitHub.
+    H["Human<br/>Scope + publication approval"] --> C["Coordinator<br/>State · budgets · gates"]
+    C <-->|prompts / artifacts| A["Model roles<br/>Scout · Builder · Auditor"]
+    C <-->|commits / receipts| V["Verifier<br/>Restricted candidate execution"]
+    C <-->|ownership / checkpoints| L[("Control ledger<br/>Private Git branch")]
+    C -->|approved push| G["GitHub<br/>Pull request for human merge"]
+    classDef core fill:#243e60,stroke:#8ca9cf,color:#ffffff,stroke-width:1.5px
+    classDef service fill:#e8eff8,stroke:#56749a,color:#182d49,stroke-width:1.5px
+    classDef human fill:#fce8d8,stroke:#ae7044,color:#442b1b,stroke-width:1.5px
+    class C core
+    class A,V,L,G service
+    class H human
+```
+
+The coordinator passes selected artifacts between roles. There is no shared agent conversation or direct agent-to-agent channel.
+The verifier uses no model.
 
 ## Roles
 
-| Role | Responsibility |
-| --- | --- |
-| Human | Approve the specification, approve candidate publication and decide whether to merge. |
-| Scout — Claude Code | Draft a specification from the request and public project context. |
-| Auditor — Claude Code | Create independent protected tests and review the candidate in a fresh context. |
-| Builder — Codex | Write and repair candidate code within the approved scope. |
-| Verifier | Execute the candidate in an isolated container and compare results with protected expectations. |
-| Coordinator | Control state, credentials, ownership, budgets and external actions. |
+| Role | Receives | Produces |
+| --- | --- | --- |
+| Scout — Claude Code | Request, project checks and selected committed files. | Draft OpenSpec contract and review notes. |
+| Test Auditor — Claude Code | Approved requirements and public requirement IDs. No implementation context. | Protected input/output cases. |
+| Builder — Codex | Approved contract, candidate files, public checks and filtered repair feedback. | Candidate code. |
+| Review Auditor — Claude Code | Contract, complete candidate diff and public verification feedback. | Findings with an owner. |
+| Verifier | Exact commit, public checks and protected suite. | A receipt with test results and artifact identities. |
+| Human | Specification, diff, results and findings. | Scope approval, publication approval and merge decision. |
 
-The normal sequence is specification, human approval, protected tests,
-implementation, verification, review, publication approval and human merge.
-The coordinator never posts an approval for the human or merges a pull request.
+The two Auditor tasks use separate, fresh calls. The reviewer sees the code deliberately; it does not receive the Builder's conversation.
+Independent context reduces shared assumptions. It does not prove that a model's tests or findings are correct.
+
+The [coordinator](../src/application/engine.ts) builds role inputs; the [Claude adapter](../src/adapters/agents.ts) disables tools and saved sessions.
+
+## Protected verification
+
+```mermaid
+flowchart TB
+    accTitle: Protected tests and candidate execution
+    accDescr: The approved contract goes separately to the test Auditor and Builder. The protected suite stays on the trusted host. The verifier sends only runtime input to the candidate container, receives output and exit status, then compares those with private expectations. Filtered requirement feedback can return to the Builder.
+    S["Approved contract"] --> T["Test Auditor<br/>No implementation context"]
+    S --> B["Builder<br/>No protected suite access"]
+    T --> P["Protected suite<br/>Inputs + expected results"]
+    B --> K["Read-only candidate files"]
+    subgraph HOST["Trusted host · verifier"]
+        P --> O["Compare results<br/>Record receipt"]
+    end
+    subgraph VM["Dedicated VM · restricted container"]
+        K --> X["Candidate process"]
+    end
+    P -->|runtime input only| X
+    X -->|output + exit status| O
+    O -.-> F["Public feedback<br/>Next Builder attempt"]
+    classDef public fill:#e8eff8,stroke:#56749a,color:#182d49,stroke-width:1.5px
+    classDef private fill:#fce8d8,stroke:#ae7044,color:#442b1b,stroke-width:1.5px
+    classDef runtime fill:#243e60,stroke:#8ca9cf,color:#ffffff,stroke-width:1.5px
+    class S,T,B,K,F public
+    class P,O private
+    class X runtime
+    style HOST fill:transparent,stroke:#ae7044,stroke-width:1.5px
+    style VM fill:transparent,stroke:#56749a,stroke-width:1.5px
+```
+
+The coordinator mediates these transfers. Solid arrows show artifacts and execution data. The dashed arrow shows filtered feedback for a later repair.
+
+- **The suite stays outside the candidate.** No protected test files, expected results, credentials or Docker socket enter the container.
+- **The candidate sees its runtime input.** The host compares output and exit status with private expectations; it never imports candidate code.
+- **Repair feedback stays narrow.** The Builder receives public requirement IDs and text, scope breaches and Builder-owned review findings.
+- **Raw results stay private.** Hidden cases, expected results, actual output and test Auditor text do not enter repair feedback.
+
+The verifier rejects symlinks and paths that can contain secrets before export. Public checks use the same restricted container.
+
+The [verifier adapter](../src/adapters/verifier.ts) owns execution and comparison.
+The [feedback rules](../src/domain/feedback.ts) own the information returned for repair.
+
+## Design choices
+
+| Choice | Reason | Cost or limit |
+| --- | --- | --- |
+| Approved OpenSpec contract | Give implementation and tests the same explicit requirements. | The human must resolve omissions before approval. |
+| Separate test author and Builder | Keep test design independent of implementation choices. | Generated tests can still omit a requirement or encode it incorrectly. |
+| Host comparison outside the container | Keep expected results beyond candidate access. | The adapter supports bounded CLI input/output contracts only. |
+| Pure workflow rules, explicit adapters | Test decisions without provider, Git or VM access. | Each new external capability needs an adapter and failure checks. |
+| Git-backed ownership and checkpoints | Coordinate two hosts without a shared live database. | Conflicts need reconciliation; there is no automatic takeover. |
+| One global Builder permit | Bound implementation capacity across hosts. | Builds are serial; a retained permit blocks later builds. |
+| Subscription CLI accounts | Use the operator's existing provider access. | Strict token caps are unsupported; an active call can exceed its allowance. |
 
 ## Code structure
 
@@ -29,158 +105,98 @@ CLI → application services → domain rules
                           → adapters
 ```
 
-- `src/cli.ts` receives commands.
-- `src/application/` coordinates each operation.
-- `src/domain/` owns pure workflow rules and data contracts.
-- `src/adapters/` handles processes, files, Git, GitHub, agents and verification.
+| Layer | Responsibility |
+| --- | --- |
+| [`src/cli.ts`](../src/cli.ts) | Parse commands and dispatch operations. |
+| [`src/application/`](../src/application/) | Coordinate operations, effects and recovery. |
+| [`src/domain/`](../src/domain/) | Define pure workflow rules and data contracts. |
+| [`src/adapters/`](../src/adapters/) | Handle processes, files, Git, GitHub, models and containers. |
 
-`aegean guide` is one more caller of the command dispatch in `src/cli.ts`. `src/domain/guide.ts` owns its choices,
-`src/application/guide.ts` its sequence and `src/adapters/terminal.ts` its prompts. It has no separate route to an effect.
-`src/application/cli-output.ts` formats a command result as text for a terminal. It has no I/O. JSON stays the
-contract for pipes, files and `--json`; [Read command output](OPERATIONS.md#read-command-output) gives the rule.
-
-Domain code does not import application services or adapters. Tests guard this
-boundary. There is no general scheduler or background model polling.
+Domain code imports neither application services nor adapters. [Boundary tests](../test/installation.test.ts) guard that rule.
+The guide calls the same command dispatch; it has no separate route to an effect.
+There is no general scheduler or background model polling.
 
 ## Data ownership
 
 | Data | Owner |
 | --- | --- |
-| Approved change contract | OpenSpec files in the project. |
-| Protected test source and expected results | The private verifier repository. |
-| Shared run state and global ownership | The verifier repository's separate `control` branch. |
-| Private execution context and local paths | Local run records. |
-| Reusable implementation | This source repository. |
+| Approved contract | Project OpenSpec files. |
+| Protected suite | Private verifier repository. |
+| Shared run state and permits | The verifier repository's separate `control` branch. |
+| Local paths, execution context and diagnostics | Private local run records. |
+| Runtime versions and policy limits | [`toolchain.json`](../toolchain.json). |
 
-The control ledger records durable run ownership separately from execution capacity.
-Each repository has one execution permit. One global Builder permit limits
-implementation across hosts. Human waits release permits only after confirmed cleanup;
-the run retains its owner. Local files do not create a competing shared owner.
+Each repository has one execution permit. One global permit bounds Builder execution across hosts.
+Human waits release permits only after confirmed cleanup; the run retains its owner.
 
-Control updates use a parent revision and a normal Git push. Two competing pushes
-cannot both advance the same parent. An uncertain push requires a fresh remote
-read. Owner generations reject updates from an earlier owner.
-
-No timeout permits another host to take over. Interrupted work requires an
-explicit recovery decision. See [recovery](OPERATIONS.md#recovery).
+Control updates use a parent revision and a normal Git push. Competing updates cannot both advance the same parent.
+A lost push response requires a remote read. Owner generations reject stale updates.
+No timeout allows another host to take over automatically.
 
 ## Approval and evidence
 
-Approval binds the specification revision, candidate and verification evidence.
-The source in PR #2 separates local decisions from publication. It stops for
-local specification review before the first push. The `approve`, `publish` and `revise` commands bind exact artifacts and human identity.
-See [bounded CLI progress](BOUNDED-CLI-PROGRESS.md) for verification and release limits.
-
-The [operations guide](OPERATIONS.md#run-lifecycle) describes local decisions and explicit comment approval. Use the installed release's guide for live operations.
-
-Protected tests expose public requirement identifiers to repair feedback. The
-Builder receives the approved requirement text and the review findings that the
-independent reviewer assigns to the Builder. It does not receive hidden cases,
-expected results, raw output, test Auditor text, or findings for the
-specification or for Aegean.
+Specification approval binds the exact contract. Publication approval binds the candidate, specification, protected suite and verification receipt.
+A revision invalidates the affected evidence and requires the relevant checks again.
 
 ### Checks around the build
 
-Three checks are code, not agent judgement:
+| Check | Rule | Failure result |
+| --- | --- | --- |
+| Base commit | Run the protected cases before the first build. | If every case already passes, stop before the Builder starts. |
+| Allowed paths | Compare candidate changes with approved `allowed-paths.txt`. | Fail verification before tests; name the paths in repair feedback. |
+| Finding owner | Route each review finding to `builder`, `spec` or `factory` (Aegean). | Repair Builder defects within budget; stop for specification or Aegean faults. |
 
-- **Base commit check.** Before the first build, the verifier runs the protected
-  tests once on the unchanged base commit. A test that passes there cannot show
-  that the change works. If every test passes, the run stops before the Builder
-  starts. Otherwise the result for each requirement is shown at publication.
-- **Allowed paths.** The specification contains `allowed-paths.txt`, which the
-  human approves with the rest of the specification. Verification fails before
-  the protected tests run if the candidate changes another path. The Builder
-  gets those paths in its repair. A human implementation revision that changes
-  another path is refused; the human widens the list with a contract revision.
-- **Finding owners.** The reviewer gives each finding one owner: `builder`,
-  `spec` or `factory` (Aegean itself). Only Builder findings become a repair.
-  A `spec` or `factory` finding stops the run and uses no repair. The reviewer
-  gets the same public verification feedback as the Builder, so that it can
-  decide the owner.
+A passing base case can check existing behaviour; it cannot demonstrate the requested change.
+The publication report shows base results by requirement. A specification or Aegean finding escalates the run; continuation needs a new run.
 
-A stopped run is `escalated`; to continue, the human prepares a new run. A
-contract correction inside the same run needs a new run state. Older releases
-cannot read a new state in the shared control ledger, so this change does not
-add one.
-
-Response schemas check structure, not correctness. Deterministic tests, negative
-controls and independent review serve separate purposes. An agent's success
-message is not verification evidence.
+Response schemas check structure, not correctness. Test results and fresh review serve different purposes.
+An agent's success message is not verification evidence.
 
 ## Execution boundaries
 
 ### Model calls and candidate code
 
-Claude planning and review calls have no tools. They use subscription login,
-restricted mode and bounded inputs. Their responses must pass schema checks.
+| Boundary | Control |
+| --- | --- |
+| Scout and Auditor calls | No tools, restricted mode, fresh context and schema checks. |
+| Builder client on the host | Subscription authentication; candidate tools use a restricted bridge. |
+| Builder execution in the VM | Bounded snapshots supply files; validated import returns changes to the worktree. |
+| Verifier container | No network; read-only candidate and root filesystem; unprivileged user; no extra capabilities; CPU, memory, process and time limits. |
 
-The Builder uses a trusted host Codex client and a restricted tool bridge.
-Candidate execution occurs in a dedicated VM container. Bounded snapshots supply
-candidate files; validated import returns the result to the worktree. Host model
-authentication stays outside candidate execution.
-
-The old host-execution entry points refuse use. Resource and import records
-support interruption recovery. Unknown cleanup retains ownership and execution intent.
-Native synthetic controls are recorded in [bounded CLI progress](BOUNDED-CLI-PROGRESS.md);
-they do not establish full live workflow acceptance.
-
-The installed bootstrap used a native process boundary that failed detached-process
-containment. Its evidence does not describe the newer VM boundary or qualify a
-new release. See [release acceptance](ACCEPTANCE.md).
+[Model use](MODEL-USAGE.md) explains context and token limits.
+[Operations](OPERATIONS.md#check-the-installation) lists candidate resource limits.
+Unsupported controls stop execution.
 
 ### Git on the host
 
-The coordinator controls host Git operations. It suppresses hooks and auxiliary
-execution. It rejects executable filters, diff helpers and writable configuration
-includes. Environment overrides cannot change the configuration between validation
-and execution. Candidate scripts are not trusted host helpers.
+The coordinator owns host Git effects. It suppresses hooks and rejects executable filters, diff helpers and writable configuration includes.
+Environment overrides cannot change configuration between validation and execution. Candidate scripts never become trusted host helpers.
 
-### Protected verification
+### Interruption and recovery
 
-The verifier exports an exact candidate commit. It rejects symlinks and paths
-that can contain secrets. Candidate processes run in a dedicated Colima Docker
-context, with these restrictions:
+The coordinator records resource intent before execution. Unknown cleanup retains ownership and blocks resume or permit release.
+Recovery checks saved effects before retry, so a lost response must not create a second publication or model call.
 
-- No network, host credentials, protected test mounts or Docker socket.
-- A read-only filesystem, an unprivileged user and no extra capabilities.
-- Explicit CPU, memory, process and time limits.
-
-The host compares results with protected expectations; it never imports candidate
-code. The candidate sees its runtime inputs. Public checks use the same restricted
-container boundary.
-
-The coordinator records container and export intentions before execution. If
-cleanup remains uncertain, resume and ownership release stay blocked. Cancellation
-and crash recovery must reconcile those resources too.
-
-## Scope and limits
-
-The first adapter supports CLI input/output contracts. Dependencies must exist in
-the pinned image or tracked candidate. Network installs, native macOS tests,
-browser tests, HTTP services and privileged infrastructure need reviewed adapters.
-Do not enrol a project whose required verification exceeds this boundary.
-
-[toolchain.json](../toolchain.json) owns execution budgets and supported versions.
-[Operations](OPERATIONS.md) explains installation and the current runtime limits.
-[Acceptance](ACCEPTANCE.md) explains evidence for an exact installed release.
-
-These controls address agent mistakes and hostile candidate code within the tested
-boundary. They do not protect against the workstation administrator or a
-compromised OS, hypervisor or provider. An operator can also override controls
-outside Aegean. GitHub Free does not enforce private repository branch protection.
-
-Test strength and defects after merge need measurement before any claim of
-productivity gains.
+[Run records](OPERATIONS.md#run-records-and-debugging) expose state, effect identities, usage and diagnostics.
+Use the [recovery procedure](OPERATIONS.md#recovery) to reconcile retained resources.
 
 ## Model policy and usage
 
-The workflow policy includes model identifiers, effort, context limits and qualification records from `toolchain.json`.
-The frozen project policy includes token allowances and task scope. Candidate changes cannot alter either policy.
-Pure selection and accounting rules live in `src/domain/`. CLI usage parsers remain in adapters.
+The run retains its model settings, context limits and project token allowances. Candidate code cannot change them.
+The coordinator reserves allowance under a short local lock; no provider call occurs inside that lock.
+Completed effects settle once. An unknown outcome retains its reservation and blocks another call.
 
-The coordinator reserves allowance under a short local lock before each call.
-The existing run owner and execution permit still control capacity. No provider call occurs inside the reservation lock.
-Completed effects keep their original model and context identity across recovery.
-Usage settlement is idempotent; an unknown outcome retains its reservation.
+[Model use](MODEL-USAGE.md) owns the policy fields, selection rules and accounting limits.
 
-See [model use](MODEL-USAGE.md) for the available controls and qualification limits.
+## Scope and limits
+
+- Dependencies must exist in the pinned image or tracked candidate. Verification does not install them.
+- Browser tests, HTTP services, native macOS tests and privileged infrastructure need reviewed adapters.
+- The workstation administrator, OS, hypervisor and provider remain trusted. These controls do not defend against their compromise.
+- [GitHub Free](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) does not provide branch protection for private repositories. Human review remains an operating requirement.
+- Synthetic tests establish specific source behaviour. Native containment and live delivery require evidence for the exact host and release.
+
+Test strength and defects after merge still need measurement.
+
+The former host process boundary failed detached-process containment. Its evidence does not qualify the current VM design.
+See the [test evidence map](TESTING.md#what-the-tests-cover), [recorded results](STATUS.md) and [release acceptance contract](ACCEPTANCE.md).

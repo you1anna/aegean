@@ -81,6 +81,14 @@ Do not add a top-level progress note for every internal change.
 - Use a small, verifiable example. Never imply that a trial is a production guarantee.
 - Use descriptive links and useful image descriptions. Keep the heading order clear.
 
+### Diagrams
+
+- Use one diagram for one question: workflow, components or an execution boundary.
+- Keep Mermaid source beside the explanation. Use named nodes, labelled data flows, `accTitle` and `accDescr`.
+- Match the existing navy, pale blue and peach palette. Labels and boundaries must carry meaning without colour.
+- State what crosses each trust boundary. Distinguish a model call from the process that executes candidate code.
+- Preview diagrams at the normal GitHub content width. Check labels, arrows, contrast and the page in light and dark themes.
+
 Keep the overview short. Put procedures in the operations guide and evidence in
 the status record. Preserve dated trial records and approved decisions.
 Use the [guides](docs/README.md) for reader tasks and the [engineering reference](docs/ENGINEERING.md) for technical records.
