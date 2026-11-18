@@ -58,6 +58,7 @@ const hints:[RegExp,string][]=[
   [/required context (missing|exceeds)|protected or invalid required context/,'Correct modelExecution.task.paths in aegean.json. Run aegean project check to see the files that the agents read.'],
   [/specification head changed/,'Record the edit first: aegean resume --run ID. Then approve the recorded specification.'],
   [/ENOENT.*aegean\.json/,'Run the command in the root folder of an enrolled project. The operations guide gives the enrolment procedure.'],
+  [/prerequisite evidence (for this host|is not passing)/,'Qualify this host for this release: run aegean qualify, then aegean doctor --require prerequisites. If an observation fails again, read the operations guide; do not bypass it.'],
   [/Pilot authorization required/,'Authorise the pilot, then run aegean resume --run ID.'],
 ];
 /** Advice only; it never changes the failure or its exit code. */

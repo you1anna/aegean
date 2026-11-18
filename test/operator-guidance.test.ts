@@ -39,6 +39,8 @@ test('recovery hints name the missing step and keep the general fallback', () =>
   assert.match(recoveryHint('authorize-pilot', '--expires-at is required'), /--limits FILE/);
   assert.match(recoveryHint('authorize-pilot', 'limits file cannot be combined with individual pilot flags'), /Run aegean status and inspect/);
   assert.match(recoveryHint('prepare', 'commit or preserve current work before starting an isolated run'), /push main/);
+  assert.match(recoveryHint('authorize-pilot', 'missing builder-isolation prerequisite evidence for this host'), /aegean qualify.*aegean doctor --require prerequisites/);
+  assert.match(recoveryHint('authorize-pilot', 'protected-verifier prerequisite evidence is not passing (fail)'), /aegean qualify/);
   assert.match(recoveryHint('project', 'required context missing: docs/a.md'), /modelExecution\.task\.paths/);
   assert.equal(recoveryHint('configure', '--run is required'), 'Inspect host configuration in the operations guide before retrying.');
   assert.equal(recoveryHint('resume', 'synthetic unknown failure'), 'Run aegean status and inspect the operations guide before retrying effects.');

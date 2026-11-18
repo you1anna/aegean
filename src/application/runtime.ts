@@ -65,7 +65,7 @@ export async function doctor(root: string): Promise<Readiness> {
   let prerequisitesPassed = false; let prerequisiteDetail = 'configure this host before qualification';
   if (host) {
     try { await acceptedPrerequisites(root, stateRoot(), host.host); prerequisitesPassed = true; prerequisiteDetail = 'native containment and protected verifier qualified for this host/release'; }
-    catch (error) { prerequisiteDetail = (error as Error).message.slice(0, 240); }
+    catch (error) { prerequisiteDetail = `${(error as Error).message.slice(0, 160)}; run aegean qualify, then aegean doctor --require prerequisites`; }
   }
   checks.push({ name: 'pilot-prerequisites', ok: prerequisitesPassed, detail: prerequisiteDetail });
   const prerequisitesReady = checks.every(check => check.ok);
