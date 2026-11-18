@@ -25,6 +25,23 @@ Expand the record for the result under review. Older installation and branch not
 <details>
 <summary>Source checks, host observations and trial history</summary>
 
+## 18 November 2026: Readable qualification output
+
+PR #21 (merged as `89564ab`) changes only the text form of command results; the JSON form is unchanged.
+At a terminal, `aegean qualify` printed digests, the receipt path and comma lists past the terminal edge. Each observation used four rows.
+Now a value that does not fit beside its label starts on the next line, and a long comma list breaks after a comma.
+Each observation shows one line: the mark, the name and the outcome word. [Operations](OPERATIONS.md#read-command-output) describes the layout.
+
+Checks with the pinned Node 26.12.1: `npm ci` and `npm run check` passed. `npm test` passed 246 TypeScript tests and 26 script tests. CI passed.
+A synthetic report rendered at 92 columns had no line wider than the terminal. Before the change, four lines were 95 to 144 columns wide.
+Limit: a word without a comma that is wider than the space below its label still overflows, so that a copy of a path or a digest stays complete.
+Not established: no installed release or live `aegean qualify` run used this change.
+
+The development shell here does not activate mise. Under Homebrew Node 26.13.1, `npm test` fails 68 tests with "Node runtime differs from the pinned version".
+Use `mise exec -- npm test`. The runtime pin is intended. A fail-fast pre-test guard or mise shims on `PATH` were offered and not chosen.
+
+Next step at session close: with explicit approval, run `aegean upgrade --source ~/Projects/aegean`, then `aegean qualify`. A new release needs new qualification evidence.
+
 ## 17 November 2026: Checks before the first real build
 
 Three checks apply before a real run reaches the Builder. All three are in source, with synthetic tests only.
