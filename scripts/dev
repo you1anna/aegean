@@ -15,15 +15,35 @@ command -v mise >/dev/null 2>&1 || { echo 'mise is required. Install it using ht
 cd "$repo"
 [ ! -L .aegean ] || { echo 'Refusing symlink task state' >&2; exit 1; }
 mkdir -p .aegean
-[ ! -e .aegean/source-task ] || { echo "Source task active or interrupted; inspect .aegean/source-task/owner.json" >&2; exit 1; }
-if ! mkdir .aegean/source-launcher 2>/dev/null; then
-  echo 'Source commands locked. Inspect .aegean/source-launcher/owner before recovery.' >&2
+locked() {
+  lock="$repo/.aegean/$1"; owner=$2
+  case "$owner" in ''|*[!0-9]*) owner= ;; esac
+  if [ -n "$owner" ] && ps -p "$owner" >/dev/null 2>&1; then
+    echo "Source commands locked: process $owner still runs ($(ps -p "$owner" -o command= 2>/dev/null))." >&2
+    echo 'Wait for it to finish, or stop it, then run this command again.' >&2
+  else
+    if [ -n "$owner" ]; then
+      echo "Source commands locked by process $owner, which no longer runs. An earlier command was interrupted." >&2
+    else
+      echo "Source commands locked, but $lock records no owner process. Investigate before removal." >&2
+    fi
+    echo 'If no other Aegean source command runs (check: pgrep -fl "scripts/dev|dev-tasks"), remove the lock and run this command again:' >&2
+    echo "  rm -r \"$lock\"" >&2
+  fi
   exit 1
-fi
+}
+[ ! -e .aegean/source-task ] || locked source-task "$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' .aegean/source-task/owner.json 2>/dev/null)"
+mkdir .aegean/source-launcher 2>/dev/null || locked source-launcher "$(cat .aegean/source-launcher/owner 2>/dev/null)"
 printf '%s\n' "$$" > .aegean/source-launcher/owner
+interrupted() {
+  trap - EXIT
+  echo "$1. The lock $repo/.aegean/source-launcher stays in place." >&2
+  echo "When no Aegean source command runs, remove it with: rm -r \"$repo/.aegean/source-launcher\"" >&2
+  exit "$2"
+}
 trap 'rm -f .aegean/source-launcher/owner; rmdir .aegean/source-launcher' EXIT
-trap 'trap - EXIT; echo "Interrupted; inspect .aegean/source-launcher before recovery" >&2; exit 130' INT
-trap 'trap - EXIT; echo "Terminated; inspect .aegean/source-launcher before recovery" >&2; exit 143' TERM
+trap 'interrupted Interrupted 130' INT
+trap 'interrupted Terminated 143' TERM
 if [ "$1" = setup ]; then
   mise trust "$repo/mise.toml"
   mise install

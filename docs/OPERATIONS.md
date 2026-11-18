@@ -51,6 +51,9 @@ dedicated Colima verifier through `scripts/setup-verifier.mjs`.
 No backup or Docker PATH export is required. Downloads use a private staging directory and an exclusive lock.
 A checksum or network failure stops installation and permits a clean retry.
 If interruption leaves a `host-tools/docker-<version>-<arch>.lock` directory, confirm no installer remains before removing that lock.
+If interruption leaves `.aegean/source-launcher` or `.aegean/source-task`, `scripts/dev` and the bootstrap refuse to start.
+The message tells whether the recorded owner process still runs, and it gives the removal command.
+The lock is never removed automatically. Remove it only when no Aegean source command runs.
 If a cached client fails its integrity check, inspect and remove that client, then repeat bootstrap.
 
 Codex and OpenSpec live inside the release. The installer copies the existing
