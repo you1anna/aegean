@@ -199,6 +199,8 @@ function terminal(pager: (text: string) => Promise<boolean> = async () => false)
 test('long text breaks at spaces with the list indent; a pager shows a file, and without one the file waits for an answer', async () => {
   assert.equal(wrap('  - one two three four', 12), '  - one two\n    three\n    four'); assert.equal(wrap('short\n\n1. a b', 80), 'short\n\n1. a b');
   assert.equal(wrap('/a/very/long/path/that/has/no/space next', 10), '/a/very/long/path/that/has/no/space\nnext'); assert.equal(wrap(`${' '.repeat(8)}a b c`, 10), `${' '.repeat(8)}a b c`); assert.equal(wrap('$ aegean status --run ID', 10), '$ aegean status --run ID');
+  assert.equal(wrap('see a=[one,two,three] now', 10), 'see\na=[one,\ntwo,three]\nnow', 'a list without spaces that is too long breaks after a comma');
+  assert.equal(wrap('a,b c', 3), 'a,b\nc', 'a word that fits keeps its commas on one line');
   const long = `- ${'word '.repeat(30).trim()}`;
   const t = terminal(); t.ui.warn(long); t.ui.say(long);
   for (const line of t.screen().split('\n')) assert.ok(line.length <= 59, line);

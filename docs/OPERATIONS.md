@@ -164,6 +164,9 @@ Each command except `aegean guide` selects its output format from the destinatio
 - At a terminal, the command writes text. Fields are labels in words: `fullWorkflowReady` shows as
   "Full workflow ready". Dates show in UTC and durations in minutes and seconds.
   Host checks show ✔ (pass), ✖ (fail) or ! (information only).
+  Qualification observations show ✔, ✖ or ? (unknown) and the outcome word on the line with their name.
+  A value that does not fit beside its label, such as a digest or a path, starts on the next line.
+  Text breaks at spaces, and a list without spaces breaks after a comma. A word is never cut.
   An `error` or `blocked` field comes first. The `next` steps come last, with each command on its own line.
 - To a pipe or a file, the command writes JSON.
 - With `--json`, the command writes JSON at a terminal too.
