@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access } from 'node:fs/promises';
@@ -65,4 +65,33 @@ test('bootstrap checks source and installs without repeating the development sui
   await writeFile(join(root,'scripts/dev'),'#!/bin/sh\nexit 1\n',{mode:0o755});
   assert.throws(()=>execFileSync('/bin/sh',[join(root,'scripts/bootstrap.sh')],{env}));
   assert.equal(await readFile(log,'utf8'),'');
+}));
+
+async function lockedRun(root, lock, owner) {
+  await writeFile(join(root,'scripts/dev'),await readFile('scripts/dev'),{mode:0o755});
+  const bin=join(root,'bin'); await mkdir(bin,{recursive:true});
+  await writeFile(join(bin,'mise'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const dir=join(root,'.aegean',lock); await mkdir(dir,{recursive:true});
+  if (owner!==undefined) await writeFile(join(dir,lock==='source-task'?'owner.json':'owner'),owner);
+  const result=spawnSync('/bin/sh',[join(root,'scripts/dev'),'check'],{env:{...process.env,PATH:bin+':'+process.env.PATH},encoding:'utf8'});
+  await access(dir);
+  return result;
+}
+const deadPid=()=>spawnSync(process.execPath,['-e','']).pid;
+test('a stale launcher lock names the dead owner and the removal command',()=>fixture(async root=>{
+  const pid=deadPid(); const r=await lockedRun(root,'source-launcher',`${pid}\n`);
+  assert.equal(r.status,1); assert.match(r.stderr,new RegExp(`process ${pid}, which no longer runs`)); assert.match(r.stderr,/rm -r ".*\.aegean\/source-launcher"/);
+}));
+test('a live launcher lock tells the user to wait and offers no removal',()=>fixture(async root=>{
+  const r=await lockedRun(root,'source-launcher',`${process.pid}\n`);
+  assert.equal(r.status,1); assert.match(r.stderr,new RegExp(`process ${process.pid} still runs`)); assert.doesNotMatch(r.stderr,/rm -r/);
+}));
+test('a launcher lock without an owner asks for investigation',()=>fixture(async root=>{
+  const r=await lockedRun(root,'source-launcher');
+  assert.equal(r.status,1); assert.match(r.stderr,/records no owner process\. Investigate/);
+}));
+test('a stale source-task lock reads the owner from owner.json',()=>fixture(async root=>{
+  const pid=deadPid(); const r=await lockedRun(root,'source-task',JSON.stringify({pid,task:'check',startedAt:1}));
+  assert.equal(r.status,1); assert.match(r.stderr,new RegExp(`process ${pid}, which no longer runs`)); assert.match(r.stderr,/rm -r ".*\.aegean\/source-task"/);
+  await assert.rejects(access(join(root,'.aegean/source-launcher')));
 }));
