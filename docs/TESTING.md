@@ -1,58 +1,94 @@
-# Low-cost testing
+# Testing
 
-For repeated local feedback, run `npm run test:quick`. It builds the current
-source and runs only the pure workflow tests, serially, with a ten-second
-timeout per test. These tests exercise approvals, stale evidence, idempotence,
-repair/revision budgets and active-time exhaustion without launching model CLIs,
-Docker, or a verifier VM. Compilation is outside that test timeout.
+[Contribute](../CONTRIBUTING.md) · [Architecture](ARCHITECTURE.md) · [Status](STATUS.md)
 
-Use `nice -n 10 npm run test:quick` to give other local work scheduling priority.
-This reduces contention; it is not a CPU percentage or energy cap. Run one test
-command at a time and avoid watch loops. The quick command shares the normal
-build output, so do not run it alongside another build or test command.
-Some sandboxes reject `nice` with `setpriority: Operation not permitted`; in that
-case no priority reduction has been applied. Bridge tests also require permission
-to open local Unix sockets. An `EPERM` socket failure is not a passing check;
-rerun those tests in a suitable environment instead of repeatedly retrying them.
+Aegean has two distinct test concerns:
 
-Build once with `npm run build`, then select the compiled file and, for expensive
-integration cases, the specific test name:
+| Concern | Purpose | Evidence limit |
+| --- | --- | --- |
+| Source tests in this repository | Check coordinator rules, adapters, races and recovery with synthetic fixtures. | Do not establish live model quality or native VM containment. |
+| Protected acceptance tests for a change | Check a candidate against its approved contract. | A passing suite proves only the cases it contains. |
+
+[Architecture](ARCHITECTURE.md#protected-verification) explains how protected cases stay outside the Builder and candidate container.
+[Release acceptance](ACCEPTANCE.md) defines the separate host and live-run evidence.
+
+## Check a change
+
+Use the pinned Node runtime from [toolchain.json](../toolchain.json).
+The [source commands](../CONTRIBUTING.md#check-the-source) install and select it through mise.
+
+Before a PR, run:
 
 ```sh
+npm ci
+npm run check
+npm test
+```
+
+The full suite runs TypeScript tests one file at a time, then script tests.
+Each TypeScript test has a five-minute limit. [CI](../.github/workflows/checks.yml) owns the job deadline; local runs have no aggregate deadline.
+Fixtures have their own subprocess limits and cleanup.
+
+Record the commands, exit status and duration. If a test fails, inspect and repeat the affected check before another full run.
+Do not repeat a passing full suite against unchanged source without a reason.
+
+## What the tests cover
+
+| Control | Test evidence |
+| --- | --- |
+| Approval, stale evidence, repair budgets and repeated events | [Workflow](../test/workflow.test.ts). |
+| Base commit results, allowed paths and finding owners | [Build checks](../test/build-checks.test.ts) and [coordinator](../test/coordinator.test.ts). |
+| Protected values stay out of receipts and repair feedback | [Verifier](../test/verifier.test.ts). |
+| Candidate mounts exclude tests and host credentials | [Adapter arguments](../test/adapters.test.ts); native enforcement needs host qualification. |
+| Fresh role calls and bounded context | [Model context](../test/model-context.test.ts) and [coordinator](../test/coordinator.test.ts). |
+| Concurrent ownership and stale owner rejection | [Ledger permits](../test/ledger-permits.test.ts) and [ownership recovery](../test/ownership.test.ts). |
+| Interrupted effects, imports and publication | [Coordinator](../test/coordinator.test.ts), [Builder import](../test/builder-import.test.ts) and [process recovery](../test/process-recovery.test.ts). |
+| Git hooks, filters and configuration isolation | [Git safety](../test/git-safety.test.ts). |
+| Domain import boundary and release installation | [Installation](../test/installation.test.ts). |
+| Host, release and policy identities invalidate old evidence | [Acceptance](../test/acceptance.test.ts). |
+
+## Fast local feedback
+
+Run only the pure workflow tests after a small rule change:
+
+```sh
+npm run test:quick
+```
+
+This command builds the source and applies a ten-second limit per test. Compilation sits outside that limit.
+It uses no model CLI, Docker or verifier VM. Do not add live provider calls to this test file.
+
+For one integration case, build once and select the test:
+
+```sh
+npm run build
 node --test --test-concurrency=1 --test-timeout=300000 \
   --test-name-pattern='lost suite-push acknowledgement' dist/test/coordinator.test.js
 ```
 
-Inspect that test's dependencies before assuming it is offline. Do not add live
-provider calls to the quick workflow test file.
+Inspect the selected test's dependencies before assuming it is offline.
+Quick or focused checks do not replace the full suite or native acceptance.
 
-Bootstrap does not run the development suite. Installation retains source provenance, type, script and artifact checks.
+## Fixture isolation and recovery
 
-Before accepting a candidate, run `npm ci`, `npm run check` and `npm test`.
-Quick checks are partial feedback, not full-suite or native acceptance evidence.
-Keep the full suite and CI checks intact; avoid repeatedly running the full suite
-against an unchanged candidate. Record the command, exit status and duration.
-On failure, inspect and rerun the affected test rather than automatically retrying
-the whole suite. Ctrl-C stops a local quick check; it holds no workflow lease or
-VM resources, and rebuilding is its recovery path.
+- Run one build or test command at a time. Quick checks share the normal build output.
+- Use synthetic data, temporary state and local Git repositories. Keep live credentials, private suites and run records outside Git.
+- Bridge tests need local Unix sockets. An `EPERM` socket error is a failed check; repeat it in a suitable environment.
+- Ctrl-C stops a quick check. It holds no workflow lease or VM resources; rebuild before the next check.
+- Bootstrap checks provenance, types, scripts and artifacts. It does not repeat the development suite.
 
-The full suite runs one file at a time and limits individual tests to five
-minutes. The [CI workflow](../.github/workflows/checks.yml) defines the job deadline.
-Local runs have no aggregate deadline. Fixture subprocesses keep their own timeouts and cleanup logic.
-Coordinator fixtures use isolated temporary state and real local Git repositories.
-The Git shim calls Git directly for routine operations and keeps the synthetic
-origin check and push fault injection. Compare elapsed time and CPU time with
-`/usr/bin/time -p npm test` when evaluating changes to the full suite.
+Use `nice -n 10 npm run test:quick` to reduce scheduling priority when supported.
+This is not a CPU or energy cap. An `Operation not permitted` error means no priority reduction occurred.
+Use `/usr/bin/time -p npm test` to compare elapsed and CPU time when a test change affects capacity.
 
-Builder-import and routing fixtures use `test/helpers/git-config.ts` to exclude
-machine-wide and user Git configuration for their test-file process and child
-commands. The helper restores the previous environment after the file finishes.
-Use it only in serial test files running with Node's default process isolation.
-Repository-local configuration remains visible to the production safety checks.
-Filter, hook and config-include rejection tests must continue to pass.
+### Git configuration in fixtures
 
-To reproduce a CI host with Git LFS configuration, create a temporary config
-containing `[filter "lfs"]` and `clean = git-lfs clean -- %f`, then run:
+Builder-import and routing fixtures use [`test/helpers/git-config.ts`](../test/helpers/git-config.ts) to exclude user and system Git configuration.
+The helper restores the environment after each file. Use it only with serial files and Node's default process isolation.
+Repository-local configuration stays visible to the production safety checks.
+
+To reproduce a host with Git LFS, create a temporary configuration with `[filter "lfs"]` and `clean = git-lfs clean -- %f`.
+Then run:
 
 ```sh
 GIT_CONFIG_GLOBAL=/path/to/temporary.gitconfig node --test \
@@ -60,12 +96,12 @@ GIT_CONFIG_GLOBAL=/path/to/temporary.gitconfig node --test \
   dist/test/builder-import.test.js dist/test/installation.test.js dist/test/git-safety.test.js
 ```
 
-Live Aegean runs consume subscription usage separately from deterministic tests.
-Current policy limits are owned by `toolchain.json`; they bound active time and retries. Reviewed project configuration also declares
-monitored token allowances; see [model use](MODEL-USAGE.md). Provider usage can be unknown, and time limits
-are not hard token caps. No model is needed to poll status. Use `aegean cancel`
-for an active workflow rather than killing its coordinator or deleting its lease.
-Installed releases can differ from this checkout; check `aegean doctor --json`
-and the installed operations guide before any live exercise. Existing release
-gates remain required. Changing runtime budgets requires the normal reviewed
-policy/release process; editing the checkout does not update an installation.
+Filter, hook and configuration-include rejection tests must still pass.
+The coordinator's Git shim preserves synthetic origin checks and push fault injection.
+
+## Live trials
+
+Live trials consume subscription usage and require separate approval.
+Use [operations](OPERATIONS.md) for the installed release's gates, records and cancellation procedure.
+[Model use](MODEL-USAGE.md) describes monitored allowances; time limits are not strict token caps.
+A source edit does not update an installation or its acceptance evidence.

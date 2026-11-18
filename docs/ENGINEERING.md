@@ -2,54 +2,55 @@
 
 [Overview](../README.md) · [Guides](README.md) · [Contribute](../CONTRIBUTING.md)
 
-These records describe the implementation, test results and proposed changes.
-For operating instructions, use the [guides](README.md).
-
-## Source and installed versions
-
-Source changes and installed releases have separate identities. A merge does not install a release or accept it for ordinary use.
-PR #2 added the VM-contained Builder, separate execution permits, host-specific evidence, local decisions and model-use controls.
-[Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) records that work and its evidence.
-The [operator command change](../openspec/changes/local-operator-commands/proposal.md) adds source tasks, host commands and controlled pilot preparation.
-
-The operations guide describes this source version. Before a live action, use the guide reported by the installed release.
-New releases expose `aegean info --json`; older releases report their guide through `aegean doctor --json`.
-
 ## Design and evidence
 
 | Reference | Purpose |
 | --- | --- |
-| [Architecture](ARCHITECTURE.md) | Roles, data ownership, module boundaries and trust boundaries. |
-| [Model use](MODEL-USAGE.md) | Selection, context, token allowances and recovery limits. |
-| [Testing](TESTING.md) | Focused checks, full-suite commands and fixture requirements. |
-| [Current status](STATUS.md) | Dated results, installed versions and open release requirements. |
+| [Architecture](ARCHITECTURE.md) | Components, isolation, ownership and design trade-offs. |
+| [Testing](TESTING.md) | Commands and a map from controls to tests. |
+| [Model use](MODEL-USAGE.md) | Model selection, context limits and token accounting. |
+| [Current status](STATUS.md) | Dated results and open release gates. |
 | [Acceptance contract](ACCEPTANCE.md) | Evidence required for an exact installed release. |
-| [Accepted plan](PLAN.md) | Original scope and approved design decisions. |
+| [Accepted plan](PLAN.md) | Original scope and approved decisions. |
+
+## Source and installed versions
+
+A merge changes source. It does not install a release or establish readiness.
+
+| Identity | Where to check |
+| --- | --- |
+| Source revision | The Git commit under review. |
+| Installed release and tools | `aegean info --json`. |
+| Host prerequisites and full acceptance | `aegean doctor --json`. |
+
+For live operations, use the guide path reported by the installed release.
+Older releases report that path through `doctor`.
 
 ## Proposals and trial records
 
-These records preserve context. Proposals do not describe available features or
-grant permission for a run.
+These records retain their original dates and approval status. A proposal does not authorise execution.
 
 | Record | Purpose |
 | --- | --- |
-| [Bounded CLI specification](BOUNDED-CLI-SPEC.md) | Scope for the implementation in PR #2; see its approval record below. |
-| [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, source checks and remaining release requirements. |
-| [Model selection and token budgets](../openspec/changes/task-model-selection-and-token-budgets/proposal.md) | Approved scope, design and implementation checklist. |
-| [Operator command review](OPERATOR-COMMANDS-REVIEW.md) | Source findings, fixes and verification limits. |
-| [Model policy review](MODEL-POLICY-REVIEW.md) | Independent findings, fixes and verification limits. |
-| [Test report](TEST-REPORT-2026-11-13.md) | Recorded local and hosted results for the bounded CLI candidate. |
-| [Pilot notes](PILOT-NOTES.md) | Real run outcomes and links to private evidence. |
-| [Recovery checks](RECOVERY-CHECKS.md) | Scope and limits of synthetic coordinator tests. |
-| [Bootstrap review](PR-1-REVIEW.md) | Findings from the first implementation review. |
-| [Follow-up review](PR-1-FOLLOWUP-REVIEW.md) | Usability findings and proposed changes. |
+| [Bounded CLI specification](BOUNDED-CLI-SPEC.md) | Scope for the VM boundary and local approval workflow. |
+| [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, source evidence and open release gates. |
+| [Model selection and token budgets](../openspec/changes/task-model-selection-and-token-budgets/proposal.md) | Approved scope and implementation plan. |
+| [Local operator commands](../openspec/changes/local-operator-commands/proposal.md) | Approved scope for source, host and pilot commands. |
+| [Operator command review](OPERATOR-COMMANDS-REVIEW.md) | Findings, fixes and verification limits. |
+| [Model policy review](MODEL-POLICY-REVIEW.md) | Findings, fixes and verification limits. |
+| [Test report](TEST-REPORT-2026-11-13.md) | Recorded local and hosted checks. |
+| [Pilot notes](PILOT-NOTES.md) | Real run outcomes and private evidence locations. |
+| [Recovery checks](RECOVERY-CHECKS.md) | Scope of the synthetic recovery tests. |
+| [Bootstrap review](PR-1-REVIEW.md) · [Follow-up review](PR-1-FOLLOWUP-REVIEW.md) | Early findings and proposed changes. |
 
 ## Record ownership
 
-Keep each fact in one place, then link to it. Status owns dated evidence;
-operations owns procedures and recovery; architecture owns design explanations.
-The acceptance validator owns the evidence schema. Plans and reviews preserve
-approved decisions and proposals with their original status.
+| Concern | Owner |
+| --- | --- |
+| Design and trade-offs | Architecture. |
+| Procedures and recovery | Operations. |
+| Dated observations | Status and the linked run records. |
+| Evidence schema | The acceptance validator. |
+| Approved intent | Plans and specifications. |
 
-The [documentation standard](../CONTRIBUTING.md#documentation) defines how each
-pull request keeps the product overview and linked guides consistent.
+Link to the owner instead of copying its facts. Follow the [documentation standard](../CONTRIBUTING.md#documentation) in each pull request.

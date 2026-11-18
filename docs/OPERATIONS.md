@@ -2,14 +2,20 @@
 
 [Documentation](README.md) · [Status](STATUS.md) · [Architecture](ARCHITECTURE.md)
 
-Aegean remains under trial. Read [current status](STATUS.md) before any installation
-or run. Installation, live trials and release acceptance require explicit approval.
-This guide describes the local operator commands in this source version. Install this version before use.
-Older installed releases can have different commands. See [source and installed versions](ENGINEERING.md#source-and-installed-versions) before use.
-Use the guide path from the installed `aegean doctor --json` for live operations.
+This guide covers installation, commands and recovery for this source version.
+For live work, use the operations guide reported by the installed `aegean doctor --json`.
+See [source and installed versions](ENGINEERING.md#source-and-installed-versions).
 
-[Install](#install-on-either-mac) · [Configure](#configure-and-approve-billing-policy) ·
-[Run](#run-lifecycle) · [Record evidence](#run-records-and-debugging) · [Recover](#recovery)
+> **Before a run:** read [current status](STATUS.md). Installation, live trials and release acceptance require explicit approval.
+
+| Task | Section |
+| --- | --- |
+| Install and check a release | [Installation](#install-on-either-mac) · [Host commands](#host-commands) |
+| Configure a host or project | [Configuration files](#configuration-files) · [Configuration procedure](#configure-and-approve-billing-policy) |
+| Prepare a request and review its specification | [Interactive guide](#use-the-interactive-guide) · [Project and request](#prepare-the-project-and-the-request) |
+| Verify and publish | [Verification and publication](#verification-and-publication) |
+| Inspect or recover a run | [Run records](#run-records-and-debugging) · [Recovery](#recovery) |
+| Migrate or remove an installation | [Control migration](#control-migration) · [Uninstall and reinstall](#uninstall-and-reinstall) |
 
 ## Install on either Mac
 
@@ -28,8 +34,11 @@ installed release or establish readiness. Each Mac needs its own evidence.
 [toolchain.json](../toolchain.json) owns the required versions. Claude Code must
 already be installed with subscription authentication.
 The Claude requirement is a stable-version range: at least the declared minimum, below the next major version.
+
 Newer versions within that range do not require a source change or a Claude downgrade.
-Old, prerelease and unrecognised versions fail the check. Colima must match the declared version. Bootstrap downloads the pinned Docker client
+Old, prerelease and unrecognised versions fail the check.
+
+Colima must match the declared version. Bootstrap downloads the pinned Docker client
 from [Docker](https://download.docker.com/mac/static/stable/), verifies archive and binary SHA-256 hashes, and includes it in the release.
 The installed command selects that client automatically. Homebrew Docker and shell configuration remain unchanged.
 
@@ -46,19 +55,24 @@ sh scripts/bootstrap.sh
 The bootstrap installs pinned Node through mise, installs locked packages with
 lifecycle scripts disabled, checks types and script syntax, and installs a versioned release.
 It does not repeat the development test suite. Run source tests during development and review; see [testing](TESTING.md).
+
 It can install mise through Homebrew if mise is absent. It also configures the
 dedicated Colima verifier through `scripts/setup-verifier.mjs`.
+
 No backup or Docker PATH export is required. Downloads use a private staging directory and an exclusive lock.
 A checksum or network failure stops installation and permits a clean retry.
+
 If interruption leaves a `host-tools/docker-<version>-<arch>.lock` directory, confirm no installer remains before removing that lock.
 If a cached client fails its integrity check, inspect and remove that client, then repeat bootstrap.
 
 Codex and OpenSpec live inside the release. The installer copies the existing
 Claude binary into the release. It leaves the ordinary Claude installation and
 the desktop app unchanged.
+
 `aegean info --json` reports the copied Claude version under `toolVersions`.
 The artifact manifest covers `tool-versions.json` and the copied binary, so run evidence identifies the exact installed tool.
 Ordinary Claude updates do not change that copy. Repeated installation of the same source reuses its existing release.
+
 A compatible version passes the version check; native qualification and release acceptance remain separate requirements.
 
 The installer exports the recorded commit and builds in an empty directory.
@@ -178,8 +192,10 @@ Keep credentials, prompts, private suites and run records outside Git.
 A pilot limits file contains `schemaVersion`, `expiresInMinutes`, `maxModelCalls`, `activeMinutes`, `maxRepairs` and `maxRevisions`.
 Unknown fields and mixed file/individual flags are rejected. Expiry cannot exceed 24 hours.
 Authorisation freezes effective values and the file digest; later file edits do not expand a run.
+
 `expiresInMinutes` must include your time to review the specification and the time for each later stage.
 You cannot extend an authorisation. After the expiry, you can only cancel the run, and a charged call is not refunded.
+
 Token allowances remain in the project's `modelExecution.budget`. Strict token caps are unsupported.
 
 ## Configure and approve billing policy
@@ -333,8 +349,10 @@ aegean project check --json
 
 This reads configuration and Git identity without executing project commands or allocating a run.
 It rejects old schemas and missing budgets. Image compatibility does not prove that project executables or dependencies exist in the verifier.
+
 The `agentContext` field lists each committed file that the Scout will read, with its size. Check this list before you prepare a run.
 A missing or oversized required file fails this command before a run exists.
+
 A project keeps the `standardVersion` that you reviewed. A release accepts each version from `minProjectStandard` to `policy` in `toolchain.json`.
 You edit `standardVersion` only when a release raises `minProjectStandard`; the command then names the accepted versions.
 Review configuration changes through the project's own workflow before a run.
@@ -356,6 +374,7 @@ aegean resume --run RUN_ID
 Answer the exact authorisation prompt yourself. The prompt shows the effective limits and project token allowances.
 One run has one authorisation. If you repeat the command with the same limits, it reports the saved authorisation and asks nothing.
 Different limits, or an expired authorisation, need a new run.
+
 Native prerequisites must pass. Without full release acceptance, scoped pilot authorisation is required before the first model call.
 `prepare` and `authorize-pilot` do not call models. `resume` executes the authorised stage.
 The existing `start --request FILE` remains available; it prepares a run and immediately attempts resume.
@@ -377,6 +396,7 @@ Then correct the project on main and prepare a new run.
 
 Also read `allowed-paths.txt` in the same folder. It lists each path that the Builder may create, change or delete.
 An entry that ends with `/` allows each file below that directory. Lines that start with `#` are comments.
+
 Verification fails if the candidate changes a path that the file does not allow. The Scout sees only a few project files,
 so check that the list includes the test files and the files that the project checks read or write. Edit the file before approval if the list is wrong.
 
@@ -411,7 +431,9 @@ and a fresh independent review must pass before publication approval.
 Before the first build, the verifier runs the protected tests once on the unchanged base commit.
 The run folder records the result in `baseline.json`. `aegean status --run ID` shows it in the `baseline` field,
 and the publication summary repeats it. A requirement whose tests already passed on the base commit has no evidence that the change works.
+
 If every protected test passes on the base commit, the run stops before the Builder starts.
+
 An inconclusive check uses the same infrastructure retry budget as candidate verification.
 If a retry remains, the run pauses; correct the verifier, then resume. The Auditor is not called again.
 If no retry remains, the run stops with `infrastructure retries exhausted`.
@@ -468,6 +490,7 @@ Revisions retain all consumed time, calls and tokens.
 Use `aegean status` or `aegean status --run ID` to inspect state without a model
 call. Status preserves durable run state if local accounting is unavailable.
 The `next` field gives the commands for the current state. It is guidance; it grants no permission.
+
 For a pilot run, the `pilot` field shows the expiry time and the limits. After the expiry, `next` tells you to cancel the run.
 A failed command prints a `recovery` line that names the missing step where Aegean can identify it.
 Use Ctrl-C to interrupt the call. Follow [recovery](#recovery) before further action.

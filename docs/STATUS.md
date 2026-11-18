@@ -6,15 +6,24 @@
 
 ## At a glance
 
-Last host inspection: **15 November 2026**.
+This summary separates source behaviour from live evidence. Dated entries below retain the facts known at the time.
 
-| Area | Last recorded result |
-| --- | --- |
-| Source | PR #1 and PR #2 are merged. The operator commands remain on `codex/local-operator-commands` for human review. |
-| Installed release | the primary host had `0.1.0-3676d6ce572a` before the authorised uninstall. See the current record below. |
-| Control history | Two cancelled bootstrap runs lack a later policy field. Read-only inspection accepts these records without changing them. |
-| Ordinary implementation | Full release acceptance remains incomplete. Source tests do not establish native qualification. |
-| secondary Mac | Installation and acceptance remain unverified. |
+| Area | Recorded position | Evidence |
+| --- | --- | --- |
+| Specification review | Real drafts reached human review on the primary host. | [Pilot notes](PILOT-NOTES.md). |
+| Build, verification and review | Implemented with synthetic checks. Complete live delivery remains unaccepted. | [Test coverage](TESTING.md#what-the-tests-cover) and dated source results below. |
+| Isolation | The VM design replaces a host process boundary that failed containment. Each release needs native qualification. | [Execution boundaries](ARCHITECTURE.md#execution-boundaries) and [acceptance](ACCEPTANCE.md). |
+| Installed release | A source merge does not update either host. Inspect the installed identity before use. | [Source and installed versions](ENGINEERING.md#source-and-installed-versions). |
+| secondary Mac | Installation and acceptance remain unverified in these records. | [Acceptance contract](ACCEPTANCE.md). |
+
+For a design walkthrough, read [architecture](ARCHITECTURE.md). For live work, use [operations](OPERATIONS.md) and the installed host checks.
+
+## Dated evidence
+
+Expand the record for the result under review. Older installation and branch notes describe their date, not the current host.
+
+<details>
+<summary>Source checks, host observations and trial history</summary>
 
 ## 17 November 2026: Checks before the first real build
 
@@ -528,3 +537,4 @@ GitHub Free does not enforce private-repository branch protection. Human PR revi
 is an operating rule here, not a claimed server-enforced control. The coordinator
 does not merge PRs. Nothing has been deployed or published publicly.
 
+</details>
