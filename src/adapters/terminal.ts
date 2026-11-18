@@ -27,7 +27,8 @@ export function completePath(line: string): [string[], string] {
 }
 
 /**
- * Breaks a long line at spaces. A list item keeps its indent on each new line. A word longer than the width stays whole.
+ * Breaks a long line at spaces. A list item keeps its indent on each new line. A word longer than the width can also
+ * break after a comma, as in `tools=[a,b,c]`; a part without a comma stays whole, so a path or a digest is never cut.
  * A command line (`$ ...`) stays on one line, so that a copy of it is complete.
  */
 export function wrap(text: string, width: number): string {
@@ -35,9 +36,11 @@ export function wrap(text: string, width: number): string {
     const lead = /^\s*(?:[-*] |\d+\. )?/.exec(line)![0];
     if (line.length <= width || lead.length > width / 2 || line.startsWith('$ ')) return line;
     const indent = ' '.repeat(lead.length), lines: string[] = []; let current = '';
-    for (const word of line.slice(lead.length).split(' ')) {
-      if (current && indent.length + current.length + 1 + word.length > width) { lines.push(current); current = word; }
-      else current = current ? `${current} ${word}` : word;
+    const parts = line.slice(lead.length).split(' ').flatMap(word => (indent.length + word.length > width ? word.split(/(?<=,)/) : [word])
+      .map((part, n) => ({ part, gap: n ? '' : ' ' })));
+    for (const { part, gap } of parts) {
+      if (current && indent.length + current.length + gap.length + part.length > width) { lines.push(current); current = part; }
+      else current = current ? current + gap + part : part;
     }
     return [...lines, current].map((part, n) => (n ? indent : lead) + part).join('\n');
   }).join('\n');

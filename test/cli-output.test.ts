@@ -145,6 +145,34 @@ test('large and deep results stay bounded and say how to see all of the data', (
   assert.ok(long.split('\n').every(line => line.length <= 100 || line.includes('x'.repeat(150))), 'only an unbreakable value is wider than the terminal');
 });
 
+test('a qualification report stays inside the terminal and shows each observation on one marked line', () => {
+  const hex = (digit: string) => digit.repeat(64), path = `acceptance-evidence/1794935335730-${host}.receipt.json`, image = `node@sha256:${hex('1')}`;
+  const note = 'Synthetic canaries on the actual CLI/VM; no model or authentication evidence.';
+  const report = { host, capability: 'bounded-cli-v1',
+    identity: { sourceHash: hex('a'), sourceCommit: 'b'.repeat(40), buildHash: hex('c'), artifactHash: hex('d'), nodeHash: hex('e'), policyIdentity: hex('f'), image },
+    prerequisitesPassed: false, acceptanceWritten: false,
+    reports: [{ kind: 'builder-isolation', reference: { path, hash: hex('2') }, outcome: 'fail', observations: [
+      { name: 'workspace-write', outcome: 'pass', observedAt: 1794935335730, detail: `Direct maintained native invocation; tools=[]; vm=[detached-positive-launched,detached-positive-wrote,snapshot-after-stop]. ${note}` },
+      { name: 'outside-read-denied', outcome: 'fail', observedAt: 1794935335730, detail: `Direct maintained native invocation; tools=[patch-update-outside,patch-delete-outside,patch-read-error,canaries-not-exposed,unchanged-outside/private-canary]; vm=[outsideReadDenied,host-mount-readonly]. ${note}` },
+      { name: 'symlink-read-denied', outcome: 'unknown', observedAt: 1794935335730 },
+    ] }],
+    workDirectory: '/tmp/aegean-qualify-synthetic', cleanupConfirmed: true, retainedResources: [], limitations: ['Synthetic limitation.'] };
+  const squash = (text: string) => text.replace(/\s+/g, '');
+  for (const width of [80, 92]) {
+    const text = renderResult(report, { ...plain, width }), lines = text.split('\n');
+    for (const value of leaves(report)) assert.ok(squash(text).includes(squash(value)), `missing ${value} at width ${width}`);
+    assert.ok(lines.some(line => line.trim() === image) && lines.some(line => line.trim() === path), 'a digest and a path stay whole for a copy');
+    assert.ok(lines.every(line => line.length <= width || /^ *\S+$/.test(line)), `at width ${width}, only a single unbreakable value on its own line is wider than the terminal`);
+    assert.match(text, /^ +✔ workspace-write {2}pass\n +Observed at {2}2026-11-17 17:08:55 UTC$/m);
+    assert.match(text, /^ +✖ outside-read-denied {2}fail$/m);
+    assert.match(text, /^ +\? symlink-read-denied {2}unknown$/m);
+    assert.doesNotMatch(text, /^ +Name +workspace-write$/m, 'an observation has no separate name and outcome rows');
+  }
+  const colour = renderResult(report, marked);
+  assert.match(colour, /<green>✔<\/green> workspace-write {2}<dim>pass<\/dim>/);
+  assert.match(colour, /Outcome {2}<red>fail<\/red>/);
+});
+
 test('script output is parsed when it holds JSON and is shown unchanged otherwise', () => {
   assert.deepEqual(parseResultText('{"installed":"v1"}\n'), { lead: '', value: { installed: 'v1' } });
   assert.deepEqual(parseResultText('warning: one\nwarning: two\n{"installed":"v1"}\n'), { lead: 'warning: one\nwarning: two', value: { installed: 'v1' } });

@@ -25,6 +25,9 @@ const FIRST_DATE_MS = 946_684_800_000, LAST_DATE_MS = 4_102_444_800_000;
 const ACRONYMS: Record<string, string> = { id: 'ID', pr: 'PR', url: 'URL', sha: 'SHA', vm: 'VM', cli: 'CLI', api: 'API', json: 'JSON', ci: 'CI' };
 const GOOD_WHEN_TRUE = new Set(['ready', 'ok', 'passed', 'accepted', 'available', 'valid']);
 const BAD_WHEN_TRUE = new Set(['exceeded', 'failed', 'blocked', 'stale', 'interrupted', 'uncertain']);
+// Check levels and evidence outcomes share one set of marks.
+const MARKS: Record<string, Cell> = { pass: { text: '✔', style: 'green' }, fail: { text: '✖', style: 'red' }, info: { text: '!', style: 'yellow' }, unknown: { text: '?', style: 'yellow' } };
+const OUTCOMES: readonly string[] = ['pass', 'fail', 'unknown'];
 // C0 and C1 controls except the line feed, and the Unicode bidirectional overrides that can disguise text.
 const CONTROLS = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F‪-‮⁦-⁩]/g;
 
@@ -117,6 +120,9 @@ const isMultiline = (value: Plain): boolean => typeof value === 'string' && clea
 const isInline = (value: Plain): boolean => isEmpty(value) || isScalar(value) && !isMultiline(value);
 const isCheck = (value: Plain): value is { name: string; ok: boolean; detail?: string } => isFields(value) && typeof value.name === 'string' && typeof value.ok === 'boolean'
   && (value.detail === undefined || typeof value.detail === 'string') && Object.keys(value).every(key => ['name', 'ok', 'detail'].includes(key));
+/** An evidence observation or another named result with a pass, fail or unknown outcome. */
+const isOutcome = (value: Plain): value is Fields & { name: string; outcome: string } => isFields(value) && typeof value.name === 'string'
+  && typeof value.outcome === 'string' && OUTCOMES.includes(value.outcome);
 const isRow = (value: Plain): value is Fields => isFields(value) && Object.values(value).every(item => isScalar(item) && !isMultiline(item));
 const lastWord = (key: string): string => key.split(/(?=[A-Z])/).at(-1)!.toLowerCase();
 
@@ -144,6 +150,7 @@ function cell(key: string | undefined, value: Scalar, multiline = false): Cell {
   const text = clean(value, multiline).trim();
   if (!text) return { text: '(empty)', style: 'dim' };
   if (key === 'state') return { text, style: ENDED.includes(value) ? 'dim' : 'bold' };
+  if (key === 'outcome' && OUTCOMES.includes(value)) return { text, style: MARKS[value]!.style! };
   return { text };
 }
 
@@ -153,6 +160,8 @@ function renderer({ width, paint }: View) {
   /** Wraps text that starts at column `at`. Each next line starts at the same column. */
   const flow = (text: string, at: number) => wrap(text, Math.max(MIN_COLUMN, width - at)).split('\n').join('\n' + pad(at));
   const flowed = (part: Cell, at: number): string => styled({ ...part, text: flow(part.text, at) });
+  /** False when a value that starts at column `at` holds a word that `wrap` cannot break to fit the terminal. */
+  const fits = (text: string, at: number) => wrap(text, width - at).split('\n').every(line => line.length <= width - at);
 
   function block(value: Plain, indent: number, depth: number, key?: string): string[] {
     if (depth > MAX_DEPTH) return [pad(indent) + paint('dim', '… nested too deeply; run the command with --json')];
@@ -176,7 +185,8 @@ function renderer({ width, paint }: View) {
       if (!isInline(item)) { out.push(pad(indent) + paint('bold', name), ...block(item, indent + 2, depth + 1, key)); continue; }
       const part = isEmpty(item) ? { text: 'none', style: 'dim' as const } : cell(key, item as Scalar);
       const at = indent + Math.max(column, name.length) + 2;
-      if (width - at < MIN_COLUMN) out.push(pad(indent) + name, pad(indent + 2) + flowed(part, indent + 2));
+      // A narrow column, or a digest or path wider than the column, moves the value below its label, where it has more room.
+      if (width - at < MIN_COLUMN || !fits(part.text, at)) out.push(pad(indent) + name, pad(indent + 2) + flowed(part, indent + 2));
       else out.push(pad(indent) + name.padEnd(column) + '  ' + flowed(part, at));
     }
     const steps = top && value.next !== undefined ? next(value.next) : [];
@@ -188,9 +198,11 @@ function renderer({ width, paint }: View) {
     if (!items.length) return [pad(indent) + paint('dim', 'none')];
     const shown = items.slice(0, MAX_ITEMS), out: string[] = [];
     if (shown.every(isCheck)) {
-      for (const check of shown) {
-        const level = checkLevel(check), mark = level === 'pass' ? paint('green', '✔') : level === 'fail' ? paint('red', '✖') : paint('yellow', '!');
-        out.push(`${pad(indent)}${mark} ${flow(clean(check.name) + (check.detail ? `: ${clean(check.detail)}` : ''), indent + 2)}`);
+      for (const check of shown) out.push(`${pad(indent)}${styled(MARKS[checkLevel(check)]!)} ${flow(clean(check.name) + (check.detail ? `: ${clean(check.detail)}` : ''), indent + 2)}`);
+    } else if (shown.every(isOutcome)) {
+      // The mark and the outcome word share the name line; the other fields follow below it.
+      for (const { name, outcome, ...rest } of shown) {
+        out.push(`${pad(indent)}${styled(MARKS[outcome]!)} ${flow(clean(name), indent + 2)}  ${paint('dim', outcome)}`, ...fields(rest, indent + 2, depth + 1));
       }
     } else if (shown.every(isScalar)) {
       for (const item of shown) out.push(`${pad(indent)}- ${flowed(cell(key, item, true), indent + 2)}`);
