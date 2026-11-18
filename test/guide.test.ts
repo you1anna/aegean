@@ -63,8 +63,9 @@ test('each live run state offers only its commands; later states and ended runs 
   // An expired authorisation cannot be replaced; no choice may lead to a command that fails.
   for (const state of ['requested', 'spec-drafted', 'paused', 'building'] as State[]) assert.deepEqual(values(runChoices(state, { ...facts, pilot: true, pilotExpired: true })), ['cancel', 'stop']);
   assert.deepEqual(checkFix('claude-subscription')?.command, ['auth', 'login', 'claude']); assert.equal(checkFix('verifier-vm')?.terminal, false);
-  for (const name of ['subscription-overflow', 'pilot-prerequisites', 'host-exclusions', 'release-acceptance']) assert.equal(checkFix(name), undefined, name);
-  for (const fix of ['claude-subscription', 'codex-subscription', 'verifier-vm']) assert.equal(validateArguments(checkFix(fix)!.command), undefined);
+  assert.deepEqual(checkFix('pilot-prerequisites')?.command, ['qualify']); assert.equal(checkFix('pilot-prerequisites')?.terminal, false);
+  for (const name of ['subscription-overflow', 'host-exclusions', 'release-acceptance']) assert.equal(checkFix(name), undefined, name);
+  for (const fix of ['claude-subscription', 'codex-subscription', 'verifier-vm', 'pilot-prerequisites']) assert.equal(validateArguments(checkFix(fix)!.command), undefined);
   // An incomplete draft shows its flags on the approval choice; a complete draft does not.
   const approve = (flags?: string) => runChoices('spec-drafted', { ...facts, ...(flags ? { flags } : {}) }).find(choice => choice.value === 'approve')!.hint;
   assert.equal(approve('2 open questions'), '2 open questions; you type the confirmation; aegean approve'); assert.equal(approve(), 'you type the confirmation; aegean approve');

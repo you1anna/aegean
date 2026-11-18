@@ -49,6 +49,7 @@ export function checkFix(name: string): { label: string; command: string[]; term
   if (name === 'claude-subscription') return { label: 'Log in to Claude', command: ['auth', 'login', 'claude'], terminal: true };
   if (name === 'codex-subscription') return { label: 'Log in to Codex', command: ['auth', 'login', 'codex'], terminal: true };
   if (name === 'verifier-vm') return { label: 'Start the verifier', command: ['verifier', 'start'], terminal: false };
+  if (name === 'pilot-prerequisites') return { label: 'Qualify this host for this release', command: ['qualify'], terminal: false };
   return undefined;
 }
 

@@ -292,7 +292,8 @@ The guide uses colour if the terminal supports it. To show plain text, set `NO_C
 
 The guide does these steps in sequence:
 
-1. It checks the host with `doctor`. For a failed login or a stopped verifier, it offers the command that corrects the check.
+1. It checks the host with `doctor`. For a failed login, a stopped verifier or missing qualification evidence, it offers the command that corrects the check.
+   For qualification, that command is `aegean qualify`. The guide then checks the host again.
 2. It reads the runs. If this host has an unfinished run, you can continue that run.
 3. It checks the project and lists the committed files that the Scout reads.
 4. It takes the request from a file, or it opens your editor (`VISUAL` or `EDITOR`) on a new private request file.
