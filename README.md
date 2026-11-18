@@ -15,16 +15,18 @@ You approve the scope, approve publication and decide whether to merge.
 ## How it works
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "-apple-system, Segoe UI, Helvetica, Arial, sans-serif", "fontSize": "15px", "lineColor": "#56749a"}, "flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 48, "padding": 18}}}%%
 flowchart LR
     accTitle: Aegean delivery workflow
     accDescr: The Scout drafts a specification. A human approves it. The Builder implements it, protected tests and a fresh review check it, then a human approves publication and decides on merge.
-    S["Specify<br/>Scout + human approval"] --> B["Build<br/>Codex Builder"]
-    B --> V["Check<br/>Verifier + fresh review"]
-    V --> H["Review<br/>Human publication + merge"]
+    S("<b>Specify</b><br/><small>Scout + human approval</small>") --> B("<b>Build</b><br/><small>Codex Builder</small>")
+    B --> V("<b>Check</b><br/><small>Verifier + fresh review</small>")
+    V --> H(["<b>Review</b><br/><small>Human publication + merge</small>"])
     classDef agent fill:#e8eff8,stroke:#56749a,color:#182d49,stroke-width:1.5px
-    classDef gate fill:#fce8d8,stroke:#ae7044,color:#442b1b,stroke-width:1.5px
+    classDef gate fill:#fce8d8,stroke:#ae7044,color:#442b1b,stroke-width:2px
     class S,B,V agent
     class H gate
+    linkStyle default stroke:#56749a,stroke-width:2px
 ```
 
 - **Approve one contract.** OpenSpec records the requirements, allowed paths and implementation plan.
