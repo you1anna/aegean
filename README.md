@@ -74,7 +74,10 @@ In the enrolled project, start the interactive guide:
 aegean guide
 ```
 
-The guide covers host checks, the request and specification review. See the [workflow](docs/WORKFLOW.md) for later stages.
+![The aegean guide start screen. It shows the Aegean logo, the guide introduction and the aegean doctor host check. All host checks pass, and the last line states that this release is not accepted.](docs/images/aegean-guide.png)
+
+The guide covers the host check, the project check, the request, the pilot authorisation and the specification review.
+It shows each command before it runs it. See the [workflow](docs/WORKFLOW.md) for later stages.
 
 | Read next | Purpose |
 | --- | --- |
