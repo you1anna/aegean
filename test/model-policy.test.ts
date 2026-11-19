@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import toolchain from '../toolchain.json' with { type: 'json' };
 import { ModelPolicySchema, TaskScopeSchema, selectModel, qualificationIdentity, qualificationPolicyIdentity, qualifies, type Qualification } from '../src/domain/model-policy.js';
 import { tokenStatus, reserveTokens, settleTokens } from '../src/domain/token-budget.js';
+import { syntheticRun } from './helpers/runs.js';
 
 test('model choice is explicit and keeps unknown scope, repairs and both Auditors on the baseline', () => {
   const policy = ModelPolicySchema.parse(toolchain.models);
@@ -56,12 +57,13 @@ test('token reservations include unsettled calls and never refund missing usage'
 });
 
 test('the run policy identity binds model settings and context limits', async () => {
-  const { policyIdentityFor, POLICY_IDENTITY, createRun, assertRunPolicy, POLICY, digest } = await import('../src/domain/workflow.js');
+  const { policyIdentityFor, POLICY_IDENTITY } = await import('../src/domain/workflow-policy.js');
+  const { assertRunPolicy } = await import('../src/domain/run.js');
   const changed = structuredClone(toolchain);
   changed.models.roles.builder.baseline.effort = 'high';
   assert.notEqual(policyIdentityFor(changed), POLICY_IDENTITY);
   changed.models.roles.builder.inputBytes++;
   assert.notEqual(policyIdentityFor(changed), POLICY_IDENTITY);
-  const run = createRun('test', 'host', 'owner/repo', POLICY.version, 1, { approver: { id: 1, login: 'operator' }, projectPolicy: digest('policy') });
+  const run = syntheticRun({ id: 'test', host: 'host', now: 1 });
   assert.throws(() => assertRunPolicy({ ...run, policyIdentity: policyIdentityFor(changed) }), /policy differs/);
 });

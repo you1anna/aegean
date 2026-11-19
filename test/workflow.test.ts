@@ -1,16 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, transition, digest, POLICY, POLICY_IDENTITY, policyIdentityFor, policyFromToolchain, STOP_REASONS, type Run, type Event } from '../src/domain/workflow.js';
+import { STATES, STOP_REASONS, TERMINAL_STATES, type Event, type EventType, type Run, type State } from '../src/domain/run.js';
+import { transition } from '../src/domain/workflow.js';
+import { digest } from '../src/domain/digest.js';
+import { POLICY, POLICY_IDENTITY, policyIdentityFor, policyFromToolchain } from '../src/domain/workflow-policy.js';
 import { ProjectSchema } from '../src/domain/config.js';
 import toolchain from '../toolchain.json' with { type: 'json' };
+import { frozenProject, syntheticRun, workflowEvent as event } from './helpers/runs.js';
 
 const spec = digest('approved requirement');
 const suite = digest('independent suite');
 const commit = 'a'.repeat(40);
-const frozen = { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest('frozen project policy') };
-const start = () => createRun('run-1', 'host-a', 'owner/repo', POLICY.version, 100, frozen);
-const event = (type: Event['type'], data: Record<string, unknown> = {}): Event =>
-  ({ id: crypto.randomUUID(), at: 101, type, ...data } as Event);
+const frozen = frozenProject();
+const start = () => syntheticRun({ frozen });
 const none = { builder: 0, spec: 0, factory: 0 };
 const baseline = { suite, cases: 2, passed: 1 };
 const build = (run: Run) => transition(run, event('begin-build', { baseline }));
@@ -244,4 +246,79 @@ test('base commit infrastructure failures share the retry budget and retain an i
   candidate = transition(candidate, event('verification', { commit, spec, suite, outcome: 'inconclusive', receipt: digest('infra'), activeMs: 0 }));
   assert.equal(candidate.state, 'escalated');
   assert.throws(() => transition(build(staged()), fail()), /state/);
+});
+
+const evidence = { spec, specCommit: commit, suite, commit, mergeCommit: 'e'.repeat(40), approvalRef: 'approval', publicationRef: 'publication', verification: 'pass', receipt: digest('receipt'), repairReceipt: digest('repair receipt'), revisionRef: 'revision', reviewCommit: commit } as const;
+const withEvidence = (state: State, extra: Partial<Run> = {}): Run => ({ ...start(), ...evidence, state, ...extra });
+const evidenceFields = (run: Run) => Object.keys(run).filter(key => !Object.hasOwn(start(), key)).sort();
+test('each event clears exactly the evidence that it makes stale', () => {
+  const changed = 'f'.repeat(40);
+  const cases: [string, Run, Event, string[]][] = [
+    ['draft with a published commit', withEvidence('repair'), event('draft', { spec: digest('next'), specCommit: changed }), ['mergeCommit', 'revisionRef', 'spec', 'specCommit']],
+    ['draft without a published commit', withEvidence('spec-drafted'), event('draft', { spec: digest('next') }), ['mergeCommit', 'revisionRef', 'spec']],
+    ['repair build', withEvidence('repair'), event('begin-build'), ['approvalRef', 'commit', 'mergeCommit', 'repairReceipt', 'revisionRef', 'spec', 'specCommit', 'suite']],
+    ['candidate', withEvidence('building'), event('candidate', { commit: changed, activeMs: 0 }), ['approvalRef', 'commit', 'mergeCommit', 'receipt', 'reviewCommit', 'revisionRef', 'spec', 'specCommit', 'suite', 'verification']],
+    ['implementation revision', withEvidence('paused', { resumeState: 'human-merge-review', reason: 'wait' }), event('revise', { commit: changed, scope: 'implementation', actor: 'human', approvalRef: 'next' }), ['approvalRef', 'commit', 'revisionRef', 'spec', 'specCommit', 'suite']],
+    ['contract revision', withEvidence('human-merge-review'), event('revise', { commit: changed, scope: 'contract', actor: 'human', approvalRef: 'next', spec: digest('next'), specCommit: 'd'.repeat(40) }), ['revisionRef', 'spec', 'specCommit']],
+    ['resume', withEvidence('paused', { resumeState: 'verifying', reason: 'wait' }), event('resume'), Object.keys(evidence).sort()],
+  ];
+  for (const [name, run, next, kept] of cases) assert.deepEqual(evidenceFields(transition(run, next)), kept, name);
+  assert.equal(transition(withEvidence('repair'), event('begin-build')).repairReceipt, evidence.receipt);
+});
+
+const ACCEPTED_IN: Record<EventType, readonly State[]> = {
+  draft: ['requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'repair'],
+  approve: ['spec-drafted'],
+  'stage-tests': ['spec-approved'],
+  'baseline-inconclusive': ['tests-staged'],
+  'begin-build': ['tests-staged', 'repair'],
+  candidate: ['building'],
+  verification: ['verifying'],
+  review: ['reviewing'],
+  'authorize-publication': ['human-merge-review'],
+  revise: ['human-merge-review', 'paused'],
+  merged: ['human-merge-review'],
+  archive: ['merged'],
+  cancel: ['requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'building', 'verifying', 'reviewing', 'repair', 'human-merge-review', 'merged', 'paused'],
+  pause: ['requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'building', 'verifying', 'reviewing', 'repair', 'human-merge-review'],
+  resume: ['paused'],
+};
+test('each event is accepted only in its own states, and a terminal run accepts none', () => {
+  const sample: Record<EventType, Record<string, unknown>> = {
+    draft: { spec: digest('next') }, approve: { spec, specCommit: commit, actor: 'human', approvalRef: 'approval' }, 'stage-tests': { spec, suite, activeMs: 0 },
+    'baseline-inconclusive': { suite, reason: 'unavailable', activeMs: 0 }, 'begin-build': {}, candidate: { commit: 'f'.repeat(40), activeMs: 0 },
+    verification: { commit, spec, suite, outcome: 'pass', receipt: evidence.receipt, activeMs: 0 }, review: { commit, outcome: 'pass', findings: none, activeMs: 0 },
+    'authorize-publication': { commit, spec, suite, receipt: evidence.receipt, actor: 'human', approvalRef: 'publication' },
+    revise: { commit: 'f'.repeat(40), scope: 'implementation', actor: 'human', approvalRef: 'revision' }, merged: { commit, mergeCommit: 'e'.repeat(40), actor: 'human' },
+    archive: {}, cancel: {}, pause: { reason: 'wait', activeMs: 0 }, resume: {},
+  };
+  const refusal = (run: Run, next: Event): string | undefined => { try { transition(run, next); return undefined; } catch (error) { return (error as Error).message; } };
+  for (const type of Object.keys(ACCEPTED_IN) as EventType[]) {
+    for (const state of STATES) {
+      const run = withEvidence(state, state === 'paused' ? { resumeState: 'human-merge-review', reason: 'wait' } : {});
+      const message = refusal(run, event(type, sample[type])) ?? '';
+      if (TERMINAL_STATES.includes(state)) assert.match(message, /^terminal state/, `${type} in ${state}`);
+      else assert.equal(/^invalid state|^revision requires human merge review/.test(message), !ACCEPTED_IN[type].includes(state), `${type} in ${state}: ${message}`);
+    }
+  }
+});
+
+test('a repeated event returns the same run, and no transition changes its input', () => {
+  const draft = event('draft', { spec });
+  const drafted = transition(start(), draft);
+  assert.equal(transition(drafted, draft), drafted);
+  const cancel = event('cancel'); const cancelled = transition(drafted, cancel);
+  assert.equal(transition(cancelled, cancel), cancelled);
+  const before = structuredClone(drafted);
+  transition(drafted, event('approve', { spec, actor: 'human', approvalRef: 'approval' }));
+  assert.throws(() => transition(drafted, event('stage-tests', { spec, suite, activeMs: 0 })), /state/);
+  assert.deepEqual(drafted, before);
+});
+
+test('an event type outside the workflow is refused, including inherited object keys', () => {
+  const run = start(); const before = structuredClone(run);
+  for (const type of ['unknown', 'constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    assert.throws(() => transition(run, event(type as EventType)), /unknown workflow event/, type);
+  }
+  assert.deepEqual(run, before);
 });

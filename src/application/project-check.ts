@@ -4,7 +4,7 @@ import { ProjectSchema, assertSupportedImage } from '../domain/config.js';
 import { candidateGit, candidateGitChecked } from '../adapters/candidate-git.js';
 import { eligible } from './enrol.js';
 import { hostConfig } from './runtime.js';
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import type { Project } from '../domain/config.js';
 import { scoutContext } from './model-context.js';
 export async function checkProject(repo: string, signal?: AbortSignal) {

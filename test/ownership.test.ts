@@ -6,9 +6,9 @@ import { test } from 'node:test';
 import { GitLedger, emptyLedger } from '../src/adapters/ledger.js';
 import { checked, command } from '../src/adapters/process.js';
 import { acquireRunPermit, quiescentResources, reconcilePermitIntent, releaseQuiescentPermits } from '../src/application/ownership.js';
-import { createRun, digest, POLICY } from '../src/domain/workflow.js';
+import { syntheticRun } from './helpers/runs.js';
 
-const makeRun = (id = 'run-a', repository = 'owner/a', host = 'air') => createRun(id, host, repository, POLICY.version, 1, { approver: { id: 1, login: 'operator' }, projectPolicy: digest('reviewed policy') });
+const makeRun = (id = 'run-a', repository = 'owner/a', host = 'air') => syntheticRun({ id, repository, host, now: 1 });
 async function fixture(body: (f: { root: string; dir: string; remote: string; ledger: GitLedger; local: { id: string; generation: number; note: string } }) => Promise<void>): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'aegean-ownership-test-')); const dir = join(root, 'local'); const remote = join(root, 'remote.git'); const seed = join(root, 'seed');
   try {

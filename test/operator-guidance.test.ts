@@ -1,4 +1,4 @@
-import { STOP_REASONS } from '../src/domain/workflow.js';
+import { STOP_REASONS } from '../src/domain/run.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nextSteps, listSteps } from '../src/domain/next-steps.js';

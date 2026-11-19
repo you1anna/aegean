@@ -11,7 +11,7 @@ import { terminalUi, completePath, openEditor, openPager, wrap } from '../src/ad
 import { brandLines, colourDepth, MARK_WIDTH, WORDMARK } from '../src/adapters/brand.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
 import { PilotLimitsSchema } from '../src/domain/pilot-limits.js';
-import type { State } from '../src/domain/workflow.js';
+import type { State } from '../src/domain/run.js';
 import { fixture } from './helpers/coordinator.js';
 
 const id = 'run-00000000-0000-4000-8000-000000000000';

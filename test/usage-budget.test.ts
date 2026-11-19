@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { initializeBudget, budgetStatus, budgetedRole as invokeRole } from '../src/application/usage-budget.js';
 import { identity } from '../src/domain/model-policy.js';
 import type { ModelCall } from '../src/application/model-call.js';
-import { POLICY } from '../src/domain/workflow.js';
+import { POLICY } from '../src/domain/workflow-policy.js';
+import { syntheticRun } from './helpers/runs.js';
 const tokenPolicy = { enforcement: 'monitored' as const, maxTokensPerRun: 10000, maxTokensPerCall: 100 };
 const call: ModelCall = { role: 'scout', profile: POLICY.models.roles.scout.baseline, cliVersion: 'test', contextDigest: 'a'.repeat(64), budgetIdentity: identity(tokenPolicy), generation: 1, requireReportedModel: false, assertOwned: async () => {} };
 const budgetedRole = (...args: Parameters<typeof invokeRole> extends [...infer A, ModelCall] ? A : never) => invokeRole(...args, call);
@@ -36,8 +37,7 @@ test('missing, malformed and drifted accounting fail closed', async () => fixtur
 
 test('expiry and active, repair, revision budgets reject execution at their exact boundaries', async () => {
   const { remainingExecution, defaultBudget } = await import('../src/domain/budgets.js');
-  const { createRun, digest } = await import('../src/domain/workflow.js');
-  const run = createRun('test', 'host', 'owner/repo', POLICY.version, 1, { approver: { id: 1, login: 'operator' }, projectPolicy: digest('policy') });
+  const run = syntheticRun({ id: 'test', host: 'host', now: 1 });
   assert.equal(remainingExecution(run, defaultBudget, 0, 100, 101), 1);
   assert.throws(() => remainingExecution(run, defaultBudget, 0, 100, 100), /expired/);
   assert.throws(() => remainingExecution(run, defaultBudget, defaultBudget.activeTimeoutMs, 1), /budget exhausted/);

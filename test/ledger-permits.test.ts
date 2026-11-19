@@ -6,7 +6,11 @@ import { join } from 'node:path';
 import { GitLedger, emptyLedger, Conflict, assertOwned, type Ledger } from '../src/adapters/ledger.js';
 import { checked, command } from '../src/adapters/process.js';
 import { acquireRunPermit } from '../src/application/ownership.js';
-import { createRun, transition, POLICY, digest, type Run, type HistoricalRun } from '../src/domain/workflow.js';
+import type { Run, HistoricalRun } from '../src/domain/run.js';
+import { transition } from '../src/domain/workflow.js';
+import { POLICY } from '../src/domain/workflow-policy.js';
+import { digest } from '../src/domain/digest.js';
+import { syntheticRun } from './helpers/runs.js';
 
 async function fixture(initial: unknown = emptyLedger()) {
   const root = await mkdtemp(join(tmpdir(), 'aegean-permits-'));
@@ -21,7 +25,7 @@ async function fixture(initial: unknown = emptyLedger()) {
   await save(initial);
   return { root, remote, seed, ledger: new GitLedger(remote), close: () => rm(root, { recursive: true, force: true }) };
 }
-const run = (id: string, repository = 'owner/repo', host = 'air') => createRun(id, host, repository, POLICY.version, 1, { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest('project') });
+const run = (id: string, repository = 'owner/repo', host = 'air') => syntheticRun({ id, repository, host, now: 1 });
 const historical = (run: Run): HistoricalRun => {
   const { approver, projectPolicy, revisions, revisionRef, reviewCommit, ...legacy } = run;
   return { ...legacy, schemaVersion: 1, policy: '0.1.0', policyIdentity: digest('historical policy') };
@@ -203,7 +207,7 @@ test('original bootstrap history without policy identity is inspected read-only 
     assert.equal(preview.terminalRuns,2);assert.equal(await checked('git',['rev-parse','control'],{cwd:f.remote}),head);
     const migrated=await f.ledger.migrateQuiescent(head);assert.deepEqual(migrated.runs,history);assert.equal('policyIdentity' in migrated.runs['old-a']!,false);
     assert.deepEqual((await f.ledger.migrateQuiescent()).runs,history);await assert.rejects(f.ledger.resumeOwned('old-a','air',1),/stale|terminal/);
-    const {assertRunPolicy}=await import('../src/domain/workflow.js');assert.throws(()=>assertRunPolicy(migrated.runs['old-a']!),/policy differs/);
+    const {assertRunPolicy}=await import('../src/domain/run.js');assert.throws(()=>assertRunPolicy(migrated.runs['old-a']!),/policy differs/);
     await assert.rejects(f.ledger.migrateQuiescent(head),/source changed/);
   }finally{await f.close();}
 });

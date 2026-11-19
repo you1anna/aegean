@@ -1,4 +1,5 @@
-import { POLICY, type State } from './workflow.js';
+import { POLICY } from './workflow-policy.js';
+import { TERMINAL_STATES, type State } from './run.js';
 import { REVIEW_NOTES } from './scout.js';
 import { ALLOWED_PATHS } from './allowed-paths.js';
 
@@ -23,7 +24,7 @@ export interface GuideUi {
 /** The operator left the guide. A run keeps its recorded state. */
 export class GuideStop extends Error { constructor(readonly interrupted = false) { super('guide stopped'); } }
 
-export const ENDED: readonly string[] = ['archived', 'cancelled', 'escalated'];
+export const ENDED: readonly string[] = TERMINAL_STATES;
 export const SPEC_FILES = [REVIEW_NOTES, 'proposal.md', 'specs/contract/spec.md', ALLOWED_PATHS, 'design.md', 'tasks.md'] as const;
 export const REQUEST_TEMPLATE = '# Goal\n\n\n# Limits\n\n\n# Tests of success\n\n';
 

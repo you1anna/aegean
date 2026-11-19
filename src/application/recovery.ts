@@ -55,8 +55,8 @@ export async function recover(id: string, confirmedStopped: boolean, root: strin
           if (!Number.isFinite(item.startedAt) || !Number.isSafeInteger(item.timeoutMs) || item.timeoutMs <= 0) throw new Error('invalid effect timing');
           if (run.state !== 'paused') await ledger.owned(id, host.host, local.generation, current => transition(current, { id:randomUUID(), at:Date.now(), type:'pause', reason:'operator confirmed stopped after unknown role outcome; prior evidence retained', activeMs:Math.max(0,Math.min(Date.now()-item.startedAt,item.timeoutMs)) }));
           await settleUnknownBudget(dir);
-          await observeRun(root, dir, run as import('../domain/workflow.js').Run, 'recovery', 'interruption', 'pass', { pending: pending.map(item => item.key), unknownCalls: usage.uncertain });
-          await finalizeRunEvidence(root, dir, run as import('../domain/workflow.js').Run, ['recovery']);
+          await observeRun(root, dir, run as import('../domain/run.js').Run, 'recovery', 'interruption', 'pass', { pending: pending.map(item => item.key), unknownCalls: usage.uncertain });
+          await finalizeRunEvidence(root, dir, run as import('../domain/run.js').Run, ['recovery']);
         }
       }
       else { await reconcileVerifierResource(dir); await reconcileBuilder(dir, local.worktree); }

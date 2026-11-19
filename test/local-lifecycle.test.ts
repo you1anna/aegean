@@ -5,14 +5,14 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { fixture } from './helpers/coordinator.js';
 import { command } from '../src/adapters/process.js';
-import { digest } from '../src/domain/workflow.js';
+import { digest } from '../src/domain/digest.js';
 import { defaultBudget } from '../src/domain/budgets.js';
 
 // Test-only coordinator edge. No unattended production flag or environment bypass.
 async function decision(f: Awaited<ReturnType<typeof fixture>>, action: string, options = {}, during = '') {
   const id = (await f.current()).id;
   const script = `import {decisionCoordinator} from ${JSON.stringify(pathToFileURL(join(f.root, 'dist/src/application/decision-commands.js')).href)};
-import {digest} from ${JSON.stringify(pathToFileURL(join(f.root, 'dist/src/domain/workflow.js')).href)};
+import {digest} from ${JSON.stringify(pathToFileURL(join(f.root, 'dist/src/domain/digest.js')).href)};
 import {randomUUID} from 'node:crypto';
 const confirm=async(action,run,summary,artifact,actor,authenticate)=>{ await authenticate(); ${during}; return {schemaVersion:1,id:randomUUID(),action,run,actor,binding:digest(JSON.stringify(artifact)),decidedAt:Date.now()}; };
 console.log(JSON.stringify(await decisionCoordinator(confirm)(${JSON.stringify(f.root)},${JSON.stringify(id)},${JSON.stringify(action)},${JSON.stringify(options)},new AbortController().signal)));`;

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { checked, command, type Result } from '../../src/adapters/process.js';
-import type { Run } from '../../src/domain/workflow.js';
+import type { Run } from '../../src/domain/run.js';
 import { syntheticAcceptance } from './acceptance.js';
 
 export async function fixture(options: { approvalMode?: 'local' | 'github-comments'; prerequisitesOnly?: boolean; qualifiedBuilder?: boolean } = {}) {

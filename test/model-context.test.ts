@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boundedContext, toolOutputAllowance } from '../src/domain/context.js';
 import { claudeArgs } from '../src/adapters/agents.js';
-import { POLICY } from '../src/domain/workflow.js';
+import { POLICY } from '../src/domain/workflow-policy.js';
 
 test('required context has priority, counts Unicode bytes and never silently truncates', () => {
   const input = [{ path: 'optional', text: 'x'.repeat(100), required: false }, { path: 'required', text: '海', required: true }];

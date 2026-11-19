@@ -1,4 +1,4 @@
-import { STOP_REASONS, type Run } from './workflow.js';
+import { STOP_REASONS, type Run } from './run.js';
 import { REVIEW_NOTES } from './scout.js';
 
 export interface StepFacts { pilotExpiresAt?: number; specification?: string; runFolder?: string }

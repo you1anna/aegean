@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, access, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fixture } from './helpers/coordinator.js';
-import { STOP_REASONS } from '../src/domain/workflow.js';
+import { STOP_REASONS } from '../src/domain/run.js';
 import { randomUUID } from 'node:crypto';
 
 test('recovery refuses an initializing lock and cancellation retains ownership until verifier cleanup', async () => {
