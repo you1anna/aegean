@@ -3,12 +3,13 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { candidateGit, candidateGitChecked } from '../adapters/candidate-git.js';
 import { transition } from '../domain/workflow.js';
-import { digest } from '../domain/digest.js';
+import { digest, identity } from '../domain/digest.js';
 import { POLICY } from '../domain/workflow-policy.js';
 import { TERMINAL_STATES, assertRunPolicy, isTerminal, type Event, type Run } from '../domain/run.js';
-import { selectModel, identity, type ModelRole, type ModelProfile } from '../domain/model-policy.js';
+import { selectModel, type ModelRole, type ModelProfile } from '../domain/model-policy.js';
 import { assertSupportedImage, type Project } from '../domain/config.js';
 import { responseFault } from '../domain/scout.js';
+import { promptRecord } from '../domain/context.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { type GitLedger, assertOwned as assertLedgerOwned } from '../adapters/ledger.js';
@@ -136,7 +137,7 @@ export class RunSession {
       if (Buffer.byteLength(prompt) > rolePolicy.inputBytes) throw new Error(`required ${role} context exceeds ${rolePolicy.inputBytes} bytes`);
       const profile = selectModel(POLICY.models, role, this.project.modelExecution.task, this.run.repairs, toolchain);
       const key = `${role}-${this.run.repairs}-${this.run.events.length}`;
-      await recordContext(join(dir, 'contexts', `${key}.json`), { role, bytes: Buffer.byteLength(prompt), hash: digest(prompt), tokenEstimate: null, scope: 'Aegean prompt only; CLI system text and tool schemas excluded' });
+      await recordContext(join(dir, 'contexts', `${key}.json`), promptRecord(role, prompt));
       result = await budgetedRole(dir, key, timeout, limits.budget.maxModelCalls, () => invoke(timeout, deadline, profile), {
         role, profile, budgetIdentity: identity(this.project.modelExecution.budget), cliVersion: toolchain[profile.provider], contextDigest: digest(prompt), generation: local.generation,
         requireReportedModel: identity(profile) !== identity(rolePolicy.baseline), assertOwned: () => this.assertOwned(),

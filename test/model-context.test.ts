@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { boundedContext, toolOutputAllowance } from '../src/domain/context.js';
+import { boundedContext, promptRecord, toolOutputAllowance } from '../src/domain/context.js';
 import { claudeArgs } from '../src/adapters/agents.js';
 import { checked } from '../src/adapters/process.js';
 import { POLICY } from '../src/domain/workflow-policy.js';
-import { digest } from '../src/domain/digest.js';
+import { digest, identity } from '../src/domain/digest.js';
 import { unknownTask } from '../src/domain/model-policy.js';
 import { sourceContext } from '../src/application/model-context.js';
 
@@ -31,18 +31,19 @@ test('source context reserves exactly the bytes that the bounded context frames'
   const repo = await realpath(await mkdtemp(join(tmpdir(), 'aegean-source-context-')));
   try {
     const git = (args: string[]) => checked('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@localhost', '-c', 'commit.gpgSign=false', ...args], { cwd: repo });
-    await git(['init', '-b', 'main']); await mkdir(join(repo, 'src'));
-    await writeFile(join(repo, 'README.md'), 'readme'); await writeFile(join(repo, 'src/a.ts'), 'alpha');
+    // The optional file sorts before the required one by path alone, so the required-first order is visible.
+    await git(['init', '-b', 'main']);
+    await writeFile(join(repo, 'README.md'), 'readme'); await writeFile(join(repo, 'a.ts'), 'alpha');
     await git(['add', '.']); await git(['commit', '-m', 'synthetic']);
-    const required = '\nFILE "README.md"\nreadme\n', framed = required + '\nFILE "src/a.ts"\nalpha\n';
+    const required = '\nFILE "README.md"\nreadme\n', framed = required + '\nFILE "a.ts"\nalpha\n';
     const exact = await sourceContext(repo, unknownTask, Buffer.byteLength(framed));
     assert.equal(exact.text, framed); assert.deepEqual(exact.omitted, []);
-    assert.deepEqual(exact.manifest.map(part => [part.path, part.required, part.included]), [['README.md', true, true], ['src/a.ts', false, true]]);
+    assert.deepEqual(exact.manifest.map(part => [part.path, part.required, part.included]), [['README.md', true, true], ['a.ts', false, true]]);
     // One byte less: the size check omits the optional file before the bounded context sees it.
     const short = await sourceContext(repo, unknownTask, Buffer.byteLength(framed) - 1);
-    assert.equal(short.text, required); assert.deepEqual(short.omitted, ['src/a.ts']);
+    assert.equal(short.text, required); assert.deepEqual(short.omitted, ['a.ts']);
     assert.deepEqual(short.manifest.map(part => part.path), ['README.md']);
-    assert.deepEqual(short.sourceObjects.map(object => object.path), ['README.md', 'src/a.ts']);
+    assert.deepEqual(short.sourceObjects.map(object => object.path), ['README.md', 'a.ts']);
     await assert.rejects(sourceContext(repo, unknownTask, Buffer.byteLength(required) - 1), /required context exceeds \d+ bytes: README\.md/);
   } finally { await rm(repo, { recursive: true, force: true }); }
 });
@@ -68,4 +69,11 @@ test('Claude arguments pin model and effort without weakening subscription isola
   assert.equal(args[args.indexOf('--effort') + 1], profile.effort);
   for (const control of ['--restricted', '--safe-mode', '--strict-mcp-config', '--no-session-persistence']) assert.ok(args.includes(control));
   assert.ok(!args.includes('--fallback-model')); assert.ok(!args.includes('--bare'));
+});
+test('a prompt record hashes the prompt text, and a JSON identity sorts keys and leaves out undefined', () => {
+  const prompt = 'p海';
+  assert.equal(JSON.stringify(promptRecord('builder', prompt)), JSON.stringify({ role: 'builder', bytes: 4, hash: digest(prompt), tokenEstimate: null, scope: 'Aegean prompt only; CLI system text and tool schemas excluded' }));
+  assert.notEqual(promptRecord('builder', prompt).hash, identity(prompt));
+  assert.equal(identity({ b: 1, a: undefined, c: [{ y: 2, x: 1 }] }), digest('{"b":1,"c":[{"x":1,"y":2}]}'));
+  assert.equal(identity(undefined), digest('undefined'));
 });

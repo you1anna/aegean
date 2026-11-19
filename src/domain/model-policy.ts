@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { identity } from './digest.js';
 import { z } from 'zod';
 
 export const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -31,12 +31,6 @@ export const ModelPolicySchema = z.object({ schemaVersion: z.literal(1), roles: 
 });
 export type ModelPolicy = z.infer<typeof ModelPolicySchema>;
 export type ModelRole = keyof ModelPolicy['roles'];
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b, 'en')).map(([k, v]) => [k, canonical(v)]));
-  return value;
-}
-export const identity = (value: unknown): string => createHash('sha256').update(JSON.stringify(canonical(value)) ?? 'undefined').digest('hex');
 export interface QualificationPins { policy: string; maxRepairs: number; maxRevisions: number; maxModelCalls: number; activeTimeoutMs: number; claude: string; codex: string }
 export function qualificationPolicyIdentity(policy: ModelPolicy, pins: QualificationPins): string {
   return identity({ workflow: pins.policy, contextPolicy: 'required-first-v1', taskClass: 'routine-cli', maxRepairs: pins.maxRepairs, maxRevisions: pins.maxRevisions, maxModelCalls: pins.maxModelCalls, activeTimeoutMs: pins.activeTimeoutMs, auditorCli: pins.claude, testAuditor: policy.roles['auditor-tests'], reviewAuditor: policy.roles['auditor-review'] });
