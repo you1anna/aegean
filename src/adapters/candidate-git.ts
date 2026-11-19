@@ -63,3 +63,12 @@ export async function candidateGitChecked(args: readonly string[], options: Opti
   if (result.code !== 0 || result.interrupted) throw new Error(`git failed (${result.termination ?? result.code}): ${result.stderr.slice(0, 2000)}`);
   return result.stdout.trim();
 }
+/** Commit the candidate worktree, except Builder scratch, and return its HEAD. */
+export async function saveCandidate(worktree: string, message: string): Promise<string> {
+  await candidateGitChecked(['add', '-A', '--', '.', ':(exclude).aegean-tmp'], { cwd: worktree });
+  if (await candidateGitChecked(['ls-files', '--', '.aegean-tmp'], { cwd: worktree })) throw new Error('Builder scratch directory must not be tracked');
+  const changed = await candidateGit(['diff', '--cached', '--quiet'], { cwd: worktree });
+  if (changed.code === 1) await candidateGitChecked(['commit', '-m', message], { cwd: worktree });
+  else if (changed.code !== 0) throw new Error('could not inspect candidate changes');
+  return candidateGitChecked(['rev-parse', 'HEAD'], { cwd: worktree });
+}
