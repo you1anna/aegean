@@ -38,6 +38,8 @@ test('oversized candidate review pauses with diagnostics and never publishes a p
   const f=await fixture();try {
     const started = await f.start(); assert.equal(started.code, 0, started.stderr);
     await f.scenario({approved:true,publishApproved:true,builderLargeDiff:true});const result=await f.resume();assert.equal(result.code,0,result.stderr);
+    // A stage that stops the build loop ends the resume with the standard result.
+    assert.deepEqual((({pr,action})=>({pr,action}))(JSON.parse(result.stdout)),{pr:1,action:'Inspect status before continuing'});
     const run=await f.current();const local=await f.local();assert.equal(run.state,'paused');assert.equal(run.resumeState,'reviewing',run.reason ?? 'missing pause reason');assert.match(run.reason!,/200000 bytes/);
     assert.equal((await f.events()).filter(e=>e.role==='auditor-review').length,0);
     assert.equal(await f.realGit(['--git-dir',f.remote,'rev-parse',local.branch]),run.specCommit);
