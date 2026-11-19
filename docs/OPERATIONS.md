@@ -106,6 +106,7 @@ aegean doctor --require prerequisites
 
 Qualification records Builder containment and protected-verifier observations for the exact installed host and release.
 It does not call models or accept the full release. Failed or unknown observations block pilot execution.
+The result ends with the next steps. For a failed, unknown or uncleaned control, the steps name the control and the command to run next.
 The historical host-Builder probe is retired; do not use it as an installation check.
 
 The verifier uses a dedicated Colima profile and a pinned image. Keep the user's

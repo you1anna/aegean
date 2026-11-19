@@ -41,6 +41,39 @@ export function nextSteps(run: Guided, facts: StepFacts = {}, now = Date.now()):
   }
 }
 
+export interface QualificationFacts {
+  prerequisitesPassed: boolean; cleanupConfirmed: boolean; retainedResources: string[]; workDirectory: string;
+  reports: { kind: string; observations: { name: string; outcome: string }[] }[];
+}
+
+/** Operator guidance after aegean qualify. It explains a failed or unknown control and names the next command. */
+export function qualificationSteps(facts: QualificationFacts): string[] {
+  const named = (outcome: string) => facts.reports.flatMap(report => report.observations.filter(item => item.outcome === outcome).map(item => `${report.kind}/${item.name}`));
+  const failed = named('fail'), unknown = named('unknown');
+  if (facts.prerequisitesPassed) return [
+    'This host and release are qualified. Confirm the check: aegean doctor --require prerequisites',
+    'Start or continue a run in the project repository: aegean guide',
+    'Qualification applies to one installed release. After each install or upgrade, run: aegean qualify',
+  ];
+  const steps: string[] = [];
+  if (!facts.cleanupConfirmed) steps.push(
+    `The probes did not confirm cleanup. These resources can remain: ${facts.retainedResources.join(', ') || 'not identified'}`,
+    'Make sure that no Aegean process runs, then inspect the verifier: aegean verifier status',
+    'If the verifier reports retained or uncertain resources, recover it: aegean verifier recover --confirm-stopped',
+  );
+  if (failed.length) steps.push(
+    `A containment control failed: ${failed.join(', ')}. Pilot runs stay blocked. Do not bypass this check.`,
+    `Read the detail of each failed observation above, and the probe records in ${facts.workDirectory}`,
+    'Read "Check the installation" in the operations guide. Correct the cause before you qualify again.',
+  );
+  if (unknown.length) steps.push(
+    `These controls gave no result: ${unknown.join(', ')}. Usually the verifier VM was unavailable or the probes were interrupted.`,
+    'Make sure that the verifier runs: aegean verifier status',
+  );
+  steps.push('Then qualify again: aegean qualify');
+  return steps;
+}
+
 export function listSteps(states: string[]): string[] {
   const active = states.some(state => !['cancelled', 'archived', 'escalated'].includes(state));
   return active ? ['Inspect a run and its next step: aegean status --run ID'] : ['No run is active. A run exists only after you run this in the project repository: aegean prepare --request FILE'];
