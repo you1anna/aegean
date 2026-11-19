@@ -36,7 +36,7 @@ Do not repeat a passing full suite against unchanged source without a reason.
 
 | Control | Test evidence |
 | --- | --- |
-| Approval, stale evidence, repair budgets and repeated events | [Workflow](../test/workflow.test.ts). |
+| Approval, stale evidence, repair budgets and repeated events; the states that accept each event and the evidence that each event clears | [Workflow](../test/workflow.test.ts). |
 | Base commit results, allowed paths and finding owners | [Build checks](../test/build-checks.test.ts) and [coordinator](../test/coordinator.test.ts). |
 | Protected values stay out of receipts and repair feedback | [Verifier](../test/verifier.test.ts). |
 | Candidate mounts exclude tests and host credentials | [Adapter arguments](../test/adapters.test.ts); native enforcement needs host qualification. |
@@ -44,7 +44,8 @@ Do not repeat a passing full suite against unchanged source without a reason.
 | Concurrent ownership and stale owner rejection | [Ledger permits](../test/ledger-permits.test.ts) and [ownership recovery](../test/ownership.test.ts). |
 | Interrupted effects, imports and publication | [Coordinator](../test/coordinator.test.ts), [Builder import](../test/builder-import.test.ts) and [process recovery](../test/process-recovery.test.ts). |
 | Git hooks, filters and configuration isolation | [Git safety](../test/git-safety.test.ts). |
-| Domain import boundary and release installation | [Installation](../test/installation.test.ts). |
+| Layer import rules and import cycles | [Architecture](../test/architecture.test.ts). |
+| Release installation | [Installation](../test/installation.test.ts). |
 | Host, release and policy identities invalidate old evidence | [Acceptance](../test/acceptance.test.ts). |
 
 ## Fast local feedback

@@ -112,7 +112,11 @@ CLI → application services → domain rules
 | [`src/domain/`](../src/domain/) | Define pure workflow rules and data contracts. |
 | [`src/adapters/`](../src/adapters/) | Handle processes, files, Git, GitHub, models and containers. |
 
-Domain code imports neither application services nor adapters. [Boundary tests](../test/installation.test.ts) guard that rule.
+In the domain, [`run.ts`](../src/domain/run.ts) defines runs and events, [`workflow-policy.ts`](../src/domain/workflow-policy.ts) reads the policy limits,
+and [`workflow.ts`](../src/domain/workflow.ts) applies one event to a run.
+
+A module imports only from its own layer or an inner layer. Domain code imports neither adapters nor application services.
+Adapters do not import application services. The source has no import cycles. [Architecture tests](../test/architecture.test.ts) guard these rules.
 The guide calls the same command dispatch; it has no separate route to an effect.
 There is no general scheduler or background model polling.
 
