@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createRun } from '../domain/run.js';
+import { RUN_ID, createRun } from '../domain/run.js';
 import { digest } from '../domain/digest.js';
 import { POLICY } from '../domain/workflow-policy.js';
 import { atomicJson } from '../adapters/files.js';
@@ -27,7 +27,7 @@ export async function prepareRun(repo: string, request: string, signal: AbortSig
     let id:string;let intent:{id:string;pid:number;run?:unknown};
     try{intent=JSON.parse((await readBoundedEvidenceFile(join(marker,'intent.json'),16_384)).toString());id=intent.id;}
     catch{throw new Error(`preparation is active or interrupted at ${marker}; inspect before recovery; no second run created`);}
-    if(!/^run-[a-f0-9-]{36}$/.test(id))throw new Error('invalid preparation intent');
+    if(!RUN_ID.test(id))throw new Error('invalid preparation intent');
     const state=await ledger.read();const run=state.runs[id];
     if(!run)throw new Error(`preparation ${id} has uncertain ownership; inspect ${marker}; no second run created`);
     if(['archived','cancelled','escalated'].includes(run.state))throw new Error(`matching request already ended as ${run.state}: ${id}; revise the request for a new run`);

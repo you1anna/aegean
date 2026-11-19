@@ -18,6 +18,7 @@ import { baselineText } from './build-checks.js';
 import { acquireRunPermit, quiescentResources, releaseQuiescentPermits } from './ownership.js';
 import { buildSpecArtifact, buildPublicationArtifact, buildRevisionArtifact, persistLocalDecision, frozenProject, validateLocalPublication, type LocalDecisionArtifact } from './decisions.js';
 import { pilotArtifact, persistPilot, executionAuthorization, savedPilot, repeatedPilot, type PilotArtifact } from './pilot.js';
+import { RUN_ID } from '../domain/run.js';
 
 type Action = 'approve' | 'publish' | 'revise' | 'pilot';
 export interface DecisionOptions { scope?: 'implementation' | 'contract'; expiresAt?: number; budget?: ExecutionBudget; limitsDigest?: string }
@@ -40,7 +41,7 @@ async function remoteIdentity(local: LocalRun, run: Run, action: Action, signal:
 }
 
 async function withRun<T>(id: string, body: (dir: string, local: LocalRun, run: Run, ledger: GitLedger, host: string) => Promise<T>): Promise<T> {
-  if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
+  if (!RUN_ID.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote);
   const dir = join(stateRoot(), 'runs', id); const release = await executionLock(dir);
   let local: LocalRun | undefined;

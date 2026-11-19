@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { stateRoot } from './runtime.js';
 import { parseReviewNotes, REVIEW_NOTES, type ReviewSummary } from '../domain/scout.js';
+import { RUN_ID } from '../domain/run.js';
 
 const absolute = z.string().max(4096).refine(path => isAbsolute(path) && resolve(path) === path && !/[\0\r\n]/.test(path));
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
@@ -45,6 +46,6 @@ export async function localReview(local: Pick<LocalRun, 'worktree' | 'id'>): Pro
 
 /** Each approved contract keeps its own immutable protected suite. */
 export function suiteRelativePath(run: { id: string; spec?: string }): string {
-  if (!/^run-[a-f0-9-]{36}$/.test(run.id) || !/^[a-f0-9]{64}$/.test(run.spec ?? '')) throw new Error('suite requires exact run and specification identity');
+  if (!RUN_ID.test(run.id) || !/^[a-f0-9]{64}$/.test(run.spec ?? '')) throw new Error('suite requires exact run and specification identity');
   return `suites/${run.id}-${run.spec}.json`;
 }

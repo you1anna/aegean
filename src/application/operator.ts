@@ -10,6 +10,7 @@ import { quiescentResources } from './ownership.js';
 import { binaries, hostConfig, stateRoot } from './runtime.js';
 import { verifierStartArgs, verifierProfileState } from '../domain/verifier-plan.js';
 import toolchain from '../../toolchain.json' with {type:'json'};
+import { RUN_ID } from '../domain/run.js';
 export async function releaseInfo(root:string){
   const manifest=JSON.parse(await readFile(join(root,'installation.json'),'utf8'));
   return {release:root,sourceCommit:manifest.sourceCommit,sourceHash:manifest.sourceHash,artifactHash:manifest.artifactHash,node:manifest.node,toolVersions:await readFile(join(root,'tool-versions.json'),'utf8').then(JSON.parse).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return undefined;throw error;}),hostConfig:join(stateRoot(),'settings.json'),operations:join(root,'docs/OPERATIONS.md')};
@@ -36,7 +37,7 @@ export async function assertHostQuiescent(){
   let dirs:string[]=[];try{dirs=await readdir(join(stateRoot(),'runs'));}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
   for(const id of dirs){
     const dir=join(stateRoot(),'runs',id);
-    if(!/^run-[a-f0-9-]{36}$/.test(id))throw new Error('unknown run record; inspect before host transition');
+    if(!RUN_ID.test(id))throw new Error('unknown run record; inspect before host transition');
     try{await lstat(join(dir,'executing'));throw new Error(`run ${id} retains an execution lock; recover before host transition`);}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
     if(!await quiescentResources(dir))throw new Error(`run ${id} retains uncertain resources; recover before host transition`);
   }

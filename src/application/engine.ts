@@ -18,13 +18,14 @@ import { loadLocalRun, suiteRelativePath, specificationFolder, localReview } fro
 import { validateLocalSpecApproval } from './decisions.js';
 import { RunSession, nowEvent } from './run-session.js';
 import { NEXT, STOP, draftSpecification, reviewSpecification, stageTests, checkBaseline, build, verifyCandidate, reviewCandidate, publishCandidate, archiveRun, type Drafted } from './run-stages.js';
+import { RUN_ID } from '../domain/run.js';
 export async function start(root: string, repo: string, request: string, signal: AbortSignal): Promise<unknown> {
   await requireSubscriptions(root);
   const prepared = await prepareRun(repo, request, signal);
   return resume(root, prepared.id, signal);
 }
 export async function status(id?: string): Promise<unknown> {
-  if (id && !/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
+  if (id && !RUN_ID.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const state = await new GitLedger(host.controlRemote).read();
   let usage: unknown;
   if (!id) { const runs = Object.values(state.runs); return { owners: state.owners, repositories: state.repositories, builder: state.builder, runs: runs.map(r => ({ id: r.id, host: r.host, state: r.state, repairs: r.repairs, activeMs: r.activeMs })), next: listSteps(runs.map(r => r.state)) }; }
@@ -43,7 +44,7 @@ export async function status(id?: string): Promise<unknown> {
   return { ...run, usage, ...(pilot ? { pilot: { expiresAt: new Date(pilot.expiresAt).toISOString(), budget: pilot.budget } } : {}), ...(specification ? { specification } : {}), ...(review ? { review } : {}), ...(baseline ? { baseline } : {}), next: nextSteps(run, { ...(pilot ? { pilotExpiresAt: pilot.expiresAt } : {}), ...(specification ? { specification } : {}), runFolder: dir }) };
 }
 export async function cancel(id: string, root: string): Promise<unknown> {
-  if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
+  if (!RUN_ID.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote);
   const dir = join(stateRoot(), 'runs', id); const local = await loadLocalRun(dir);
   const release = await executionLock(dir);
@@ -69,7 +70,7 @@ export async function resume(root: string, id: string, signal: AbortSignal): Pro
   try { return await resumeRun(root, id, signal); } finally { await releaseHost(); }
 }
 async function resumeRun(root: string, id: string, signal: AbortSignal): Promise<unknown> {
-  if (!/^run-[a-f0-9-]{36}$/.test(id)) throw new Error('invalid run identifier');
+  if (!RUN_ID.test(id)) throw new Error('invalid run identifier');
   const host = await hostConfig(); const bins = binaries(root); const ledger = new GitLedger(host.controlRemote);
   const dir = join(stateRoot(), 'runs', id); const local = await loadLocalRun(dir);
   const release = await executionLock(dir);

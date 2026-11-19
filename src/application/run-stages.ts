@@ -7,7 +7,8 @@ import { sourceContext, scoutContext } from './model-context.js';
 import { parseDraft, draftFiles, reviewSummary } from '../domain/scout.js';
 import { nextSteps } from '../domain/next-steps.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
-import { SuiteSchema, ReviewSchema } from '../domain/config.js';
+import { SuiteSchema, ReviewSchema, type Project, type Suite } from '../domain/config.js';
+import { testAuditorPrompt, builderPrefix, reviewerPrompt, type BuilderRepair } from '../domain/prompts.js';
 import { builderFindings, findingCounts, publicRequirements, repairFeedback } from '../domain/feedback.js';
 import { ALLOWED_PATHS } from '../domain/allowed-paths.js';
 import { allowedPaths, pathsOutsideScope, scopeReceipt, recordBaseline, baselineText } from './build-checks.js';
@@ -36,6 +37,38 @@ import { nowEvent, recordContext, type RunSession } from './run-session.js';
 export const NEXT = 'next', STOP = 'stop';
 export interface Done { readonly result: unknown }
 export type Drafted = ReturnType<typeof reviewSummary>;
+
+/**
+ * Find the run's PR or create it as a draft, then set its body. An ownership check comes directly before each GitHub write.
+ * The two callers differ, and both behaviours are kept: only candidate publication passes a signal to the PR listing
+ * and refuses more than one matching PR.
+ */
+async function upsertPullRequest(session: RunSession, body: string, listing: { listSignal?: AbortSignal; refuseSeveral: boolean }): Promise<void> {
+  const { id, dir, local, project, signal } = session;
+  if (!local.pr) {
+    const existing = JSON.parse(await checked('gh', ['pr', 'list', '--repo', project.repository, '--head', local.branch, '--state', 'all', '--json', 'number'], listing.listSignal ? { signal: listing.listSignal } : {}));
+    if (listing.refuseSeveral && existing.length > 1) throw new Error('multiple PRs match the run branch; inspect their identities');
+    if (existing.length) local.pr = existing[0].number;
+    else {
+      await session.assertOwned();
+      const url = await checked('gh', ['pr', 'create', '--repo', project.repository, '--head', local.branch, '--base', 'main', '--draft', '--title', `Aegean ${id}`, '--body-file', body], { signal });
+      local.pr = Number(url.split('/').pop());
+    }
+    await atomicJson(join(dir, 'run.json'), local);
+  }
+  await session.assertOwned();
+  await checked('gh', ['pr', 'edit', String(local.pr), '--repo', project.repository, '--body-file', body], { signal });
+}
+
+/** Run the protected verifier once under a durable budget key. A replay of the key gives the recorded receipt. */
+async function budgetedVerification(session: RunSession, key: string, remainingMs: number, commit: string, project: Project, suite: Suite, deadline: AbortSignal): Promise<Receipt> {
+  const { dir, local } = session;
+  const result = await budgetedExecution(dir, key, remainingMs, async () => {
+    const value = await verify(local.worktree, commit, project, suite, deadline, undefined, resource => recordVerifierResource(dir, resource));
+    return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
+  });
+  return JSON.parse(result.stdout) as Receipt;
+}
 
 /** requested: the Scout drafts the change contract. */
 export async function draftSpecification(session: RunSession): Promise<Done | { drafted: Drafted }> {
@@ -77,18 +110,7 @@ export async function reviewSpecification(session: RunSession, drafted: Drafted 
   const body = join(dir, 'pr-body.md');
   await writeFile(body, `Aegean specification review.\n\nPublished specification commit: [${specCommit}](https://github.com/${project.repository}/commit/${specCommit})\n\nSpecification digest: ${session.run.spec}\n\nApprove this exact published revision with:\n\n\`/aegean approve-spec ${session.run.spec} ${specCommit}\`\n\nImplementation starts only after approval and protected tests.\n`);
   await session.assertOwned(); await pushExact(local.worktree, local.branch, specCommit, signal, project.repository);
-  if (!local.pr) {
-    const existing = JSON.parse(await checked('gh', ['pr', 'list', '--repo', project.repository, '--head', local.branch, '--state', 'all', '--json', 'number']));
-    if (existing.length) local.pr = existing[0].number;
-    else {
-      await session.assertOwned();
-      const url = await checked('gh', ['pr', 'create', '--repo', project.repository, '--head', local.branch, '--base', 'main', '--draft', '--title', `Aegean ${id}`, '--body-file', body], { signal });
-      local.pr = Number(url.split('/').pop());
-    }
-    await atomicJson(join(dir, 'run.json'), local);
-  }
-  await session.assertOwned();
-  await checked('gh', ['pr', 'edit', String(local.pr), '--repo', project.repository, '--body-file', body], { signal });
+  await upsertPullRequest(session, body, { refuseSeveral: false });
   const published = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as { head: { sha: string }; base: { ref: string; repo: { full_name: string } }; merged: boolean };
   if (published.head.sha !== specCommit || published.base.ref !== 'main' || published.base.repo.full_name !== project.repository || published.merged) throw new Error('published specification PR identity differs from the revision awaiting approval');
   const receipt = await approval(project.repository, local.pr!, session.run.approver, session.run.spec!, session.run.updatedAt, specCommit, signal);
@@ -103,7 +125,7 @@ export async function stageTests(session: RunSession, suitePath: string): Promis
   const contract = await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8');
   const requirements = publicRequirements(contract);
   const timeout = Math.max(1, Math.min(900000, POLICY.activeTimeoutMs - session.run.activeMs));
-  const prompt = `Act as independent acceptance-test Auditor. You have no implementation context. Return ONLY JSON {schemaVersion:2,spec:${JSON.stringify(session.run.spec)},cases:[{input:string,stdout:string,exit:number,requirement:string}]}. Derive CLI stdin/stdout acceptance cases from this approved contract. Each requirement must be one of these public requirement IDs: ${JSON.stringify(requirements)}. Do not return free-text feedback.\n${contract}`;
+  const prompt = testAuditorPrompt(session.run.spec, requirements, contract);
   const result = await session.model('auditor-tests', prompt, timeout, (limit, deadline, profile) => claudeRole(bins.claude, prompt, dir, limit, deadline, profile), r => {
     const suite = SuiteSchema.parse(parseJsonAnswer(claudeText(r)));
     if (suite.spec !== session.run.spec || suite.cases.some(c => !Object.hasOwn(requirements, c.requirement))) throw new Error('Auditor returned stale or unknown public requirement');
@@ -133,11 +155,7 @@ export async function checkBaseline(session: RunSession, suitePath: string): Pro
   if (digest(JSON.stringify(suite)) !== session.run.suite) throw new Error('protected suite changed after staging');
   const limits = await session.authorization();
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(limits.remainingMs)]);
-  const baselineRun = await budgetedExecution(dir, `baseline-${session.run.revisions}-${session.run.events.length}`, limits.remainingMs, async () => {
-    const value = await verify(local.worktree, local.base, { ...project, checks: [] }, suite, deadline, undefined, resource => recordVerifierResource(dir, resource));
-    return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
-  });
-  const receipt = JSON.parse(baselineRun.stdout) as Receipt;
+  const receipt = await budgetedVerification(session, `baseline-${session.run.revisions}-${session.run.events.length}`, limits.remainingMs, local.base, { ...project, checks: [] }, suite, deadline);
   const decision = await recordBaseline(dir, session.run.suite!, local.base, suite, receipt);
   if ('pause' in decision) {
     await session.update(decision.infrastructureFailure
@@ -153,17 +171,17 @@ export async function checkBaseline(session: RunSession, suitePath: string): Pro
 export async function build(session: RunSession): Promise<typeof NEXT | typeof STOP> {
   const { id, dir, local, specDir, project, bins, ledger, host } = session;
   await ledger.claimBuilder(id, host.host, local.generation);
-  let feedback = '';
+  let repair: BuilderRepair | undefined;
   if (session.run.repairReceipt) {
     const lastReview = ReviewSchema.parse(await readJson(join(dir, `review-${session.run.repairs - 1}.json`)));
-    feedback = '\nIndependent review findings: ' + JSON.stringify(builderFindings(lastReview));
+    const findings = builderFindings(lastReview);
     const receipt = await readJson(join(dir, 'repair-feedback.json')) as Receipt;
     if (receipt.spec !== session.run.spec || receipt.suite !== session.run.suite || receipt.commit !== session.run.commit || digest(JSON.stringify(receipt)) !== session.run.repairReceipt) throw new Error('repair feedback does not match verified evidence');
-    feedback += '\nPublic acceptance feedback: ' + JSON.stringify(repairFeedback(receipt.reason, receipt.requirements, await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8'), receipt.outsidePaths));
+    repair = { findings, feedback: repairFeedback(receipt.reason, receipt.requirements, await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8'), receipt.outsidePaths) };
   }
   const timeout = Math.max(1, POLICY.activeTimeoutMs - session.run.activeMs);
-  const contract = (await Promise.all(['proposal.md', 'design.md', 'tasks.md', 'specs/contract/spec.md', ALLOWED_PATHS].map(async path => `\nFILE ${path}\n${(await readBoundedEvidenceFile(join(specDir, path), POLICY.models.roles.builder.inputBytes).catch(error => { throw new Error(`required Builder context ${path} exceeds ${POLICY.models.roles.builder.inputBytes} bytes or is unreadable: ${error.message}`); })).toString('utf8')}`))).join('');
-  const prefix = `Implement only the approved OpenSpec change ${id}. Read its proposal, design, requirements and tasks. Change only the paths that ${ALLOWED_PATHS} allows; verification fails for a change to another path. Keep the contract, aegean.json and agent configuration unchanged. Do not access hidden tests or credentials. Public test commands: ${JSON.stringify(project.checks)}.${feedback}\nAPPROVED CONTRACT:\n${contract}`;
+  const contract = await Promise.all(['proposal.md', 'design.md', 'tasks.md', 'specs/contract/spec.md', ALLOWED_PATHS].map(async path => ({ path, text: (await readBoundedEvidenceFile(join(specDir, path), POLICY.models.roles.builder.inputBytes).catch(error => { throw new Error(`required Builder context ${path} exceeds ${POLICY.models.roles.builder.inputBytes} bytes or is unreadable: ${error.message}`); })).toString('utf8') })));
+  const prefix = builderPrefix(id, project.checks, contract, repair);
   const source = await sourceContext(local.worktree, project.modelExecution!.task, POLICY.models.roles.builder.inputBytes - Buffer.byteLength(prefix) - 256, false);
   await recordContext(join(dir, 'contexts', `builder-${session.run.repairs}-${session.run.events.length}-source.json`), { ...source, text: undefined });
   const prompt = prefix + source.text;
@@ -192,12 +210,9 @@ export async function verifyCandidate(session: RunSession, suitePath: string): P
   const verificationDeadline = AbortSignal.any([signal, AbortSignal.timeout(limits.remainingMs)]);
   const scopeStarted = Date.now();
   const outside = await pathsOutsideScope(local.worktree, local.base, session.run.commit!, specDir, id, verificationDeadline);
-  const verified = outside.length ? { stdout: JSON.stringify(scopeReceipt(session.run.commit!, suite.spec, session.run.suite!, project.verifier.image, outside, Date.now() - scopeStarted)) }
-    : await budgetedExecution(dir, `verification-${session.run.revisions}-${session.run.repairs}-${session.run.infrastructureRetries}-${session.run.events.length}`, limits.remainingMs, async () => {
-      const value = await verify(local.worktree, session.run.commit!, project, suite, verificationDeadline, undefined, resource => recordVerifierResource(dir, resource));
-      return { code: 0, stdout: JSON.stringify(value), stderr: '', interrupted: false, durationMs: value.durationMs };
-    });
-  const receipt = JSON.parse(verified.stdout) as Receipt;
+  // A scope receipt takes the same JSON form as a recorded verifier receipt.
+  const receipt = outside.length ? JSON.parse(JSON.stringify(scopeReceipt(session.run.commit!, suite.spec, session.run.suite!, project.verifier.image, outside, Date.now() - scopeStarted))) as Receipt
+    : await budgetedVerification(session, `verification-${session.run.revisions}-${session.run.repairs}-${session.run.infrastructureRetries}-${session.run.events.length}`, limits.remainingMs, session.run.commit!, project, suite, verificationDeadline);
   await atomicJson(receiptPath, receipt);
   await observeRun(root, dir, session.run, 'real-pilot', 'protected-verification', receipt.outcome === 'pass' ? 'pass' : receipt.outcome === 'fail' ? 'fail' : 'unknown', receipt);
   if (receipt.retainedResources) { await session.update(nowEvent('pause', { reason: `Verifier cleanup failed; retained resources recorded in ${receiptPath}; restore Docker before resume`, activeMs: receipt.durationMs })); return STOP; }
@@ -222,17 +237,7 @@ export async function reviewCandidate(session: RunSession): Promise<typeof NEXT 
   const verified = await readJson(join(dir, 'repair-feedback.json')) as Receipt;
   if (digest(JSON.stringify(verified)) !== session.run.receipt) throw new Error('review evidence does not match the verified receipt');
   const evidence = session.run.verification === 'fail' ? repairFeedback(verified.reason, verified.requirements, contractText, verified.outsidePaths) : [];
-  const prompt = [
-    'Act as a fresh independent code reviewer. Return ONLY JSON {outcome:"pass"|"repair"|"escalate",findings:[{owner:"builder"|"spec"|"factory",finding:string}]}.',
-    'Identify actionable defects and security risks. Give each finding one owner:',
-    '- builder: a defect in the code that the Builder can correct within the approved contract.',
-    '- spec: the contract is wrong, incomplete or contradicts itself, so no correct code can satisfy it.',
-    '- factory: a fault in Aegean itself, for example a protected test or the verifier that checks the wrong thing.',
-    'A spec or factory finding stops the run, and the Builder gets no repair. Use these owners only when the evidence shows that the Builder cannot correct the fault.',
-    `Deterministic verification was ${session.run.verification}.${evidence.length ? `\nPUBLIC VERIFICATION FEEDBACK:\n${evidence.join('\n')}` : ''}`,
-    `CONTRACT:\n${contractText}`,
-    `DIFF:\n${diff}`,
-  ].join('\n');
+  const prompt = reviewerPrompt(session.run.verification, evidence, contractText, diff);
   const result = await session.model('auditor-review', prompt, timeout, (limit, deadline, profile) => claudeRole(bins.claude, prompt, dir, limit, deadline, profile), r => ReviewSchema.parse(parseJsonAnswer(claudeText(r))));
   if (!result) return STOP;
   const review = result.value; await atomicJson(join(dir, `review-${session.run.repairs}.json`), review);
@@ -279,18 +284,7 @@ export async function publishCandidate(session: RunSession): Promise<typeof NEXT
     local.publishedCommit = session.run.commit!; await atomicJson(join(dir, 'run.json'), local);
     const body = join(dir, 'pr-body.md');
     await writeFile(body, `Aegean bounded CLI candidate.\n\nVerified and independently reviewed commit: ${session.run.commit}\nSpecification: ${session.run.spec}\nProtected suite: ${session.run.suite}\nVerification receipt: ${session.run.receipt}\n\nThe configured human approver authorized this exact publication. Review and merge manually; changed heads require aegean revise and fresh verification/publication.\n`);
-    if (!local.pr) {
-      const existing = JSON.parse(await checked('gh', ['pr', 'list', '--repo', project.repository, '--head', local.branch, '--state', 'all', '--json', 'number'], { signal }));
-      if (existing.length > 1) throw new Error('multiple PRs match the run branch; inspect their identities');
-      if (existing.length) local.pr = existing[0].number;
-      else {
-        await session.assertOwned();
-        const url = await checked('gh', ['pr', 'create', '--repo', project.repository, '--head', local.branch, '--base', 'main', '--draft', '--title', `Aegean ${id}`, '--body-file', body], { signal });
-        local.pr = Number(url.split('/').pop());
-      }
-      await atomicJson(join(dir, 'run.json'), local);
-    }
-    await session.assertOwned(); await checked('gh', ['pr', 'edit', String(local.pr), '--repo', project.repository, '--body-file', body], { signal });
+    await upsertPullRequest(session, body, { listSignal: signal, refuseSeveral: true });
     pr = await github(`repos/${project.repository}/pulls/${local.pr}`, signal) as Pull; checkPull(pr);
     if (pr.head.sha !== session.run.commit) throw new Error('PR head changed after publication; use aegean revise before any further publication');
   }
