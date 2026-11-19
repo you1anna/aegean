@@ -1,6 +1,6 @@
 import { parseSnapshot } from '../adapters/builder-snapshot.js';
 import { candidateGitChecked } from '../adapters/candidate-git.js';
-import { boundedContext, type ContextPart } from '../domain/context.js';
+import { boundedContext, byContextPriority, contextFragment, type ContextPart } from '../domain/context.js';
 import type { TaskScope } from '../domain/model-policy.js';
 import type { Project } from '../domain/config.js';
 import { POLICY } from '../domain/workflow-policy.js';
@@ -16,7 +16,7 @@ export async function sourceContext(repo: string, task: TaskScope, limit: number
   for (const path of required) if (!names.includes(path)) throw new Error(`required context missing: ${path}`);
   if (selected.length > 10000) throw new Error('source context file capacity exceeded');
   const parts: ContextPart[] = []; const omitted: string[] = []; let used = 0;
-  selected.sort((a, b) => Number(required.has(b)) - Number(required.has(a)) || a.localeCompare(b, 'en'));
+  selected.sort((a, b) => byContextPriority({ path: a, required: required.has(a) }, { path: b, required: required.has(b) }));
   for (const name of selected) {
     try {
       parseSnapshot({ schemaVersion: 1, files: [{ path: name, mode: 420, data: '' }] });
@@ -24,8 +24,9 @@ export async function sourceContext(repo: string, task: TaskScope, limit: number
     } catch (error) { if (required.has(name)) throw new Error(`protected or invalid required context ${name}: ${(error as Error).message}`); omitted.push(name); continue; }
     const size = Number(await candidateGitChecked(['cat-file', '-s', `${commit}:${name}`], { cwd: repo }));
     if (!Number.isSafeInteger(size) || size < 0) throw new Error('invalid context blob size');
-    if (used + size + Buffer.byteLength(`\nFILE ${JSON.stringify(name)}\n\n`) > limit) { if (required.has(name)) throw new Error(`required context exceeds ${limit} bytes: ${name}`); omitted.push(name); continue; }
-    used += size + Buffer.byteLength(`\nFILE ${JSON.stringify(name)}\n\n`);
+    const framing = Buffer.byteLength(contextFragment(name, ''));
+    if (used + size + framing > limit) { if (required.has(name)) throw new Error(`required context exceeds ${limit} bytes: ${name}`); omitted.push(name); continue; }
+    used += size + framing;
     parts.push({ path: name, text: await candidateGitChecked(['show', `${commit}:${name}`], { cwd: repo, maxBytes: limit }), required: required.has(name) });
   }
   const result = boundedContext(parts, limit);

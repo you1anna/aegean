@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { initializeBudget, budgetStatus, budgetedRole as invokeRole } from '../src/application/usage-budget.js';
-import { identity } from '../src/domain/model-policy.js';
+import { identity } from '../src/domain/digest.js';
 import type { ModelCall } from '../src/application/model-call.js';
 import { POLICY } from '../src/domain/workflow-policy.js';
 import { syntheticRun } from './helpers/runs.js';

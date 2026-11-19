@@ -7,7 +7,7 @@ import { treeDigest } from '../adapters/files.js';
 import { identityShape, readBoundedEvidenceFile, releaseIdentity } from '../adapters/acceptance-evidence.js';
 import { assertDecision, type HumanDecision } from '../adapters/human-decision.js';
 import { ApproverSchema, ProjectSchema, ReviewSchema, SuiteSchema, assertSupportedImage, type Project } from '../domain/config.js';
-import { assertRunPolicy, type Run } from '../domain/run.js';
+import { RUN_ID, assertRunPolicy, type Run } from '../domain/run.js';
 import { digest } from '../domain/digest.js';
 import { POLICY } from '../domain/workflow-policy.js';
 import { hostConfig } from './runtime.js';
@@ -19,7 +19,7 @@ const validAllowedPaths = (folder: string) => allowedPaths(folder).catch(error =
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/); const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const scope = {
-  schemaVersion: z.literal(1), run: z.string().regex(/^run-[a-f0-9-]{36}$/), host: z.string().uuid(), repository: z.string().min(3).max(256),
+  schemaVersion: z.literal(1), run: z.string().regex(RUN_ID), host: z.string().uuid(), repository: z.string().min(3).max(256),
   approverId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), projectPolicy: hash, request: hash,
   release: z.object(identityShape).strict(), base: sha, branch: z.string().max(200), spec: hash, specCommit: sha,
 };

@@ -18,6 +18,12 @@ export type HostConfig = z.infer<typeof HostSchema>;
 export async function hostConfig(): Promise<HostConfig> {
   return HostSchema.parse(await readJson(join(stateRoot(), 'settings.json')));
 }
+/** Model execution needs billing confirmation and both subscription logins. */
+export async function requireSubscriptions(root: string): Promise<void> {
+  const host = await hostConfig(); if (!host.billingConfirmed) throw new Error('Confirm paid overflow is disabled in both accounts before model execution; see OPERATIONS.md');
+  const bins = binaries(root); const auth = await authentication(bins.codex, bins.claude);
+  if (!auth.codex || !auth.claude) throw new Error('both subscription logins must be verified');
+}
 interface ConfigureOptions { controlRemote?: string | undefined; verifierCheckout?: string | undefined; image?: string | undefined; excludedRoots: readonly string[] }
 export async function configure(options: ConfigureOptions): Promise<HostConfig> {
   if (options.image && options.image !== toolchain.verifier.image) throw new Error('verifier image is owned by the reviewed toolchain; host override is unsupported');

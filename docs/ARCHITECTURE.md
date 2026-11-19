@@ -43,7 +43,8 @@ The verifier uses no model.
 The two Auditor tasks use separate, fresh calls. The reviewer sees the code deliberately; it does not receive the Builder's conversation.
 Independent context reduces shared assumptions. It does not prove that a model's tests or findings are correct.
 
-The [coordinator](../src/application/engine.ts) builds role inputs; the [Claude adapter](../src/adapters/agents.ts) disables tools and saved sessions.
+The [Scout module](../src/domain/scout.ts) and the [role prompts](../src/domain/prompts.ts) give the exact text of each role input.
+[Context assembly](../src/domain/context.ts) frames and limits the files in that input. The [Claude adapter](../src/adapters/agents.ts) disables tools and saved sessions.
 
 ## Protected verification
 
@@ -114,6 +115,9 @@ CLI → application services → domain rules
 
 In the domain, [`run.ts`](../src/domain/run.ts) defines runs and events, [`workflow-policy.ts`](../src/domain/workflow-policy.ts) reads the policy limits,
 and [`workflow.ts`](../src/domain/workflow.ts) applies one event to a run.
+
+In the application layer, [`engine.ts`](../src/application/engine.ts) resumes a run. It opens a [run session](../src/application/run-session.ts),
+which owns the ledger record of the run and the effects that the stages share. Then it calls the [stage function](../src/application/run-stages.ts) for each state.
 
 A module imports only from its own layer or an inner layer. Domain code imports neither adapters nor application services.
 Adapters do not import application services. The source has no import cycles. [Architecture tests](../test/architecture.test.ts) guard these rules.

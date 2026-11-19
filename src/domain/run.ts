@@ -3,6 +3,8 @@ import { POLICY, POLICY_IDENTITY } from './workflow-policy.js';
 import { ApproverSchema, type Approver, type FindingOwner } from './config.js';
 
 /** Every run state. The control ledger schema and the guide read this list. */
+/** A run identifier: `run-` and a random UUID. */
+export const RUN_ID = /^run-[a-f0-9-]{36}$/;
 export const STATES = ['requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'building', 'verifying', 'reviewing', 'repair', 'human-merge-review', 'merged', 'archived', 'paused', 'escalated', 'cancelled'] as const;
 export type State = typeof STATES[number];
 /** A run in one of these states accepts no further event. */

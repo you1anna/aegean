@@ -12,9 +12,10 @@ import type { RoleRecord } from './role-result.js';
 import { reconcileVerifierResource } from './verifier-recovery.js';
 import { reconcileBuilder } from './builder.js';
 import { acquireRunPermit, reconcilePermitIntent, releaseQuiescentPermits } from './ownership.js';
+import { RUN_ID } from '../domain/run.js';
 
 export async function recover(id: string, confirmedStopped: boolean, root: string): Promise<unknown> {
-  if (!/^run-[a-f0-9-]{36}$/.test(id) || !confirmedStopped) throw new Error('recovery requires a valid run and --confirm-stopped after inspecting its child processes');
+  if (!RUN_ID.test(id) || !confirmedStopped) throw new Error('recovery requires a valid run and --confirm-stopped after inspecting its child processes');
   const dir = join(stateRoot(), 'runs', id); const marker = join(dir, 'executing');
   const host = await hostConfig(); const ledger = new GitLedger(host.controlRemote);
   const local = await loadLocalRun(dir);
