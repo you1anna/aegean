@@ -10,6 +10,10 @@ import { POLICY } from '../src/domain/workflow-policy.js';
 import { digest, identity } from '../src/domain/digest.js';
 import { unknownTask } from '../src/domain/model-policy.js';
 import { sourceContext } from '../src/application/model-context.js';
+import { isolateGitConfig } from './helpers/git-config.js';
+
+// sourceContext refuses executable Git configuration, such as a host's global LFS filter.
+isolateGitConfig();
 
 // Recorded context manifests are run evidence. The literal values below came from the source before the refactor.
 test('bounded context keeps its exact framing, order, manifest hashes and scope', () => {
