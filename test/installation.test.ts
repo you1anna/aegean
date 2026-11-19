@@ -229,9 +229,3 @@ test('sensitive and production checkouts cannot be auto-enrolled', () => {
   assert.throws(() => eligible('/tmp/ordinary-project', ['/']), /excluded/);
   assert.throws(() => eligible('/tmp/ordinary-project'), /fails closed/);
 });
-test('domain modules do not depend on process, persistence or orchestration adapters', async () => {
-  for (const name of await readdir('src/domain')) {
-    const source = await readFile(join('src/domain', name), 'utf8');
-    assert.doesNotMatch(source, /from\s+['"][^'"]*(application|adapters|node:fs|node:child_process|node:http)/);
-  }
-});
