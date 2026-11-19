@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import toolchain from '../../toolchain.json' with { type: 'json' };
-import { digest, POLICY_IDENTITY, policyIdentityFor } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
+import { POLICY_IDENTITY, policyIdentityFor } from '../domain/workflow-policy.js';
 import { treeDigest } from './files.js';
 import { fileHash, releaseArtifacts } from './release-artifacts.js';
 

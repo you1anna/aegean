@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import toolchain from '../../toolchain.json' with { type: 'json' };
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import { ProjectSchema, SuiteSchema } from '../domain/config.js';
 import { atomicJson } from './files.js';
 import { fileHash } from './release-artifacts.js';

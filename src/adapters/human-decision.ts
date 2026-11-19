@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import type { Approver } from '../domain/config.js';
 
 export type DecisionAction = 'approve' | 'publish' | 'pilot' | 'revise' | 'migrate-control';

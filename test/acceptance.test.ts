@@ -7,7 +7,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { acceptedPrerequisites, acceptedRelease, releaseIdentity } from '../src/adapters/acceptance.js';
 import { recordObservedEvidence } from '../src/adapters/acceptance-evidence.js';
 import { syntheticAcceptance, fixtureObservations, fixtureSource } from './helpers/acceptance.js';
-import { digest } from '../src/domain/workflow.js';
+import { digest } from '../src/domain/digest.js';
 
 async function fixture(body: (root: string, state: string) => Promise<void>): Promise<void> {
   const parent = await mkdtemp(join(tmpdir(), 'aegean-acceptance-test-')); const root = join(parent, 'release'); const state = join(parent, 'state');

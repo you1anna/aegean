@@ -5,7 +5,8 @@ import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import type { Receipt } from '../adapters/verifier.js';
 import { ALLOWED_PATHS, outsideAllowedPaths, parseAllowedPaths } from '../domain/allowed-paths.js';
 import { baselineReport, baselineSummary, type BaselineSummary } from '../domain/baseline.js';
-import { digest, type BaselineCounts } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
+import type { BaselineCounts } from '../domain/run.js';
 import type { Suite } from '../domain/config.js';
 
 export const BASELINE = 'baseline.json';

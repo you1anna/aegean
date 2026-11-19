@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { checked, command } from './process.js';
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import { assertSupportedImage, type Suite, type Project } from '../domain/config.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { docker, removeContainer } from './container-runtime.js';

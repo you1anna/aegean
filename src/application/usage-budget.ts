@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { open } from 'node:fs/promises';
 import { z } from 'zod';
-import { POLICY, POLICY_IDENTITY } from '../domain/workflow.js';
+import { POLICY, POLICY_IDENTITY } from '../domain/workflow-policy.js';
 import { atomicJson } from '../adapters/files.js';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { executionLock } from '../adapters/run-lock.js';

@@ -1,7 +1,7 @@
 import { mkdir, open, rename, readFile, readdir, lstat, realpath } from 'node:fs/promises';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 export async function atomicJson(path: string, data: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.${randomUUID()}.tmp`;

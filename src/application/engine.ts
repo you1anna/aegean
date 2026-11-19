@@ -2,7 +2,10 @@ import { candidateGitChecked, candidateGit } from '../adapters/candidate-git.js'
 import { readFile, writeFile, mkdir, access, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { transition, digest, POLICY, assertRunPolicy, type Event, type Run } from '../domain/workflow.js';
+import { transition } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
+import { POLICY } from '../domain/workflow-policy.js';
+import { TERMINAL_STATES, assertRunPolicy, isTerminal, type Event, type Run } from '../domain/run.js';
 import { selectModel, identity, type ModelRole, type ModelProfile } from '../domain/model-policy.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { sourceContext, scoutContext } from './model-context.js';
@@ -164,7 +167,7 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
   };
   try {
     const state = await ledger.read(); const stored = state.runs[id];
-    if (stored && ['archived', 'cancelled', 'escalated'].includes(stored.state)) return { run: stored };
+    if (stored && isTerminal(stored.state)) return { run: stored };
     if (stored) assertRunPolicy(stored);
     run = stored;
     if (!local.generation && state.owners[id]?.host === host.host) {
@@ -467,7 +470,7 @@ async function resumeRun(root: string, id: string, signal: AbortSignal): Promise
     }
     return { run, pr: local.pr, action: run.state === 'human-merge-review' ? 'Review trusted local evidence and merge the PR manually' : 'Inspect status before continuing' };
   } catch (error) {
-    if (run && !['paused', 'merged', 'archived', 'cancelled', 'escalated'].includes(run.state) && /context|bounded evidence|file size/i.test((error as Error).message)) await update(nowEvent('pause', { reason: (error as Error).message, activeMs: 0 }));
+    if (run && !['paused', 'merged', ...TERMINAL_STATES].includes(run.state) && /context|bounded evidence|file size/i.test((error as Error).message)) await update(nowEvent('pause', { reason: (error as Error).message, activeMs: 0 }));
     throw error;
   } finally {
     try { await releaseQuiescentPermits(ledger, dir, local, host.host); } finally { await release(); }

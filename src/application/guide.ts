@@ -7,7 +7,7 @@ import { expandHome } from '../adapters/terminal.js';
 import { PilotLimitsSchema, parsePilotLimits } from '../domain/pilot-limits.js';
 import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, checkLevel, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
 import { reviewFlags, type ReviewSummary } from '../domain/scout.js';
-import type { State } from '../domain/workflow.js';
+import type { State } from '../domain/run.js';
 import { recoveryHint } from './cli-arguments.js';
 import type { Readiness } from './runtime.js';
 

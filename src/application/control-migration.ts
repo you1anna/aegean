@@ -7,7 +7,7 @@ import { authenticatedApprover, resolveApprover } from '../adapters/github.js';
 import { assertDecision, confirmHumanDecision } from '../adapters/human-decision.js';
 import { identityKeys, releaseIdentity } from '../adapters/acceptance-evidence.js';
 import { executionLock } from '../adapters/run-lock.js';
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import { GitHubLogin } from '../domain/config.js';
 import { hostConfig, stateRoot } from './runtime.js';
 

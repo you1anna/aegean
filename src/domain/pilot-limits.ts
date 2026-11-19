@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ExecutionBudget } from './budgets.js';
-import { digest } from './workflow.js';
+import { digest } from './digest.js';
 export const PilotLimitsSchema = z.object({
   schemaVersion: z.literal(1), expiresInMinutes: z.number().int().min(1).max(1440),
   maxModelCalls: z.number().int(), activeMinutes: z.number().int().positive(),

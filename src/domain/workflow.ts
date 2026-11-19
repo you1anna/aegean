@@ -1,186 +1,186 @@
-import { createHash } from 'node:crypto';
-import toolchain from '../../toolchain.json' with { type: 'json' };
-import { ModelPolicySchema } from './model-policy.js';
-import { ApproverSchema, FINDING_OWNERS, type Approver, type FindingOwner } from './config.js';
+import { assertHash } from './digest.js';
+import { POLICY } from './workflow-policy.js';
+import { FINDING_OWNERS, type FindingOwner } from './config.js';
+import { STOP_REASONS, assertRunPolicy, isTerminal, type Event, type EventType, type Run, type State } from './run.js';
 
-export const digest = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex');
-export interface PolicyPins { policy: string; maxModelCalls: number; maxRepairs: number; maxRevisions: number; maxInfrastructureRetries: number; activeTimeoutMs: number; models: unknown }
-export function policyFromToolchain(pins: PolicyPins) {
-  if (!pins || typeof pins.policy !== 'string' || !/^\d+\.\d+\.\d+$/.test(pins.policy) || [pins.maxModelCalls, pins.maxRepairs, pins.maxRevisions, pins.maxInfrastructureRetries, pins.activeTimeoutMs].some(value => !Number.isSafeInteger(value) || value < 0) || (pins.activeTimeoutMs === 0 || pins.maxModelCalls === 0)) throw new Error('invalid workflow policy pins');
-  return Object.freeze({ models: ModelPolicySchema.parse(pins.models), version: pins.policy, maxModelCalls: pins.maxModelCalls, maxRepairs: pins.maxRepairs, maxRevisions: pins.maxRevisions, maxInfrastructureRetries: pins.maxInfrastructureRetries, activeTimeoutMs: pins.activeTimeoutMs });
-}
-export const policyIdentityFor = (pins: PolicyPins): string => digest(JSON.stringify(policyFromToolchain(pins)));
-export const POLICY = policyFromToolchain(toolchain);
-export const POLICY_IDENTITY = policyIdentityFor(toolchain);
-/** Fixed reasons for a stop that a check or a finding owner caused. Guidance and tests match them exactly. */
-export const STOP_REASONS = {
-  baseline: 'every protected test already passed on the base commit',
-  spec: 'independent review found a specification fault',
-  factory: 'independent review found an Aegean fault',
-} as const;
-/** Protected suite results on the base commit, counted by test case. */
-export interface BaselineCounts { suite: string; cases: number; passed: number }
-export type State = 'requested' | 'spec-drafted' | 'spec-approved' | 'tests-staged' | 'building' | 'verifying' | 'reviewing' | 'repair' | 'human-merge-review' | 'merged' | 'archived' | 'paused' | 'escalated' | 'cancelled';
-export interface Run {
-  schemaVersion: 2; id: string; host: string; repository: string; policy: string; policyIdentity: string;
-  approver: Approver; projectPolicy: string; revisions: number;
-  state: State; createdAt: number; updatedAt: number; events: string[];
-  repairs: number; infrastructureRetries: number; activeMs: number;
-  spec?: string; specCommit?: string; suite?: string; commit?: string; mergeCommit?: string;
-  approvalRef?: string; publicationRef?: string; verification?: 'pass' | 'fail'; receipt?: string; repairReceipt?: string;
-  revisionRef?: string; reviewCommit?: string;
-  resumeState?: State; reason?: string;
-}
-export type HistoricalRun = Omit<Run, 'schemaVersion' | 'approver' | 'projectPolicy' | 'revisions' | 'revisionRef' | 'reviewCommit' | 'policyIdentity'> & { schemaVersion: 1; policyIdentity?: string };
-interface BaseEvent { id: string; at: number }
-export type Event = BaseEvent & (
-  | { type: 'draft'; spec: string; specCommit?: string; activeMs?: number }
-  | { type: 'approve'; spec: string; specCommit?: string; actor: 'human'; approvalRef: string }
-  | { type: 'stage-tests'; spec: string; suite: string; activeMs: number }
-  | { type: 'baseline-inconclusive'; suite: string; reason: string; activeMs: number }
-  | { type: 'begin-build'; baseline?: BaselineCounts; activeMs?: number }
-  | { type: 'candidate'; commit: string; activeMs: number }
-  | { type: 'verification'; commit: string; spec: string; suite: string; outcome: 'pass' | 'fail' | 'inconclusive'; receipt: string; activeMs: number }
-  | { type: 'review'; commit: string; outcome: 'pass' | 'repair' | 'escalate'; findings: Record<FindingOwner, number>; activeMs: number }
-  | { type: 'authorize-publication'; commit: string; spec: string; suite: string; receipt: string; actor: 'human'; approvalRef: string }
-  | { type: 'revise'; commit: string; scope: 'implementation' | 'contract'; actor: 'human'; approvalRef: string; spec?: string; specCommit?: string }
-  | { type: 'merged'; commit: string; mergeCommit: string; actor: 'human' }
-  | { type: 'archive' | 'cancel' | 'resume' }
-  | { type: 'pause'; reason: string; activeMs: number }
-);
-export function createRun(id: string, host: string, repository: string, policy: string, now: number, frozen: { approver: Approver; projectPolicy: string }): Run {
-  if (!/^[a-zA-Z0-9_-]+$/.test(id) || !host || !repository || policy !== POLICY.version || !Number.isSafeInteger(now) || now < 0) throw new Error('invalid run identity or unsupported policy');
-  const approver = ApproverSchema.parse(frozen?.approver); hash(frozen.projectPolicy);
-  return { schemaVersion: 2, id, host, repository, policy, policyIdentity: POLICY_IDENTITY, approver, projectPolicy: frozen.projectPolicy, revisions: 0, state: 'requested', createdAt: now, updatedAt: now, events: [], repairs: 0, infrastructureRetries: 0, activeMs: 0 };
-}
-export function assertRunPolicy(run: Run | HistoricalRun): asserts run is Run {
-  if (run.schemaVersion !== 2 || run.policy !== POLICY.version || run.policyIdentity !== POLICY_IDENTITY) throw new Error('run policy differs from installed policy; use its original release or cancel; no implicit migration');
-}
-const terminal = new Set<State>(['archived', 'cancelled', 'escalated']);
-function requireState(run: Run, ...states: State[]): void {
-  if (!states.includes(run.state)) throw new Error(`invalid state ${run.state}; expected ${states.join(', ')}`);
-}
-function hash(value: string, length = 64): void {
-  if (!new RegExp(`^[a-f0-9]{${length}}$`).test(value)) throw new Error('invalid artifact hash');
-}
-function allowInfrastructureRetry(run: Run): boolean {
-  if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) {
-    run.state = 'escalated'; run.reason = 'infrastructure retries exhausted'; return false;
-  }
-  run.infrastructureRetries++; return true;
-}
+type EventOf<T extends EventType> = Extract<Event, { type: T }>;
+type Handler<T extends EventType> = (run: Run, event: EventOf<T>) => void;
+type OptionalField = { [K in keyof Run]-?: object extends Pick<Run, K> ? K : never }[keyof Run];
+
+/** States in which active time does not pause the run: it already waits, or the human holds it. */
+const ACTIVE_BUDGET_EXEMPT: readonly State[] = ['paused', 'human-merge-review', 'merged'];
+
+/**
+ * Apply one event to a run and return the next run. The function does not change `previous`.
+ * A repeated event returns `previous` itself. An invalid event throws and records nothing.
+ */
 export function transition(previous: Run, event: Event): Run {
   if (event.type !== 'cancel') assertRunPolicy(previous);
   if (previous.events.includes(event.id)) return previous;
-  if (terminal.has(previous.state)) throw new Error(`terminal state ${previous.state}`);
+  if (isTerminal(previous.state)) throw new Error(`terminal state ${previous.state}`);
   if (!event.id || !Number.isSafeInteger(event.at) || event.at < previous.updatedAt) throw new Error('invalid event identity or time');
   const run = structuredClone(previous);
-  if ('activeMs' in event) {
-    if (event.activeMs === undefined || !Number.isSafeInteger(event.activeMs) || event.activeMs < 0) throw new Error('invalid active duration');
-    run.activeMs += event.activeMs;
-    if (!Number.isSafeInteger(run.activeMs)) throw new Error('invalid active duration');
-  }
-  switch (event.type) {
-    case 'draft':
-      requireState(run, 'requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'repair');
-      hash(event.spec); run.spec = event.spec; run.state = 'spec-drafted';
-      if (event.specCommit) { hash(event.specCommit, 40); run.specCommit = event.specCommit; } else delete run.specCommit;
-      delete run.suite; delete run.commit; delete run.approvalRef; delete run.publicationRef; delete run.verification; delete run.receipt; delete run.repairReceipt; delete run.reviewCommit;
-      break;
-    case 'approve':
-      requireState(run, 'spec-drafted');
-      if (event.spec !== run.spec || (run.specCommit && event.specCommit !== run.specCommit) || event.actor !== 'human' || !event.approvalRef) throw new Error('approval must reference the exact spec, published commit and human receipt');
-      run.approvalRef = event.approvalRef; run.state = 'spec-approved'; break;
-    case 'stage-tests':
-      requireState(run, 'spec-approved');
-      if (event.spec !== run.spec) throw new Error('stale spec for suite');
-      hash(event.suite); run.suite = event.suite; run.state = 'tests-staged'; break;
-    case 'baseline-inconclusive':
-      requireState(run, 'tests-staged');
-      if (!run.suite || event.suite !== run.suite) throw new Error('stale base commit evidence');
-      if (allowInfrastructureRetry(run)) {
-        run.resumeState = 'tests-staged'; run.state = 'paused'; run.reason = event.reason;
-      }
-      break;
-    case 'begin-build':
-      requireState(run, 'tests-staged', 'repair');
-      if (run.state === 'tests-staged') {
-        const baseline = event.baseline;
-        if (!baseline || baseline.suite !== run.suite) throw new Error('building requires base commit results for the staged suite');
-        if (!Number.isSafeInteger(baseline.cases) || !Number.isSafeInteger(baseline.passed) || baseline.cases < 1 || baseline.passed < 0 || baseline.passed > baseline.cases) throw new Error('invalid base commit results');
-        // A test that passes before the change cannot show that the change works.
-        if (baseline.passed === baseline.cases) { run.state = 'escalated'; run.reason = STOP_REASONS.baseline; break; }
-      } else if (event.baseline !== undefined) throw new Error('a repair uses the base commit results of its staged suite');
-      if (run.state === 'repair' && run.receipt) run.repairReceipt = run.receipt;
-      run.state = 'building'; delete run.verification; delete run.receipt; delete run.reviewCommit; delete run.publicationRef; break;
-    case 'candidate':
-      requireState(run, 'building'); hash(event.commit, 40); run.commit = event.commit; delete run.repairReceipt; delete run.publicationRef; run.state = 'verifying'; break;
-    case 'verification':
-      requireState(run, 'verifying');
-      if (event.spec !== run.spec || event.suite !== run.suite || event.commit !== run.commit) throw new Error('stale verification evidence');
-      hash(event.receipt);
-      if (event.outcome === 'inconclusive') {
-        allowInfrastructureRetry(run);
-      } else { run.verification = event.outcome; run.receipt = event.receipt; run.state = 'reviewing'; }
-      break;
-    case 'review': {
-      requireState(run, 'reviewing');
-      if (!run.commit || event.commit !== run.commit) throw new Error('stale review commit');
-      const owners = event.findings;
-      if (!owners || typeof owners !== 'object' || Object.keys(owners).length !== FINDING_OWNERS.length || FINDING_OWNERS.some(owner => !Number.isSafeInteger(owners[owner]) || owners[owner] < 0)) throw new Error('review requires a finding count for each owner');
-      // A fault in the specification or in Aegean goes to the human; it never becomes a Builder repair.
-      if (owners.spec > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.spec; }
-      else if (owners.factory > 0) { run.state = 'escalated'; run.reason = STOP_REASONS.factory; }
-      else if (event.outcome === 'pass' && run.verification === 'pass' && owners.builder === 0) { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
-      else if (event.outcome !== 'escalate' && run.repairs < POLICY.maxRepairs) { run.repairs++; run.state = 'repair'; }
-      else { run.state = 'escalated'; run.reason = event.outcome === 'escalate' ? 'independent review escalation' : 'repair attempts exhausted'; }
-      break;
-    }
-    case 'authorize-publication':
-      requireState(run, 'human-merge-review');
-      if (event.actor !== 'human' || !event.approvalRef || !run.commit || run.verification !== 'pass' || run.reviewCommit !== run.commit || !run.spec || !run.suite || !run.receipt || event.commit !== run.commit || event.spec !== run.spec || event.suite !== run.suite || event.receipt !== run.receipt) throw new Error('publication approval must bind exact verified and reviewed evidence');
-      run.publicationRef = event.approvalRef; break;
-    case 'revise': {
-      if (run.state !== 'human-merge-review' && !(run.state === 'paused' && run.resumeState === 'human-merge-review')) throw new Error('revision requires human merge review');
-      if (event.actor !== 'human' || !event.approvalRef) throw new Error('revision requires an explicit human decision');
-      if (run.revisions >= POLICY.maxRevisions) throw new Error('revision budget exhausted; requires a new human decision');
-      hash(event.commit, 40);
-      if (!run.commit || event.commit === run.commit) throw new Error('revision requires a changed candidate commit');
-      if (event.scope === 'implementation') {
-        if (!run.spec || !run.suite || !run.approvalRef) throw new Error('implementation revision requires the approved specification and suite');
-        if (event.spec !== undefined || event.specCommit !== undefined) throw new Error('implementation revision cannot change its approved contract');
-        run.commit = event.commit; run.state = 'verifying';
-      } else if (event.scope === 'contract') {
-        if (!event.spec || !event.specCommit) throw new Error('contract revision requires a new specification and published commit');
-        hash(event.spec); hash(event.specCommit, 40);
-        if (event.spec === run.spec || event.specCommit === run.specCommit) throw new Error('contract revision requires a changed specification and commit');
-        run.spec = event.spec; run.specCommit = event.specCommit; run.state = 'spec-drafted';
-        delete run.suite; delete run.commit; delete run.approvalRef;
-      } else throw new Error('invalid revision scope');
-      run.revisions++; run.revisionRef = event.approvalRef;
-      delete run.verification; delete run.receipt; delete run.reviewCommit; delete run.publicationRef; delete run.repairReceipt;
-      delete run.resumeState; delete run.reason; delete run.mergeCommit;
-      break;
-    }
-    case 'merged':
-      requireState(run, 'human-merge-review');
-      if (event.actor !== 'human' || !run.publicationRef || !run.commit || run.verification !== 'pass' || run.reviewCommit !== run.commit || !run.spec || !run.suite || !run.receipt || event.commit !== run.commit) throw new Error('human merge must reference the published exact verified and reviewed commit');
-      hash(event.mergeCommit, 40); run.mergeCommit = event.mergeCommit; run.state = 'merged'; break;
-    case 'archive': requireState(run, 'merged'); run.state = 'archived'; break;
-    case 'cancel': run.state = 'cancelled'; break;
-    case 'pause':
-      requireState(run, 'building', 'verifying', 'reviewing', 'requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'repair', 'human-merge-review');
-      run.resumeState = run.state; run.state = 'paused'; run.reason = event.reason; break;
-    case 'resume':
-      requireState(run, 'paused');
-      if (run.activeMs >= POLICY.activeTimeoutMs) throw new Error('active budget exhausted; requires a new human decision');
-      if (!run.resumeState) throw new Error('missing resume state');
-      run.state = run.resumeState; delete run.resumeState; delete run.reason; break;
-    default: throw new Error('unknown workflow event');
-  }
-  if (run.activeMs >= POLICY.activeTimeoutMs && !terminal.has(run.state) && !['paused', 'human-merge-review', 'merged'].includes(run.state)) {
-    run.resumeState = run.state; run.state = 'paused'; run.reason = 'active budget exhausted';
-  }
+  addActiveTime(run, event);
+  apply(run, event);
+  if (run.activeMs >= POLICY.activeTimeoutMs && !isTerminal(run.state) && !ACTIVE_BUDGET_EXEMPT.includes(run.state)) pauseRun(run, 'active budget exhausted');
   run.events.push(event.id); run.updatedAt = event.at;
   return run;
+}
+
+function addActiveTime(run: Run, event: Event): void {
+  if (!('activeMs' in event)) return;
+  if (event.activeMs === undefined || !Number.isSafeInteger(event.activeMs) || event.activeMs < 0) throw new Error('invalid active duration');
+  run.activeMs += event.activeMs;
+  if (!Number.isSafeInteger(run.activeMs)) throw new Error('invalid active duration');
+}
+
+function apply(run: Run, event: Event): void {
+  if (typeof event.type !== 'string' || !Object.hasOwn(HANDLERS, event.type)) throw new Error('unknown workflow event');
+  (HANDLERS[event.type] as (run: Run, event: Event) => void)(run, event);
+}
+
+const HANDLERS: { readonly [T in EventType]: Handler<T> } = {
+  draft(run, event) {
+    requireState(run, 'requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'repair');
+    assertHash(event.spec); run.spec = event.spec; run.state = 'spec-drafted';
+    if (event.specCommit) { assertHash(event.specCommit, 40); run.specCommit = event.specCommit; } else delete run.specCommit;
+    clear(run, 'suite', 'commit', 'approvalRef', 'publicationRef', 'verification', 'receipt', 'repairReceipt', 'reviewCommit');
+  },
+
+  approve(run, event) {
+    requireState(run, 'spec-drafted');
+    if (event.spec !== run.spec || (run.specCommit && event.specCommit !== run.specCommit) || event.actor !== 'human' || !event.approvalRef) throw new Error('approval must reference the exact spec, published commit and human receipt');
+    run.approvalRef = event.approvalRef; run.state = 'spec-approved';
+  },
+
+  'stage-tests'(run, event) {
+    requireState(run, 'spec-approved');
+    if (event.spec !== run.spec) throw new Error('stale spec for suite');
+    assertHash(event.suite); run.suite = event.suite; run.state = 'tests-staged';
+  },
+
+  'baseline-inconclusive'(run, event) {
+    requireState(run, 'tests-staged');
+    if (!run.suite || event.suite !== run.suite) throw new Error('stale base commit evidence');
+    if (allowInfrastructureRetry(run)) pauseRun(run, event.reason);
+  },
+
+  'begin-build'(run, event) {
+    requireState(run, 'tests-staged', 'repair');
+    if (run.state === 'tests-staged') {
+      const baseline = event.baseline;
+      if (!baseline || baseline.suite !== run.suite) throw new Error('building requires base commit results for the staged suite');
+      if (!Number.isSafeInteger(baseline.cases) || !Number.isSafeInteger(baseline.passed) || baseline.cases < 1 || baseline.passed < 0 || baseline.passed > baseline.cases) throw new Error('invalid base commit results');
+      // A test that passes before the change cannot show that the change works.
+      if (baseline.passed === baseline.cases) { escalateRun(run, STOP_REASONS.baseline); return; }
+    } else if (event.baseline !== undefined) throw new Error('a repair uses the base commit results of its staged suite');
+    if (run.state === 'repair' && run.receipt) run.repairReceipt = run.receipt;
+    run.state = 'building';
+    clear(run, 'verification', 'receipt', 'reviewCommit', 'publicationRef');
+  },
+
+  candidate(run, event) {
+    requireState(run, 'building');
+    assertHash(event.commit, 40); run.commit = event.commit;
+    clear(run, 'repairReceipt', 'publicationRef');
+    run.state = 'verifying';
+  },
+
+  verification(run, event) {
+    requireState(run, 'verifying');
+    if (event.spec !== run.spec || event.suite !== run.suite || event.commit !== run.commit) throw new Error('stale verification evidence');
+    assertHash(event.receipt);
+    if (event.outcome === 'inconclusive') allowInfrastructureRetry(run);
+    else { run.verification = event.outcome; run.receipt = event.receipt; run.state = 'reviewing'; }
+  },
+
+  review(run, event) {
+    requireState(run, 'reviewing');
+    if (!run.commit || event.commit !== run.commit) throw new Error('stale review commit');
+    const owners = event.findings;
+    if (!isFindingCounts(owners)) throw new Error('review requires a finding count for each owner');
+    // A fault in the specification or in Aegean goes to the human; it never becomes a Builder repair.
+    if (owners.spec > 0) escalateRun(run, STOP_REASONS.spec);
+    else if (owners.factory > 0) escalateRun(run, STOP_REASONS.factory);
+    else if (event.outcome === 'pass' && run.verification === 'pass' && owners.builder === 0) { run.state = 'human-merge-review'; run.reviewCommit = event.commit; }
+    else if (event.outcome !== 'escalate' && run.repairs < POLICY.maxRepairs) { run.repairs++; run.state = 'repair'; }
+    else escalateRun(run, event.outcome === 'escalate' ? 'independent review escalation' : 'repair attempts exhausted');
+  },
+
+  'authorize-publication'(run, event) {
+    requireState(run, 'human-merge-review');
+    if (event.actor !== 'human' || !event.approvalRef || !hasReviewedEvidence(run) || event.commit !== run.commit || event.spec !== run.spec || event.suite !== run.suite || event.receipt !== run.receipt) throw new Error('publication approval must bind exact verified and reviewed evidence');
+    run.publicationRef = event.approvalRef;
+  },
+
+  revise(run, event) {
+    if (run.state !== 'human-merge-review' && !(run.state === 'paused' && run.resumeState === 'human-merge-review')) throw new Error('revision requires human merge review');
+    if (event.actor !== 'human' || !event.approvalRef) throw new Error('revision requires an explicit human decision');
+    if (run.revisions >= POLICY.maxRevisions) throw new Error('revision budget exhausted; requires a new human decision');
+    assertHash(event.commit, 40);
+    if (!run.commit || event.commit === run.commit) throw new Error('revision requires a changed candidate commit');
+    if (event.scope === 'implementation') {
+      if (!run.spec || !run.suite || !run.approvalRef) throw new Error('implementation revision requires the approved specification and suite');
+      if (event.spec !== undefined || event.specCommit !== undefined) throw new Error('implementation revision cannot change its approved contract');
+      run.commit = event.commit; run.state = 'verifying';
+    } else if (event.scope === 'contract') {
+      if (!event.spec || !event.specCommit) throw new Error('contract revision requires a new specification and published commit');
+      assertHash(event.spec); assertHash(event.specCommit, 40);
+      if (event.spec === run.spec || event.specCommit === run.specCommit) throw new Error('contract revision requires a changed specification and commit');
+      run.spec = event.spec; run.specCommit = event.specCommit; run.state = 'spec-drafted';
+      clear(run, 'suite', 'commit', 'approvalRef');
+    } else throw new Error('invalid revision scope');
+    run.revisions++; run.revisionRef = event.approvalRef;
+    clear(run, 'verification', 'receipt', 'reviewCommit', 'publicationRef', 'repairReceipt', 'resumeState', 'reason', 'mergeCommit');
+  },
+
+  merged(run, event) {
+    requireState(run, 'human-merge-review');
+    if (event.actor !== 'human' || !run.publicationRef || !hasReviewedEvidence(run) || event.commit !== run.commit) throw new Error('human merge must reference the published exact verified and reviewed commit');
+    assertHash(event.mergeCommit, 40); run.mergeCommit = event.mergeCommit; run.state = 'merged';
+  },
+
+  archive(run) { requireState(run, 'merged'); run.state = 'archived'; },
+
+  cancel(run) { run.state = 'cancelled'; },
+
+  pause(run, event) {
+    requireState(run, 'building', 'verifying', 'reviewing', 'requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'repair', 'human-merge-review');
+    pauseRun(run, event.reason);
+  },
+
+  resume(run) {
+    requireState(run, 'paused');
+    if (run.activeMs >= POLICY.activeTimeoutMs) throw new Error('active budget exhausted; requires a new human decision');
+    if (!run.resumeState) throw new Error('missing resume state');
+    run.state = run.resumeState;
+    clear(run, 'resumeState', 'reason');
+  },
+};
+
+function requireState(run: Run, ...states: State[]): void {
+  if (!states.includes(run.state)) throw new Error(`invalid state ${run.state}; expected ${states.join(', ')}`);
+}
+/** Remove evidence that the event makes stale. Each event names its own fields. */
+function clear(run: Run, ...fields: OptionalField[]): void {
+  for (const field of fields) delete run[field];
+}
+function escalateRun(run: Run, reason: string): void {
+  run.state = 'escalated'; run.reason = reason;
+}
+function pauseRun(run: Run, reason: string): void {
+  run.resumeState = run.state; run.state = 'paused'; run.reason = reason;
+}
+function allowInfrastructureRetry(run: Run): boolean {
+  if (run.infrastructureRetries >= POLICY.maxInfrastructureRetries) { escalateRun(run, 'infrastructure retries exhausted'); return false; }
+  run.infrastructureRetries++; return true;
+}
+function isFindingCounts(owners: unknown): owners is Record<FindingOwner, number> {
+  if (!owners || typeof owners !== 'object') return false;
+  const counts = owners as Record<string, unknown>;
+  return Object.keys(counts).length === FINDING_OWNERS.length && FINDING_OWNERS.every(owner => Number.isSafeInteger(counts[owner]) && (counts[owner] as number) >= 0);
+}
+/** The candidate passed verification and a review of the same commit. */
+function hasReviewedEvidence(run: Run): boolean {
+  return !!run.commit && run.verification === 'pass' && run.reviewCommit === run.commit && !!run.spec && !!run.suite && !!run.receipt;
 }

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { treeDigest, atomicJson } from '../../src/adapters/files.js';
 import { evidenceKinds, requiredEvidenceChecks, releaseIdentity } from '../../src/adapters/acceptance.js';
 import { recordObservedEvidence, type EvidenceKind, type EvidenceObservation, type EvidenceSource } from '../../src/adapters/acceptance-evidence.js';
-import { digest } from '../../src/domain/workflow.js';
+import { digest } from '../../src/domain/digest.js';
 import { fileHash, releaseArtifacts } from '../../src/adapters/release-artifacts.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 

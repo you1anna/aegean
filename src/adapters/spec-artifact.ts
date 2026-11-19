@@ -1,4 +1,4 @@
-import { digest } from '../domain/workflow.js';
+import { digest } from '../domain/digest.js';
 import { candidateGit, candidateGitChecked } from './candidate-git.js';
 
 export async function committedSpecDigest(repo: string, commit: string, path: string): Promise<string> {

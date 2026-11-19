@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { POLICY, type Run } from './workflow.js';
+import { POLICY } from './workflow-policy.js';
+import type { Run } from './run.js';
 export const ExecutionBudget = z.object({
   maxModelCalls: z.number().int().min(1).max(POLICY.maxModelCalls),
   activeTimeoutMs: z.number().int().min(1).max(POLICY.activeTimeoutMs),

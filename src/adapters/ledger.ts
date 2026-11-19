@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { command, type Options } from './process.js';
-import { assertRunPolicy, type HistoricalRun, type Run } from '../domain/workflow.js';
+import { STATES, assertRunPolicy, isTerminal, type HistoricalRun, type Run } from '../domain/run.js';
 import { ApproverSchema } from '../domain/config.js';
 
 export interface Permit { run: string; host: string; generation: number }
@@ -25,8 +25,7 @@ const repository = z.string().min(3).max(256).regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-
 const text = z.string().max(4096);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const commit = z.string().regex(/^[a-f0-9]{40}$/);
-const state = z.enum(['requested', 'spec-drafted', 'spec-approved', 'tests-staged', 'building', 'verifying', 'reviewing', 'repair', 'human-merge-review', 'merged', 'archived', 'paused', 'escalated', 'cancelled']);
-const terminal = (value: Run['state']) => ['archived', 'cancelled', 'escalated'].includes(value);
+const state = z.enum(STATES);
 // GitHub repository slugs are case-insensitive; retain the Run's display form.
 const repositoryKey = (value: string) => value.toLowerCase();
 const PermitSchema = z.object({ run: id, host, generation: integer.min(1) }).strict();
@@ -42,7 +41,7 @@ const runHistoryValid = (run: { createdAt: number; updatedAt: number; events: st
 // Original bootstrap terminal records predate policy hashes. Preserve absence;
 // never infer an identity or permit these records to execute.
 const HistoricalRunSchema = z.object({ schemaVersion: z.literal(1), ...RunFields, policyIdentity: hash.optional() }).strict()
-  .refine(runHistoryValid).refine(run => run.policyIdentity !== undefined || (run.policy === '0.1.0' && terminal(run.state)));
+  .refine(runHistoryValid).refine(run => run.policyIdentity !== undefined || (run.policy === '0.1.0' && isTerminal(run.state)));
 const RunSchema = z.object({ schemaVersion: z.literal(2), ...RunFields, approver: ApproverSchema, projectPolicy: hash, revisions: integer, revisionRef: text.optional(), reviewCommit: commit.optional() }).strict().refine(runHistoryValid);
 const RunsSchema = z.record(id, z.union([RunSchema, HistoricalRunSchema])).refine(runs => Object.keys(runs).length <= maxRuns);
 const OwnersSchema = z.record(id, PermitSchema).refine(owners => Object.keys(owners).length <= maxRuns);
@@ -64,13 +63,13 @@ function parseLedger(value: unknown): Ledger {
   const ledger = parsed.data as Ledger;
   for (const [key, run] of Object.entries(ledger.runs)) {
     if (key !== run.id) invalid();
-    if (run.schemaVersion === 1 && !terminal(run.state)) invalid();
+    if (run.schemaVersion === 1 && !isTerminal(run.state)) invalid();
     const owner = ledger.owners[key];
-    if (terminal(run.state) ? owner !== undefined : !owner) invalid();
+    if (isTerminal(run.state) ? owner !== undefined : !owner) invalid();
   }
   for (const [key, owner] of Object.entries(ledger.owners)) {
     const run = ledger.runs[key];
-    if (!run || owner.run !== key || owner.host !== run.host || owner.generation > ledger.revision || terminal(run.state)) invalid();
+    if (!run || owner.run !== key || owner.host !== run.host || owner.generation > ledger.revision || isTerminal(run.state)) invalid();
   }
   for (const [key, permit] of Object.entries(ledger.repositories)) {
     const run = ledger.runs[permit.run];
@@ -86,7 +85,7 @@ function parseLedger(value: unknown): Ledger {
 function quiescentMigration(value: unknown): { schemaVersion: 1 | 2; ledger: Ledger } {
   if (typeof value === 'object' && value !== null && 'schemaVersion' in value && value.schemaVersion === 2) return { schemaVersion: 2, ledger: parseLedger(value) };
   const legacy = LegacySchema.safeParse(value); if (!legacy.success) return invalid();
-  if (legacy.data.owner || Object.values(legacy.data.runs).some(run => !terminal(run.state))) throw new Conflict('control migration requires a quiescent legacy ledger: no owner and all runs terminal');
+  if (legacy.data.owner || Object.values(legacy.data.runs).some(run => !isTerminal(run.state))) throw new Conflict('control migration requires a quiescent legacy ledger: no owner and all runs terminal');
   return { schemaVersion: 1, ledger: parseLedger({ ...emptyLedger(), revision: legacy.data.revision, runs: legacy.data.runs }) };
 }
 
@@ -96,7 +95,7 @@ function quiescentMigration(value: unknown): { schemaVersion: 1 | 2; ledger: Led
  */
 export function assertOwnership(ledger: Ledger, runId: string, ownerHost: string, generation: number, requireRepo: boolean): Run {
   const owner = ledger.owners[runId]; const run = ledger.runs[runId];
-  if (!run || !owner || terminal(run.state) || !same(owner, { run: runId, host: ownerHost, generation })) throw new Conflict('stale or foreign run ownership');
+  if (!run || !owner || isTerminal(run.state) || !same(owner, { run: runId, host: ownerHost, generation })) throw new Conflict('stale or foreign run ownership');
   if (run.schemaVersion !== 2) assertRunPolicy(run);
   if (requireRepo && !same(owner, ledger.repositories[repositoryKey(run.repository)])) throw new Conflict('repository execution permit is not held by this run generation');
   return run;
@@ -114,7 +113,7 @@ function applyOwnedChange(state: Ledger, run: Run, change: (run: Run) => Run): L
   const next = change(run);
   if (identity !== JSON.stringify([next.id, next.host, next.repository, next.policy, next.policyIdentity, next.createdAt, next.approver?.id, next.approver?.login, next.projectPolicy])) throw new Error('owned update cannot change immutable run identity, approver or project policy');
   state.runs[run.id] = next;
-  if (terminal(next.state)) {
+  if (isTerminal(next.state)) {
     const owner = state.owners[run.id]!;
     if (same(state.repositories[repositoryKey(next.repository)], owner)) delete state.repositories[repositoryKey(next.repository)];
     if (same(state.builder, owner)) state.builder = null;
@@ -182,7 +181,7 @@ export class GitLedger {
       if (Object.hasOwn(state.runs, requested.id)) throw new Conflict('run already exists');
       const key = repositoryKey(requested.repository); const occupied = state.repositories[key];
       if (occupied) throw new Conflict(`repository permit active for run ${occupied.run} on ${occupied.host}; no automatic takeover`);
-      if (terminal(requested.state)) throw new Error('cannot acquire a terminal run');
+      if (isTerminal(requested.state)) throw new Error('cannot acquire a terminal run');
       const permit = { run: requested.id, host: requested.host, generation: state.revision + 1 };
       state.owners[requested.id] = permit; state.repositories[key] = permit; state.runs[requested.id] = requested; return state;
     });
@@ -238,7 +237,7 @@ export class GitLedger {
   async inspectMigration(): Promise<ControlMigrationPreview> {
     return this.checkout(async (dir, value) => {
       const source = quiescentMigration(value);
-      return { commit: await this.git(['rev-parse', 'HEAD'], { cwd: dir }), schemaVersion: source.schemaVersion, revision: source.ledger.revision, terminalRuns: Object.values(source.ledger.runs).filter(run => terminal(run.state)).length };
+      return { commit: await this.git(['rev-parse', 'HEAD'], { cwd: dir }), schemaVersion: source.schemaVersion, revision: source.ledger.revision, terminalRuns: Object.values(source.ledger.runs).filter(run => isTerminal(run.state)).length };
     });
   }
   async migrateQuiescent(expectedCommit?: string): Promise<Ledger> {

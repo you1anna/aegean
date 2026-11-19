@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checked, command } from '../src/adapters/process.js';
 import { GitLedger, emptyLedger } from '../src/adapters/ledger.js';
-import { createRun, POLICY, digest } from '../src/domain/workflow.js';
 import { approvalFrom, assertApprover, resolveApprover, authenticatedApprover, approval, commandReceipt, publicationCommand } from '../src/adapters/github.js';
 import { subscriptionEnvironment, claudeArgs } from '../src/adapters/agents.js';
 import { containerArgs, exportCommit } from '../src/adapters/verifier.js';
 import { reportedUsage } from '../src/adapters/usage.js';
-const frozen = { approver: { id: 42, login: 'reviewer' }, projectPolicy: digest('frozen project policy') };
+import { frozenProject, syntheticRun } from './helpers/runs.js';
+const frozen = frozenProject();
 
 test('token accounting preserves unknown and reads provider-reported usage only', () => {
   assert.deepEqual(reportedUsage('null\n42\n{}'), { input: null, output: null, cachedInput: null });
@@ -30,14 +30,14 @@ test('concurrent hosts cannot both acquire ownership; stale generations cannot p
     await checked('git', ['push', remote, 'control'], { cwd: seed });
     const a = new GitLedger(remote); const b = new GitLedger(remote);
     const results = await Promise.allSettled([
-      a.acquire(createRun('run-a', 'host-a', 'o/r', POLICY.version, 0, frozen)),
-      b.acquire(createRun('run-b', 'host-b', 'o/r', POLICY.version, 0, frozen)),
+      a.acquire(syntheticRun({ id: 'run-a', host: 'host-a', repository: 'o/r', now: 0, frozen })),
+      b.acquire(syntheticRun({ id: 'run-b', host: 'host-b', repository: 'o/r', now: 0, frozen })),
     ]);
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
     const state = await a.read(); assert.equal(Object.keys(state.runs).length, 1);
     const owner = Object.values(state.owners)[0]!;
     await assert.rejects(a.owned(owner.run, owner.host, owner.generation + 1, r => r), /stale/);
-    await assert.rejects(b.acquire(createRun('run-c', 'host-c', 'o/r', POLICY.version, 0, frozen)), /no automatic takeover/);
+    await assert.rejects(b.acquire(syntheticRun({ id: 'run-c', host: 'host-c', repository: 'o/r', now: 0, frozen })), /no automatic takeover/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 test('only exact current commands from the explicit stable human approver are accepted', () => {

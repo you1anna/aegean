@@ -3,7 +3,7 @@ import { candidateGitChecked } from '../adapters/candidate-git.js';
 import { boundedContext, type ContextPart } from '../domain/context.js';
 import type { TaskScope } from '../domain/model-policy.js';
 import type { Project } from '../domain/config.js';
-import { POLICY } from '../domain/workflow.js';
+import { POLICY } from '../domain/workflow-policy.js';
 import { scoutPrefix } from '../domain/scout.js';
 /** All reads use committed Git objects through the candidate-safe adapter. */
 export async function sourceContext(repo: string, task: TaskScope, limit: number, includeOptional = true) {

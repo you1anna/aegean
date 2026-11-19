@@ -8,7 +8,8 @@ import { command, type Options, type Result } from '../src/adapters/process.js';
 import { runQualificationProbes, qualificationToolCheckIds, qualificationVmCheckIds } from '../src/adapters/qualification-probes.js';
 import { qualificationCoordinator } from '../src/application/qualification.js';
 import { builderResource } from '../src/adapters/builder-session.js';
-import { digest, POLICY_IDENTITY } from '../src/domain/workflow.js';
+import { digest } from '../src/domain/digest.js';
+import { POLICY_IDENTITY } from '../src/domain/workflow-policy.js';
 import toolchain from '../toolchain.json' with { type: 'json' };
 
 const result = (fields: Partial<Result> = {}): Result => ({ code: 0, stdout: '', stderr: '', durationMs: 1, interrupted: false, ...fields });
