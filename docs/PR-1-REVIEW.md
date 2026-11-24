@@ -7,7 +7,7 @@ state. The operator subsequently authorized integrating the recovery work and se
 human approval before each candidate push. Implementation and final verification
 are recorded in [STATUS](STATUS.md); no release acceptance is claimed.
 
-[PR #1](https://github.com/you1anna/aegean/pull/1) remains open and draft. Its two
+[PR #1](../docs/history/pull-requests/1.md) remains open and draft. Its two
 hosted deterministic jobs passed. The pasted review has not been posted on GitHub;
 the PR had no submitted reviews or conversation comments when inspected.
 

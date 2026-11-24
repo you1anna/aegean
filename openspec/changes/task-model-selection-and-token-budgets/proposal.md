@@ -41,7 +41,7 @@ The work affects workflow policy, role execution, usage records, Builder configu
 The design keeps domain rules separate from CLI and storage adapters.
 It adds no scheduler, model-based router, paid API route or additional Builder capacity.
 
-Use [PR #2](https://github.com/you1anna/aegean/pull/2).
+Use [PR #2](../../../docs/history/pull-requests/2.md).
 Complete its pilot, decision and recovery controls before the combined lifecycle qualifies for release.
 Keep product documentation focused on available behaviour; link this proposal from the engineering reference.
 

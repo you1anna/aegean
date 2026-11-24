@@ -44,7 +44,7 @@ The older remaining-work list is historical; use the current [implementation che
 
 Published the explicitly approved commit
 `4ea484cf535fe3e3fcf203e22263f842b865608b` to
-[draft PR #2](https://github.com/you1anna/aegean/pull/2). Confirmed the PR head
+[draft PR #2](../docs/history/pull-requests/2.md). Confirmed the PR head
 still matches that exact commit after CI completed.
 
 Hosted CI run 43432930555 (archived CI record)
