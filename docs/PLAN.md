@@ -10,6 +10,9 @@ draft for human review; the baseline plan below describes the original bootstrap
 
 - Name: Aegean. Preserve the previous private repository and all local changes as
   legacy-project; create clean private source history. Publish only on request.
+  On 24 November 2026, the maintainer requested publication. The private repository with the
+  pull-request records becomes `you1anna/aegean-archive`. A new public
+  `you1anna/aegean` receives the rewritten branch history.
 - Targets: primary Mac and secondary Mac, independently operable. Repository bootstrap
   is the secondary host delivery route until a working connection is available.
 - Significant work uses OpenSpec, isolated branches, protected acceptance tests,
@@ -58,8 +61,8 @@ to have verified itself through a not-yet-installed system.
 ## Release gates
 
 The full workflow is accepted only after passing the checks in STATUS.md on both
-hosts. GitHub Free does not enforce private-repository branch protections; this
-limitation is disclosed and does not justify claiming protected main. Aegean
+hosts. GitHub Free does not enforce branch protection on a private repository. Do not
+claim a protected main until the public repository has branch protection on `main`. Aegean
 does not merge PRs. The operator remains responsible for the final merge.
 
 ## Sources checked during planning

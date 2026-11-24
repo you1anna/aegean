@@ -23,7 +23,7 @@ See [source and installed versions](ENGINEERING.md#source-and-installed-versions
 
 1. Use the host's own GitHub, Claude and ChatGPT logins. Do not copy authentication
    files between machines.
-2. Clone the private `you1anna/aegean` repository and review the intended commit.
+2. Clone the `you1anna/aegean` repository and review the intended commit.
 3. Read [AGENTS.md](../AGENTS.md) and [STATUS.md](STATUS.md).
 4. Inspect the host configuration. Preserve unrelated instructions and excluded paths.
 5. Confirm explicit approval to install that version.
