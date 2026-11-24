@@ -12,6 +12,8 @@
 | [Current status](STATUS.md) | Dated results and open release gates. |
 | [Acceptance contract](ACCEPTANCE.md) | Evidence required for an exact installed release. |
 | [Accepted plan](PLAN.md) | Original scope and approved decisions. |
+| [Pull-request archive](history/pull-requests/README.md) | The record of each pull request from the earlier private repository. |
+| [Commit map](history/commit-map.md) | Find a commit hash that an older document quotes. |
 
 ## Source and installed versions
 

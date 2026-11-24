@@ -31,8 +31,8 @@ See [current results and gaps](docs/STATUS.md).
 ## Make a change
 
 1. Read the relevant guide and source before you edit.
-2. Follow [AGENTS.md](AGENTS.md). Use a branch and human-reviewed PR for every
-   change, including documentation. Significant engineering work also needs an approved specification.
+2. Use a branch and a human-reviewed PR. [AGENTS.md](AGENTS.md) gives the one exception for
+   documentation. Significant engineering work also needs an approved specification.
 3. Keep the change focused. Preserve the [module boundaries](docs/ARCHITECTURE.md#code-structure).
 4. Add appropriate automated coverage for behaviour changes. Test rejection and
    recovery as well as success.

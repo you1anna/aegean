@@ -61,8 +61,8 @@ to have verified itself through a not-yet-installed system.
 ## Release gates
 
 The full workflow is accepted only after passing the checks in STATUS.md on both
-hosts. GitHub Free does not enforce branch protection on a private repository. Do not
-claim a protected main until the public repository has branch protection on `main`. Aegean
+hosts. A ruleset on `main` requires a PR and the `deterministic` check. The administrator
+bypass is limited to the documentation pushes that [AGENTS.md](../AGENTS.md) permits. Aegean
 does not merge PRs. The operator remains responsible for the final merge.
 
 ## Sources checked during planning

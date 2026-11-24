@@ -3,11 +3,14 @@
 This repository contains the Aegean software-delivery coordinator.
 Keep unrelated projects and their records outside this checkout.
 
-Read README.md, docs/PLAN.md and docs/STATUS.md. All Aegean changes, including
-documentation, use a branch and a human-reviewed PR. Never push changes directly
-to `main`. Never merge, publish, deploy, change billing, or bypass
-the verifier without the user's explicit instruction. The initial documentation
-commit on main is the recorded bootstrap exception.
+Read README.md, docs/PLAN.md and docs/STATUS.md. Code changes use a branch and a
+human-reviewed PR. A documentation-only change, for example a close note or a status
+record, can go directly to `main` if the user asks for it in the current chat. Add
+`[skip ci]` to the message of that commit. A ruleset on `main` requires a PR and the
+`deterministic` check; the administrator bypass exists only for these documentation
+pushes. Never merge, publish, deploy, change billing, or bypass the verifier without
+the user's explicit instruction. The initial documentation commit on main is the
+recorded bootstrap exception.
 
 Keep workflow rules pure; CLI/process/network/filesystem code belongs in
 adapters. One owner per fact. Do not add an orchestration framework, background
