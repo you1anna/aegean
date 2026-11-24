@@ -550,8 +550,10 @@ already in the pinned image or candidate. UI, HTTP, native macOS and infrastruct
 verification need additional reviewed adapters. This cannot yet replace delivery
 checks for every existing system.
 
-GitHub Free does not enforce private-repository branch protection. Human PR review
+GitHub Free does not enforce branch protection on a private repository. Human PR review
 is an operating rule here, not a claimed server-enforced control. The coordinator
-does not merge PRs. Nothing has been deployed or published publicly.
+does not merge PRs. Nothing has been deployed. Publication of the source is in
+preparation: the next public `you1anna/aegean` will receive the rewritten branch
+history, and this repository will become the private archive.
 
 </details>

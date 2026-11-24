@@ -61,4 +61,4 @@ It shows each command before it runs it. See the [workflow](docs/WORKFLOW.md) fo
 | [Engineering reference](docs/ENGINEERING.md) | Find decisions, release gates and trial records. |
 
 The first adapter supports command-line changes on macOS with subscription CLI accounts.
-This repository is private and has no software licence.
+Aegean is available under the [MIT licence](LICENSE). To report a security problem, read the [security policy](SECURITY.md).
