@@ -1,5 +1,6 @@
 import { capability, identityKeys, recordObservedEvidence, releaseIdentity, type EvidenceKind } from '../adapters/acceptance-evidence.js';
 import { runQualificationProbes } from '../adapters/qualification-probes.js';
+import { qualificationSteps } from '../domain/next-steps.js';
 
 interface QualificationEdges {
   identity: typeof releaseIdentity;
@@ -20,7 +21,8 @@ export function qualificationCoordinator(edges: QualificationEdges) {
       const outcome = evidence.observations.some(item => item.outcome === 'fail') ? 'fail' : evidence.observations.every(item => item.outcome === 'pass') ? 'pass' : 'unknown';
       reports.push({ kind: kind as EvidenceKind, reference, outcome, observations: evidence.observations });
     }
-    return { host, capability, identity: after, prerequisitesPassed: observed.cleanupConfirmed && reports.every(report => report.outcome === 'pass'), acceptanceWritten: false as const, reports, workDirectory: observed.workDirectory, cleanupConfirmed: observed.cleanupConfirmed, retainedResources: observed.retainedResources, limitations: observed.limitations };
+    const result = { host, capability, identity: after, prerequisitesPassed: observed.cleanupConfirmed && reports.every(report => report.outcome === 'pass'), acceptanceWritten: false as const, reports, workDirectory: observed.workDirectory, cleanupConfirmed: observed.cleanupConfirmed, retainedResources: observed.retainedResources, limitations: observed.limitations };
+    return { ...result, next: qualificationSteps(result) };
   };
 }
 

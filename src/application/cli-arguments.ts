@@ -60,9 +60,13 @@ const hints:[RegExp,string][]=[
   [/ENOENT.*aegean\.json/,'Run the command in the root folder of an enrolled project. The operations guide gives the enrolment procedure.'],
   [/prerequisite evidence (for this host|is not passing)/,'Qualify this host for this release: run aegean qualify, then aegean doctor --require prerequisites. If an observation fails again, read the operations guide; do not bypass it.'],
   [/Pilot authorization required/,'Authorise the pilot, then run aegean resume --run ID.'],
+  [/qualification artifacts changed during the native probes/,'An install or upgrade changed the release during qualification. Let it finish, then run aegean qualify again.'],
 ];
 /** Advice only; it never changes the failure or its exit code. */
 export function recoveryHint(command:string|undefined,message:string):string{
   if(command==='configure')return 'Inspect host configuration in the operations guide before retrying.';
-  return hints.find(([pattern])=>pattern.test(message))?.[1]??'Run aegean status and inspect the operations guide before retrying effects.';
+  const fallback=command==='qualify'
+    ?'Qualification recorded no evidence. Make sure that the verifier runs: aegean verifier status. Then run aegean qualify again. If it fails again, read "Check the installation" in the operations guide.'
+    :'Run aegean status and inspect the operations guide before retrying effects.';
+  return hints.find(([pattern])=>pattern.test(message))?.[1]??fallback;
 }
