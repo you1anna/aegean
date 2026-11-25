@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Readable, Writable } from 'node:stream';
 import { GuideStop, type Choice, type GuideUi, type TextOptions } from '../domain/guide.js';
 import { brandLines } from './brand.js';
@@ -58,6 +59,15 @@ export async function openPager(text: string, env: NodeJS.ProcessEnv = process.e
   });
 }
 
+/** Terminals that draw an OSC 8 link. Other terminals show only the text; many of them detect an absolute path. */
+const LINK_TERMINALS = ['iTerm.app', 'vscode', 'WezTerm', 'ghostty'];
+
+/** A local file path as a link that opens the file. Over SSH the link would name a path on the wrong computer. */
+export function fileLink(path: string, env: NodeJS.ProcessEnv = process.env): string {
+  const links = !env.SSH_CONNECTION && (LINK_TERMINALS.includes(env.TERM_PROGRAM ?? '') || Boolean(env.KITTY_WINDOW_ID));
+  return links ? `\x1b]8;;${pathToFileURL(path).href}\x1b\\${path}\x1b]8;;\x1b\\` : path;
+}
+
 /** Opens the operator's own editor on a private file or folder. Never use for candidate code. */
 export async function openEditor(path: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   const editor = env.VISUAL || env.EDITOR;
@@ -74,7 +84,7 @@ export async function openEditor(path: string, env: NodeJS.ProcessEnv = process.
  * Draws the guide on an interactive terminal. It has no unattended mode:
  * the guide leads to human decisions, and an agent must not operate it.
  */
-export function terminalUi(input: Input = process.stdin, output: Output = process.stdout, pager: (text: string) => Promise<boolean> = openPager): GuideUi {
+export function terminalUi(input: Input = process.stdin, output: Output = process.stdout, pager: (text: string) => Promise<boolean> = openPager, env: NodeJS.ProcessEnv = process.env): GuideUi {
   if (!input.isTTY || !output.isTTY) throw new Error('The guide requires the operator at an interactive terminal. Use aegean status for the next step, or aegean help for the commands');
   const paint = (colour: Colour, text: string) => styleText(colour, text, { stream: output });
   let spinner: { clear(): void; draw(): void } | undefined;
@@ -162,6 +172,8 @@ export function terminalUi(input: Input = process.stdin, output: Output = proces
       print(`\n${paint('bold', title)}\n\n${body}\n`);
       await ui.select(`End of ${title}`, [{ value: 'back', label: 'Go back' }]);
     },
+    // A path is never wrapped: a break would make a copy or a click incomplete.
+    paths(paths) { for (const path of paths) print(`  ${fileLink(path, env)}`); },
   };
   return ui;
 }

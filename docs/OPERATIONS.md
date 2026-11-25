@@ -303,13 +303,18 @@ The guide does these steps in sequence:
 4. It takes the request from a file, or it opens your editor (`VISUAL` or `EDITOR`) on a new private request file.
 5. It prepares the run. If the release has no full acceptance, it asks for the pilot limits and starts the authorisation.
 6. It starts the Scout draft. Then it shows the review summary and the specification folder.
-7. At the specification review, you can read each file, open the folder in your editor, record your edits, approve or cancel.
+7. At the specification review, you can read each file, show the file paths for your editor, open the folder in your editor, record your edits, approve or cancel.
 
 For each run, the guide shows the minutes that remain in the pilot authorisation. Below 15 minutes, this line is a warning.
 
 The guide opens a specification file in your pager (`PAGER`, or `less`). Press `q` to close the file.
 The file list then shows the next file, and it marks each file that you opened.
 If the pager cannot start, the guide prints the file and waits for your answer.
+
+To read the files in another editor, select "Show the file paths for my editor" in the file list.
+The guide shows the specification folder and the path of each file in the draft, with one path on each line.
+It names the files that the draft does not contain. In iTerm2, VS Code, WezTerm, Ghostty and kitty, each path is also a link to the file.
+Over SSH, the guide shows only the paths. If you change a file, select "Record my edits to the specification" before you approve.
 
 If the review notes contain an open question or a `NOT COVERED` need, the guide shows a warning that the draft is not complete.
 The approval choice shows the counts, and the guide asks one more question before the approval prompt.
@@ -324,7 +329,8 @@ Press Ctrl-C to stop the guide. The run keeps its state, and `aegean guide` cont
 The guide needs an interactive terminal. An agent must not operate it; a pipe or a script gets a failure and no effect.
 
 Tested: the synthetic suite and pseudo-terminal sessions with synthetic text. One real pilot project run used the earlier guide, to the specification review.
-No real run used the pager, the remaining-time line or the warning for a draft that is not complete.
+No real run used the pager, the file paths, the remaining-time line or the warning for a draft that is not complete.
+No path link was opened in a real terminal.
 
 ### Prepare the project and the request
 

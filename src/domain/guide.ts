@@ -20,6 +20,8 @@ export interface GuideUi {
   task<T>(label: string, work: () => Promise<T>): Promise<T>;
   /** Shows a long text. It returns only after the operator closes the text. */
   page(title: string, text: string): Promise<void>;
+  /** Shows file paths for another program, such as an editor. Each path is complete on its own line. */
+  paths(paths: string[]): void;
 }
 /** The operator left the guide. A run keeps its recorded state. */
 export class GuideStop extends Error { constructor(readonly interrupted = false) { super('guide stopped'); } }

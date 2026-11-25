@@ -1,5 +1,5 @@
 import { join, resolve } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, writeFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { atomicJson } from '../adapters/files.js';
@@ -32,6 +32,10 @@ type Mode = { label: string; echo?: boolean } | 'terminal';
 
 const stop = { value: 'stop', label: 'Stop here' } as const;
 const again = { value: 'again', label: 'Try again' } as const;
+/** The file list choice that gives paths. No specification file has this name. */
+const SHOW_PATHS = 'paths';
+/** An edit outside the guide changes the specification head. The approval refuses that head until the edit is recorded. */
+const RECORD_EDITS = 'After you save the files, select "Record my edits to the specification".';
 const shown = (args: string[]) => `aegean ${args.map(arg => /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`).join(' ')}`;
 
 /** Runs one installed command. A failure is shown with its recovery hint; the caller offers the next choice. */
@@ -217,12 +221,30 @@ function describe(g: Guide, status: RunStatus, facts: RunFacts, expiry: number |
   }
 }
 
+/** Gives the folder and each specification file as a path, for an editor outside the terminal. A missing file gets no path. */
+async function showPaths(g: Guide, folder: string): Promise<void> {
+  const present: string[] = [], absent: string[] = [];
+  for (const file of SPEC_FILES) {
+    const isFile = await lstat(join(folder, file)).then(info => info.isFile(), () => false);
+    (isFile ? present : absent).push(file);
+  }
+  g.ui.say('Open the specification folder or a file in your editor:');
+  g.ui.paths([folder, ...present.map(file => join(folder, file))]);
+  if (absent.length) g.ui.note(`No file in this draft: ${absent.join(', ')}`);
+  g.ui.note(RECORD_EDITS);
+}
+
 /** Shows the specification files one at a time. The cursor moves to the next file after each one. */
 async function read(g: Guide, folder: string): Promise<void> {
   const seen = new Set<string>(); let initial: string = SPEC_FILES[0];
   for (;;) {
-    const file = await g.ui.select<string>('Which file do you want to read?', [...SPEC_FILES.map(name => ({ value: name, label: name, ...(seen.has(name) ? { hint: 'read' } : {}) })), { value: '', label: 'Go back' }], initial);
+    const file = await g.ui.select<string>('Which file do you want to read?', [
+      ...SPEC_FILES.map(name => ({ value: name, label: name, ...(seen.has(name) ? { hint: 'read' } : {}) })),
+      { value: SHOW_PATHS, label: 'Show the file paths for my editor' },
+      { value: '', label: 'Go back' },
+    ], initial);
     if (!file) return;
+    if (file === SHOW_PATHS) { await showPaths(g, folder); initial = ''; continue; }
     let text: string;
     try { text = (await readBoundedEvidenceFile(join(folder, file), 200_000)).toString('utf8'); }
     catch (error) { g.ui.bad(`Cannot read ${file}: ${(error as Error).message}`); continue; }
@@ -260,7 +282,7 @@ async function runLoop(g: Guide, id: string, readiness: Readiness): Promise<void
     if (action === 'edit' && status.specification) {
       try { if (!await g.edit(status.specification)) g.ui.say(`No editor is set in VISUAL or EDITOR. Open this folder: ${status.specification}`); }
       catch (error) { g.ui.bad((error as Error).message); }
-      g.ui.note('After you save the files, select "Record my edits to the specification".');
+      g.ui.note(RECORD_EDITS);
     }
     if (action === 'approve') {
       if (flags) g.ui.warn(`The draft is not complete: ${flags}. An approval accepts the specification as it is.`);
