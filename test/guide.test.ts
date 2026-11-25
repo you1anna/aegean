@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guide, type Guide } from '../src/application/guide.js';
 import { GuideStop, runChoices, checkFix, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
-import { terminalUi, completePath, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
+import { terminalUi, completePath, fileLink, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
 import { brandLines, colourDepth, MARK_WIDTH, WORDMARK } from '../src/adapters/brand.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
 import { PilotLimitsSchema } from '../src/domain/pilot-limits.js';
@@ -34,6 +34,7 @@ function scripted(answers: (string | ((choices: Choice<string>[]) => string))[])
     async text(question, options) { const value = next(question) as string || options?.initial || ''; assert.equal(options?.validate?.(value), undefined, question); return value; },
     task: (_label, work) => work(),
     async page(title, text) { lines.push(`PAGE ${title}`, text); },
+    paths: list => { lines.push(...list.map(path => `PATH ${path}`)); },
   };
   return { ui, lines, questions, text: () => lines.join('\n'), unused: answers };
 }
@@ -163,6 +164,28 @@ test('the specification review warns before the authorisation ends and keeps eac
   } finally { await h.cleanup(); await rm(folder, { recursive: true, force: true }); }
 });
 
+test('the specification review gives the path of each file for an editor outside the terminal', async () => {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), 'aegean-spec-')));
+  await writeFile(join(folder, 'review-notes.md'), '# Review notes\n'); await writeFile(join(folder, 'proposal.md'), 'Synthetic proposal\n');
+  const drafted = { id, state: 'spec-drafted', spec: 'a'.repeat(64), specification: folder, next: [] };
+  const files: string[] = [];
+  const pick = (value: string) => (choices: Choice<string>[]) => { files.push(choices.map(choice => `${choice.value}${choice.hint ? `:${choice.hint}` : ''}`).join(' ')); return value; };
+  const h = await harness([id, 'read', pick('paths'), pick(''), 'stop'],
+    args => args[0] === 'doctor' ? readiness() : args.length === 1 ? { runs: [{ id, host, state: 'spec-drafted' }] } : args[0] === 'status' ? drafted : new Error('unexpected'));
+  try {
+    // The choice comes after the files, so the cursor still starts on the review notes.
+    assert.match(files[0]!, /^review-notes\.md .* tasks\.md paths $/);
+    // The folder comes first, then each file that the draft contains. A missing file gets no path.
+    assert.deepEqual(h.lines.filter(line => line.startsWith('PATH ')), [`PATH ${folder}`, `PATH ${join(folder, 'review-notes.md')}`, `PATH ${join(folder, 'proposal.md')}`]);
+    assert.match(h.text(), /No file in this draft: specs\/contract\/spec\.md, allowed-paths\.txt, design\.md, tasks\.md/);
+    // An edit outside the guide changes the specification head, and the approval refuses a changed head until the edit is recorded.
+    assert.match(h.text(), /After you save the files, select "Record my edits to the specification"\./);
+    // A path is not a read file, and the guide runs no command to show the paths.
+    assert.ok(!h.lines.some(line => line.startsWith('PAGE '))); assert.ok(!files[1]!.includes(':read'));
+    assert.deepEqual(h.commands(), ['doctor', 'status', `status --run ${id}`, `status --run ${id}`]);
+  } finally { await h.cleanup(); await rm(folder, { recursive: true, force: true }); }
+});
+
 test('an interrupted command stops the guide with the interruption result', async () => {
   const controller = new AbortController();
   const h = await harness([id, 'record'], args => {
@@ -188,13 +211,27 @@ test('a written request stays private; an unchanged template prepares nothing', 
   } finally { await written.cleanup(); }
 });
 
-function terminal(pager: (text: string) => Promise<boolean> = async () => false) {
+function terminal(pager: (text: string) => Promise<boolean> = async () => false, env: NodeJS.ProcessEnv = {}) {
   const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => undefined });
   const output = Object.assign(new PassThrough(), { isTTY: true, columns: 60 });
   let written = ''; output.on('data', chunk => { written += chunk; });
   const keys = (text: string) => setImmediate(() => input.write(text));
-  return { ui: terminalUi(input, output, pager), keys, screen: () => stripVTControlCharacters(written) };
+  return { ui: terminalUi(input, output, pager, env), keys, raw: () => written, screen: () => stripVTControlCharacters(written) };
 }
+
+test('the terminal shows each path whole on its own line, as a link where the terminal draws links', () => {
+  const path = `/state/a folder/${'x'.repeat(80)}.md`, url = 'file:///state/a%20folder/';
+  // A path wider than the terminal stays whole, and a space does not break it, so that a copy or a click gets the complete path.
+  const plain = terminal(undefined, { TERM_PROGRAM: 'Apple_Terminal' }); plain.ui.paths([path, '/state/b.md']);
+  assert.equal(plain.raw(), `  ${path}\n  /state/b.md\n`);
+  const linked = terminal(undefined, { TERM_PROGRAM: 'iTerm.app' }); linked.ui.paths([path]);
+  assert.ok(linked.raw().includes(`\x1b]8;;${url}${'x'.repeat(80)}.md\x1b\\${path}\x1b]8;;\x1b\\`)); assert.equal(linked.screen(), `  ${path}\n`);
+  for (const program of ['vscode', 'WezTerm', 'ghostty']) assert.notEqual(fileLink('/a.md', { TERM_PROGRAM: program }), '/a.md', program);
+  assert.notEqual(fileLink('/a.md', { KITTY_WINDOW_ID: '1' }), '/a.md');
+  // Over SSH, a file link would name a path on the wrong computer.
+  assert.equal(fileLink('/a.md', { TERM_PROGRAM: 'iTerm.app', SSH_CONNECTION: '10.0.0.1 1 10.0.0.2 22' }), '/a.md');
+  assert.equal(fileLink('/a.md', {}), '/a.md');
+});
 
 test('long text breaks at spaces with the list indent; a pager shows a file, and without one the file waits for an answer', async () => {
   assert.equal(wrap('  - one two three four', 12), '  - one two\n    three\n    four'); assert.equal(wrap('short\n\n1. a b', 80), 'short\n\n1. a b');
