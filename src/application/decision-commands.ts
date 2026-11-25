@@ -97,7 +97,9 @@ export function decisionCoordinator(confirm = confirmHumanDecision) {
       const flags = action === 'approve' ? await localReview(local).then(review => review && reviewFlags(review)) : undefined;
       const incomplete = flags ? `\nThe draft is not complete: ${flags}. Read ${REVIEW_NOTES} in the changes above. An approval accepts the specification as it is.\n` : '';
       const baseline = action === 'publish' ? await baselineText(dir, run.suite) : undefined;
-      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\nRequest:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${incomplete}${baseline ? `\n${baseline}\n\n` : ''}${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
+      // The artifact holds the expiry in epoch milliseconds. The person who types the confirmation needs a time.
+      const ends = action === 'pilot' && options.expiresAt ? `Authorisation ends: ${new Date(options.expiresAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })} (${Math.round((options.expiresAt - Date.now()) / 60_000)} minutes from now). The Scout draft, your specification review and the build must finish before then.\n` : '';
+      const summary = `${tokenPolicy ? 'Project token allowances (monitored): '+JSON.stringify(tokenPolicy)+'\n' : ''}${action.toUpperCase()}\n${ends}Request:\n${request}\n\nExact artifact:\n${JSON.stringify(artifact, null, 2)}\n\nChanges:\n${patch}\n${incomplete}${baseline ? `\n${baseline}\n\n` : ''}${action === 'publish' ? 'Publication can trigger repository CI and deployment integrations. This authorizes this exact push, never merge.' : 'This decision does not authorize candidate publication, merge or readiness.'}`;
       if (Buffer.byteLength(summary) > 300_000) throw new Error('decision review exceeds bounded capacity');
       return { artifact, run, summary, authorized: false };
     });

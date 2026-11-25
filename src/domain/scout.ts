@@ -1,5 +1,6 @@
 import { z, ZodError } from 'zod';
 import { ALLOWED_PATHS, formatAllowedPaths, parseAllowedPaths } from './allowed-paths.js';
+import { caseRules } from './verifier-contract.js';
 
 const note = z.string().min(1).max(2000);
 export const DraftSchema = z.object({
@@ -23,11 +24,17 @@ export function scoutPrefix(request: string, project: ProjectChecks): string {
     '- proposal, requirements, design, tasks: strings. Requirements must use OpenSpec Requirement and Scenario headings. Include scope, observable acceptance, failure cases, security/data boundaries, capacity, concurrency, checks and recovery.',
     '  The requirements are the contract for the tests. Make each requirement exact: give each name, field, type, required or optional status, identifier format and link that a test needs. The test writer and the builder must not invent them.',
     '  Write proposal, design and tasks as Markdown with headings, short paragraphs and lists.',
-    '- verification: string. State how the PROJECT CHECKS prove the deliverable. These commands run in the verifier image without network access. Plan a deliverable that these commands can pass or fail. If only a human can check the deliverable, say so in the first sentence.',
+    '- verification: string. State how the PROJECT CHECKS and the PROTECTED TESTS prove the deliverable. These commands run in the verifier image without network access. Plan a deliverable that these commands can pass or fail. If only a human can check the deliverable, say so in the first sentence.',
     '- coverage: array of strings. Write one entry for each need in the REQUEST and for each need in a context section that the REQUEST names. Give the need, then the requirement that covers it, or NOT COVERED and the reason. Do not move a need that the REQUEST names to a later change; cover it, or report it as NOT COVERED.',
     '- constraints: array of strings. Write one entry for each repository rule that limits the REQUEST or conflicts with it. Give the file, the rule and its effect on the plan. Obey the rule and report it. Use [] if there is none.',
     '- openQuestions: array of strings. List only a decision that the human must make before approval, and give your recommendation with it. Decide each other matter yourself and give the reason in design. Use [] if there is none.',
     '- allowedPaths: array of strings. List each repository path that the Builder may create, change or delete. Include the test files and each file that the project checks read or write. End a directory with / to allow each file below it. Use paths relative to the repository root. Do not list aegean.json or .git. Aegean refuses a candidate that changes another path.',
+    'PROTECTED TESTS: after approval, a test writer who does not see the code turns the requirements into hidden cases. The Builder does not see the cases, and a failed case tells the Builder only the requirement name.',
+    caseRules(project.verifier.command),
+    'So the requirements must define the verifier entry point exactly: its stdin format, the stdout text of each result and each exit code. Give each stdout as exact text, or as one JSON line with a fixed key order. Define each sort order. Do not put timestamps, durations, absolute paths or random identifiers in stdout.',
+    'Give each error one defined stdout line and an exit code from 2 to 125, so that no error case also passes when the entry point is absent.',
+    'To test a sequence of actions, let one stdin text hold the sequence, and let the entry point run it against new data in /tmp.',
+    'If the verifier command names a file that does not exist yet, the deliverable creates it: name it in a requirement and in allowedPaths.',
     'Write at most 300 characters in each array entry and at most 10 sentences in verification.',
     'Obey the ignore rules in .gitignore: do not put a committed deliverable in an ignored path.',
     'Do not implement.',

@@ -62,7 +62,8 @@ test('pilot refuses missing authorization and expiry; call cap rejects execution
     const start = await f.start(); assert.notEqual(start.code, 0); assert.match(start.stderr, /Pilot authorization required/);
     assert.equal((await f.events()).filter(e => e.role).length, 0);
     const opts = { expiresAt: Date.now() + 600_000, budget: { ...defaultBudget, maxModelCalls: 1 } };
-    ok(await decision(f, 'pilot', opts)); ok(await f.resume()); ok(await decision(f, 'approve'));
+    // The typed confirmation shows when the authorisation ends in a form that a person can read, not only the epoch milliseconds of the artifact.
+    ok(await decision(f, 'pilot', opts, `if(!/Authorisation ends: .+ \\((9|10) minutes from now\\)\\. The Scout draft, your specification review and the build must finish before then\\./.test(summary)) throw new Error('the summary lacks the readable end time: '+summary.slice(0,400))`)); ok(await f.resume()); ok(await decision(f, 'approve'));
     const exhausted = await f.resume(); assert.notEqual(exhausted.code, 0); assert.match(exhausted.stderr, /usage budget exhausted/);
     assert.equal((await f.events()).filter(e => e.role).length, 1);
     const file = join(f.state, 'runs', (await f.current()).id, 'pilot.json'); const saved = await readFile(file, 'utf8');

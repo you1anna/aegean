@@ -125,7 +125,7 @@ export async function stageTests(session: RunSession, suitePath: string): Promis
   const contract = await readFile(join(specDir, 'specs/contract/spec.md'), 'utf8');
   const requirements = publicRequirements(contract);
   const timeout = Math.max(1, Math.min(900000, POLICY.activeTimeoutMs - session.run.activeMs));
-  const prompt = testAuditorPrompt(session.run.spec, requirements, contract);
+  const prompt = testAuditorPrompt(session.run.spec, requirements, contract, session.project.verifier.command);
   const result = await session.model('auditor-tests', prompt, timeout, (limit, deadline, profile) => claudeRole(bins.claude, prompt, dir, limit, deadline, profile), r => {
     const suite = SuiteSchema.parse(parseJsonAnswer(claudeText(r)));
     if (suite.spec !== session.run.spec || suite.cases.some(c => !Object.hasOwn(requirements, c.requirement))) throw new Error('Auditor returned stale or unknown public requirement');
@@ -181,7 +181,7 @@ export async function build(session: RunSession): Promise<typeof NEXT | typeof S
   }
   const timeout = Math.max(1, POLICY.activeTimeoutMs - session.run.activeMs);
   const contract = await Promise.all(['proposal.md', 'design.md', 'tasks.md', 'specs/contract/spec.md', ALLOWED_PATHS].map(async path => ({ path, text: (await readBoundedEvidenceFile(join(specDir, path), POLICY.models.roles.builder.inputBytes).catch(error => { throw new Error(`required Builder context ${path} exceeds ${POLICY.models.roles.builder.inputBytes} bytes or is unreadable: ${error.message}`); })).toString('utf8') })));
-  const prefix = builderPrefix(id, project.checks, contract, repair);
+  const prefix = builderPrefix(id, project.checks, project.verifier.command, contract, repair);
   const source = await sourceContext(local.worktree, project.modelExecution!.task, POLICY.models.roles.builder.inputBytes - Buffer.byteLength(prefix) - 256, false);
   await recordContext(join(dir, 'contexts', `builder-${session.run.repairs}-${session.run.events.length}-source.json`), { ...source, text: undefined });
   const prompt = prefix + source.text;

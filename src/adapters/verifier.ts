@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { checked, command } from './process.js';
 import { digest } from '../domain/digest.js';
 import { assertSupportedImage, type Suite, type Project } from '../domain/config.js';
+import { CASE_LIMITS } from '../domain/verifier-contract.js';
 import toolchain from '../../toolchain.json' with { type: 'json' };
 import { docker, removeContainer } from './container-runtime.js';
 export { docker } from './container-runtime.js';
@@ -56,7 +57,7 @@ export async function exportCommit(repo: string, commit: string, target: string,
 }
 export function containerArgs(name: string, candidate: string, image: string, args: string[]): string[] {
   if (candidate.includes(',') || !/^[\w./:-]+@sha256:[a-f0-9]{64}$/.test(image)) throw new Error('invalid container input');
-  return ['run', '-i', '--name', name, '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user=65534:65534', '--pids-limit=64', '--memory=512m', '--cpus=1', '--tmpfs=/tmp:rw,noexec,nosuid,size=32m', '--mount', `type=bind,src=${candidate},dst=/candidate,readonly`, '--workdir=/candidate', '--entrypoint', args[0]!, image, ...args.slice(1)];
+  return ['run', '-i', '--name', name, '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user=65534:65534', '--pids-limit=64', '--memory=512m', '--cpus=1', `--tmpfs=/tmp:rw,noexec,nosuid,size=${CASE_LIMITS.tmpMegabytes}m`, '--mount', `type=bind,src=${candidate},dst=/candidate,readonly`, '--workdir=/candidate', '--entrypoint', args[0]!, image, ...args.slice(1)];
 }
 export async function verify(repo: string, commit: string, project: Project, suite: Suite, signal?: AbortSignal, execute = command, resourceChanged?: (resource: VerifierResource | null) => Promise<void>): Promise<Receipt> {
   assertSupportedImage(project);
@@ -77,7 +78,7 @@ export async function verify(repo: string, commit: string, project: Project, sui
       const name = `aegean-${randomUUID()}`;
       await resourceChanged?.({ container: name, candidate: dir });
       try {
-        const r = await execute('docker', docker(containerArgs(name, dir, project.verifier.image, c.args)), { input: c.input, timeoutMs: 15_000, maxBytes: 128_000, ...(signal ? { signal } : {}) });
+        const r = await execute('docker', docker(containerArgs(name, dir, project.verifier.image, c.args)), { input: c.input, timeoutMs: CASE_LIMITS.seconds * 1000, maxBytes: CASE_LIMITS.outputBytes, ...(signal ? { signal } : {}) });
         if (r.termination === 'aborted' || signal?.aborted) { receipt.outcome = 'cancelled'; receipt.reason = 'operator-cancelled'; break; }
         if (r.interrupted) {
           const state = await execute('docker', docker(['inspect', '--format', '{{json .State}}', name]));

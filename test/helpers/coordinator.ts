@@ -9,7 +9,7 @@ import { checked, command, type Result } from '../../src/adapters/process.js';
 import type { Run } from '../../src/domain/run.js';
 import { syntheticAcceptance } from './acceptance.js';
 
-export async function fixture(options: { approvalMode?: 'local' | 'github-comments'; prerequisitesOnly?: boolean; qualifiedBuilder?: boolean } = {}) {
+export async function fixture(options: { approvalMode?: 'local' | 'github-comments'; prerequisitesOnly?: boolean; qualifiedBuilder?: boolean; verifierCommand?: string[] } = {}) {
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'aegean-coordinator-test-')));
   const home = join(dir, 'home'); const root = join(dir, 'release'); const repo = join(dir, 'project'); const verifier = join(dir, 'verifier');
   const control = join(dir, 'control.git'); const remote = join(dir, 'project.git'); const bin = join(home, 'bin');
@@ -52,7 +52,7 @@ export async function fixture(options: { approvalMode?: 'local' | 'github-commen
   if (options.prerequisitesOnly) await rm(join(state, 'acceptance.json'));
   const realGit=(args:string[],cwd=repo)=>checked(git,args,{cwd,env});
   for(const p of [repo,verifier]) await realGit(['init','-b','main'],p);
-  const project={schemaVersion:2,standardVersion:pins.policy,repository:'fixture/project',approver:{id:1,login:'fixture'},approvalMode:options.approvalMode ?? 'github-comments',modelExecution:{budget:{enforcement:'monitored',maxTokensPerRun:10000,maxTokensPerCall:1000},task:{class:'unknown',paths:[],dependencies:[],concerns:[]}},checks:[['node','--check','app.cjs']],verifier:{kind:'cli',image:pins.verifier.image,command:['node','app.cjs']}};
+  const project={schemaVersion:2,standardVersion:pins.policy,repository:'fixture/project',approver:{id:1,login:'fixture'},approvalMode:options.approvalMode ?? 'github-comments',modelExecution:{budget:{enforcement:'monitored',maxTokensPerRun:10000,maxTokensPerCall:1000},task:{class:'unknown',paths:[],dependencies:[],concerns:[]}},checks:[['node','--check','app.cjs']],verifier:{kind:'cli',image:pins.verifier.image,command:options.verifierCommand ?? ['node','app.cjs']}};
   await writeFile(join(repo,'aegean.json'),JSON.stringify(project)); await writeFile(join(repo,'app.cjs'),'console.log("broken");\n');
   await realGit(['add','.']); await realGit(['commit','-m','seed']); await realGit(['clone','--bare',repo,remote]); await realGit(['remote','add','origin','git@github.com:fixture/project.git']); await realGit(['fetch','origin']);
   await writeFile(join(verifier,'README.md'),'Private synthetic verifier\n'); await realGit(['add','.'],verifier); await realGit(['commit','-m','seed'],verifier);

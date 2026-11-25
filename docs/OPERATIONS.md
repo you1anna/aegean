@@ -201,6 +201,8 @@ Unknown fields and mixed file/individual flags are rejected. Expiry cannot excee
 Authorisation freezes effective values and the file digest; later file edits do not expand a run.
 
 `expiresInMinutes` must include your time to review the specification and the time for each later stage.
+One run makes at least 4 model calls: the Scout, the test Auditor, the Builder and the review Auditor. Each repair adds 2.
+The guide refuses an expiry below 120 minutes and fewer than 4 model calls, and it suggests 1440 minutes. A limits file keeps only the schema bounds.
 You cannot extend an authorisation. After the expiry, you can only cancel the run, and a charged call is not refunded.
 
 Token allowances remain in the project's `modelExecution.budget`. Strict token caps are unsupported.
@@ -277,6 +279,28 @@ use a read-only candidate mount. Dependencies must already exist in the accepted
 Host Git also rejects unsafe executable configuration;
 see [execution boundaries](ARCHITECTURE.md#execution-boundaries).
 
+#### Protected cases
+
+After the specification approval, the test Auditor writes protected cases from the contract. It does not see the code.
+The Builder does not see the cases. A failed case tells the Builder only the name of the requirement.
+
+Each case runs `verifier.command` from `aegean.json` once, in a new container:
+
+- The command gets one stdin text and no other arguments.
+- The case passes only if the exit code and the complete stdout are equal to the expected values. Only white space at the end of stdout is ignored.
+- The stdin text and the expected stdout each have at most 8,192 characters. A suite has at most 100 cases.
+- Each case has 15 seconds, no network and read-only project files. `/tmp` is empty and writable, with 32 MB.
+
+[The verifier contract module](../src/domain/verifier-contract.ts) owns these limits. The Scout, the test Auditor and the Builder get the same rules.
+
+For this reason, `verifier.command` must name one entry point that reads stdin and prints deterministic output, for example `["node", "bin/acceptance.mjs"]`.
+A test runner such as `node --test` cannot be this command, because its output contains timings.
+`aegean project check`, `aegean prepare` and `aegean enrol` refuse a `verifier.command` that is equal to an entry in `checks`.
+
+If the entry point does not exist yet, the first specification must create it. The Scout must define its stdin format, each stdout text and each exit code exactly.
+To test a sequence of actions, put the sequence in one stdin text, and let the entry point use new data in `/tmp`.
+Tested: synthetic prompt, configuration and command tests. No real run has used these rules.
+
 ## Run lifecycle
 
 The full workflow remains unaccepted. The commands below describe its checkpoints;
@@ -302,6 +326,7 @@ The guide does these steps in sequence:
 3. It checks the project and lists the committed files that the Scout reads.
 4. It takes the request from a file, or it opens your editor (`VISUAL` or `EDITOR`) on a new private request file.
 5. It prepares the run. If the release has no full acceptance, it asks for the pilot limits and starts the authorisation.
+   It refuses limits that cannot finish a run, as [configuration files](#configuration-files) describes. It does not offer saved limits of that kind.
 6. It starts the Scout draft. Then it shows the review summary and the specification folder.
 7. At the specification review, you can read each file, show the file paths for your editor, open the folder in your editor, record your edits, approve or cancel.
 
@@ -385,7 +410,7 @@ aegean authorize-pilot --run RUN_ID --limits /absolute/path/to/pilot-limits.json
 aegean resume --run RUN_ID
 ```
 
-Answer the exact authorisation prompt yourself. The prompt shows the effective limits and project token allowances.
+Answer the exact authorisation prompt yourself. The prompt shows the effective limits, the project token allowances and the time when the authorisation ends.
 One run has one authorisation. If you repeat the command with the same limits, it reports the saved authorisation and asks nothing.
 Different limits, or an expired authorisation, need a new run.
 
