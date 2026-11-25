@@ -25,6 +25,28 @@ Expand the record for the result under review. Older installation and branch not
 <details>
 <summary>Source checks, host observations and trial history</summary>
 
+## 25 November 2026: Protected-case rules, Builder file writes and pilot limits
+
+No real run has passed the specification approval. `trial-05` expired during the review; [pilot notes](PILOT-NOTES.md) record it.
+A review of the run records and the code found faults that stop a run before or after the approval. PRs #1 and #2 correct them:
+
+- The Scout, the test Auditor and the Builder get the exact protected-case rules and `verifier.command`. [Operations](OPERATIONS.md#protected-cases) owns the rules.
+- `project check`, `prepare` and `enrol` refuse a `verifier.command` that is equal to a project check, because its output cannot match exactly.
+- The Builder prompt shows how to write a file through its only tool.
+- The guide refuses an expiry below 120 minutes and fewer than 4 model calls, and suggests 1440 minutes. The pilot prompt shows the end time.
+- At the specification review, the guide can show each file path for an editor.
+
+The policy version is `0.8.0`, because the role contexts changed. `minProjectStandard` stays `0.4.0`.
+Checks: CI passed on both PRs. Locally, `npm test` passed 262 TypeScript tests and 26 script tests on `0d489e5`.
+Installed on the primary host as `0.1.0-d89f10e1d2a2` (source `edb8bac`). `aegean qualify` recorded 18 passing observations, and `doctor --require prerequisites` passed.
+
+Not established: no live model call used the new prompts. A real Codex session has not written files through the bridge.
+Builder token use, active time and tool output are unmeasured.
+Separate fix: GitHub refuses a push that contains the private commit email. The pilot project now sets the no-reply address locally, and its run worktrees share it.
+
+Next step: the operator runs a small canary request on the pilot project through `aegean guide`, with limits of 1440 minutes, 12 calls and 60 active minutes.
+Capture the console output and write a pilot note. The stage where the canary stops is the next work item.
+
 ## 18 November 2026: Readable qualification output
 
 PR #21 (merged as `89564ab`) changes only the text form of command results; the JSON form is unchanged.
