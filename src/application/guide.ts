@@ -5,7 +5,7 @@ import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { atomicJson } from '../adapters/files.js';
 import { expandHome } from '../adapters/terminal.js';
 import { PilotLimitsSchema, parsePilotLimits } from '../domain/pilot-limits.js';
-import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, checkLevel, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
+import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, checkLevel, limitFault, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
 import { reviewFlags, type ReviewSummary } from '../domain/scout.js';
 import type { State } from '../domain/run.js';
 import { recoveryHint } from './cli-arguments.js';
@@ -163,11 +163,13 @@ async function savedLimits(g: Guide, path: string) {
 
 async function authorise(g: Guide, id: string): Promise<void> {
   const own = join(g.state, 'pilot-limits.json'), saved = await savedLimits(g, own);
+  const faults = saved ? LIMIT_FIELDS.flatMap(field => { const fault = limitFault(field.key, saved[field.key]); return fault ? [`${field.key} ${saved[field.key]}: ${fault}`] : []; }) : [];
   g.ui.say('The limits apply to this run only. One run has one authorisation; you cannot replace or extend it.');
   g.ui.say('The authorisation must stay valid during your specification review and each later stage. An expired run can only be cancelled.');
   g.ui.note('Token allowances stay in the project aegean.json. The authorisation shows them.');
+  if (faults.length) g.ui.warn(`The saved limits cannot finish a run. ${faults.join(' ')}`);
   const choices: Choice<'use' | 'enter' | 'file' | 'back'>[] = [
-    ...(saved ? [{ value: 'use', label: 'Use the saved limits', hint: LIMIT_FIELDS.map(field => `${field.key} ${saved[field.key]}`).join(', ') } as const] : []),
+    ...(saved && !faults.length ? [{ value: 'use', label: 'Use the saved limits', hint: LIMIT_FIELDS.map(field => `${field.key} ${saved[field.key]}`).join(', ') } as const] : []),
     { value: 'enter', label: saved ? 'Enter other limits' : 'Enter the limits', hint: `saved in ${own}` },
     { value: 'file', label: 'Use a limits file' }, { value: 'back', label: 'Go back' },
   ];
@@ -177,7 +179,11 @@ async function authorise(g: Guide, id: string): Promise<void> {
   if (source === 'file') path = resolve(expandHome(await g.ui.text('Path of the limits file', { paths: true, validate: value => value ? undefined : 'Give a path.' })));
   if (source === 'enter') {
     const limits: Record<string, number> = { schemaVersion: 1 };
-    for (const field of LIMIT_FIELDS) limits[field.key] = Number(await g.ui.text(field.question, { initial: String(saved?.[field.key] ?? field.initial), validate: value => /^\d{1,6}$/.test(value) ? undefined : 'Give a whole number.' }));
+    for (const field of LIMIT_FIELDS) {
+      // A saved value that cannot finish a run starts again from the recommended value.
+      const initial = saved && !limitFault(field.key, saved[field.key]) ? saved[field.key] : field.initial;
+      limits[field.key] = Number(await g.ui.text(field.question, { initial: String(initial), validate: value => /^\d{1,6}$/.test(value) ? limitFault(field.key, Number(value)) : 'Give a whole number.' }));
+    }
     try { parsePilotLimits(limits, g.now()); }
     catch (error) { g.ui.bad(error instanceof ZodError ? error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') : (error as Error).message); return; }
     await atomicJson(own, limits);

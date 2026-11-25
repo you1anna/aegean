@@ -1,5 +1,6 @@
 import { FINDING_OWNERS, type FindingOwner, type Review } from './config.js';
 import { ALLOWED_PATHS } from './allowed-paths.js';
+import { CASE_LIMITS } from './verifier-contract.js';
 
 export function publicRequirements(contract: string): Record<string, string> {
   const headings = [...contract.matchAll(/^### Requirement:\s*(.+)$/gm)].map(match => match[1]!.trim().slice(0, 200));
@@ -10,8 +11,8 @@ export function publicRequirements(contract: string): Record<string, string> {
 export function repairFeedback(reason: string, requirements: readonly string[], contract: string, outsidePaths: readonly string[] = []): string[] {
   const messages: Record<string, string> = {
     'candidate-rejected': 'Candidate includes an unsupported path, file type or size; inspect the public adapter limits.',
-    'candidate-timeout': 'Candidate exceeded the 15-second execution limit.',
-    'candidate-output-limit': 'Candidate exceeded the 128000-byte output limit.',
+    'candidate-timeout': `Candidate exceeded the ${CASE_LIMITS.seconds}-second execution limit.`,
+    'candidate-output-limit': `Candidate exceeded the ${CASE_LIMITS.outputBytes}-byte output limit.`,
     'public-check-failed': 'A configured public check failed; run the public checks.',
     'protected-requirement-failed': 'Protected acceptance found a public requirement violation.',
     'outside-allowed-paths': `The candidate changes paths that ${ALLOWED_PATHS} does not allow: ${JSON.stringify(outsidePaths.slice(0, 20).map(path => path.slice(0, 200)))}. Change only the allowed paths.`,

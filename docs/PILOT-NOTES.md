@@ -26,6 +26,21 @@ here is fixed through the normal branch and PR, then linked from its entry.
 - Follow-up: <issue, commit or PR>
 ```
 
+## trial-05 — pilot project — 25 November 2026
+
+- Host and release: primary host, `0.1.0-2511305b1adf` (source `8401e10` in the archive, `2d6937d` here, policy 0.7.0); `aegean guide`
+- Request: a data foundation that names every field of each record type; structure and storage left to the Scout
+- Reached: `spec-drafted` at 12:42 UTC, by `aegean resume` from the guide; prepared on 17 November, authorised at 12:33 UTC
+- Outcome: cancelled. The authorisation expired at 13:01 UTC during the specification review, 19 minutes after the draft
+- Usage: Scout 347 seconds; 55,295 tokens reported (7,959 input, 47,336 output, 649 cached); 1 of 6 pilot calls;
+  `claude-sonnet-5-5`, high effort, requested and reported
+- Limits: 30 minutes, 6 calls, 20 active minutes, from the saved guide limits
+- Records: retained locally outside Git; identifiers in this document are anonymised.
+- Findings: the specification had 49 KB in six files (contract 33 KB); the guide offered the saved 30-minute limits first;
+  the project's `verifier.command` was its test runner, so no protected case could pass; the Builder prompt did not say how to
+  write a file through its only tool; no Builder session has been measured against the per-call token allowance of 400,000
+- Follow-up: PR #2 (case rules, Builder file writes, limits) and PR #1 (file paths at the review)
+
 ## trial-03 — pilot project — 16 November 2026
 
 - Host and release: primary host, `0.1.0-1d675fce0213` (source `46d1238`, policy 0.5.0); first real run with `aegean guide`

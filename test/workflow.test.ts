@@ -4,7 +4,7 @@ import { STATES, STOP_REASONS, TERMINAL_STATES, type Event, type EventType, type
 import { transition } from '../src/domain/workflow.js';
 import { digest } from '../src/domain/digest.js';
 import { POLICY, POLICY_IDENTITY, policyIdentityFor, policyFromToolchain } from '../src/domain/workflow-policy.js';
-import { ProjectSchema } from '../src/domain/config.js';
+import { ProjectSchema, assertVerifierEntryPoint } from '../src/domain/config.js';
 import toolchain from '../toolchain.json' with { type: 'json' };
 import { frozenProject, syntheticRun, workflowEvent as event } from './helpers/runs.js';
 
@@ -109,6 +109,9 @@ test('project policy requires an explicit human approver for personal and organi
   assert.equal(ProjectSchema.parse({ ...configuration, approvalMode: 'github-comments' }).approvalMode, 'github-comments');
   assert.throws(() => ProjectSchema.parse({ ...configuration, approver: undefined }));
   assert.throws(() => ProjectSchema.parse({ ...configuration, approver: { id: 0, login: 'reviewer' } }));
+  // Protected cases compare the complete stdout of the verifier command. A project check is a test runner whose output has timings, so no case could pass.
+  assert.doesNotThrow(() => assertVerifierEntryPoint(project));
+  assert.throws(() => assertVerifierEntryPoint(ProjectSchema.parse({ ...configuration, verifier: { ...configuration.verifier, command: ['node', '--test'] } })), /verifier\.command is also a project check/);
   const created = start(); frozen.approver.login = 'renamed'; assert.equal(created.approver.login, 'reviewer'); frozen.approver.login = 'reviewer';
   assert.equal(created.schemaVersion, 2); assert.equal(created.revisions, 0);
 });

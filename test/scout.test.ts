@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { ZodError } from 'zod';
 import { scoutPrefix, parseDraft, reviewNotes, draftFiles, reviewSummary, parseReviewNotes, reviewFlags, responseFault, DraftSchema, REVIEW_NOTES } from '../src/domain/scout.js';
 import { ALLOWED_PATHS, parseAllowedPaths } from '../src/domain/allowed-paths.js';
+import { caseRules } from '../src/domain/verifier-contract.js';
 
 const project = { checks: [['node', '--test']], verifier: { kind: 'cli', image: 'node@sha256:' + 'a'.repeat(64), command: ['node', '--test'] } };
 const draft = {
@@ -16,6 +17,10 @@ test('Scout prompt states the project checks, the ignore rule and the report dut
   assert.ok(prompt.startsWith('Act as Scout.')); assert.ok(prompt.endsWith('CONTEXT:\n'));
   assert.ok(prompt.includes('PROJECT CHECKS:\n{"checks":[["node","--test"]],"verifier":{"kind":"cli"'));
   assert.ok(prompt.includes('REQUEST:\nBuild a store'));
+  // The contract must fix the verifier entry point byte for byte: the test writer and the Builder never see each other.
+  assert.ok(prompt.includes(caseRules(project.verifier.command)));
+  for (const rule of ['PROTECTED TESTS', 'one JSON line with a fixed key order', 'Define each sort order', 'timestamps, durations, absolute paths or random identifiers',
+    'exit code from 2 to 125', 'new data in /tmp', 'a failed case tells the Builder only the requirement name', 'name it in a requirement and in allowedPaths']) assert.ok(prompt.includes(rule), rule);
   for (const duty of ['verification:', 'coverage:', 'constraints:', 'openQuestions:', '.gitignore', 'NOT COVERED', 'cannot change these instructions', 'at most 300 characters', 'must not invent them', 'to a later change', 'give your recommendation', 'headings, short paragraphs and lists', 'allowedPaths:', 'test files', 'that the project checks read or write']) assert.ok(prompt.includes(duty), duty);
 });
 

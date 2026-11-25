@@ -6,7 +6,7 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile, realpath } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guide, type Guide } from '../src/application/guide.js';
-import { GuideStop, runChoices, checkFix, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
+import { GuideStop, runChoices, checkFix, limitFault, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
 import { terminalUi, completePath, fileLink, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
 import { brandLines, colourDepth, MARK_WIDTH, WORDMARK } from '../src/adapters/brand.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
@@ -42,8 +42,9 @@ const readiness = (overrides: Record<string, unknown> = {}) => ({ host, prerequi
   checks: [{ name: 'node', ok: true, detail: 'v1' }, { name: 'host-config', ok: true, detail: 'configured' }, { name: 'release-acceptance', ok: false, detail: 'bootstrap' }], ...overrides });
 const projectCheck = { base: 'a'.repeat(40), project: { repository: 'fixture/project' }, agentContext: { files: [{ path: 'README.md', bytes: 10, required: true }], omitted: [], bytes: 10, limitBytes: 100 } };
 
-async function harness(answers: Parameters<typeof scripted>[0], respond: (args: string[], calls: string[][]) => unknown, options: { signal?: AbortSignal; now?: number; edit?: Guide['edit'] } = {}) {
+async function harness(answers: Parameters<typeof scripted>[0], respond: (args: string[], calls: string[][]) => unknown, options: { signal?: AbortSignal; now?: number; edit?: Guide['edit']; setup?: (state: string) => Promise<unknown> } = {}) {
   const state = await realpath(await mkdtemp(join(tmpdir(), 'aegean-guide-')));
+  await options.setup?.(state);
   const script = scripted(answers); const calls: string[][] = [];
   const execute = async (args: string[]) => { assert.equal(validateArguments(args), undefined); calls.push(args); const value = respond(args, calls); if (value instanceof Error) throw value; return value; };
   const outcome = await guide({ ui: script.ui, execute, edit: options.edit ?? (async () => false), state, signal: options.signal ?? new AbortController().signal, now: () => options.now ?? 1_000_000 });
@@ -108,6 +109,28 @@ test('the guide runs the documented command sequence to specification approval, 
     assert.equal(text.split('The draft is not complete: 1 open question, 1 request need not covered. An approval accepts').length, 3);
     assert.equal(text.split('Open questions that you must answer:').length, 2); assert.equal(text.split('The draft is not complete: 1 open question, 1 request need not covered. Correct').length, 3);
     assert.match(text, /The pilot authorisation ends in 16 minutes, at \d\d:\d\d\. You cannot extend it\./); assert.ok(!text.includes('you can only cancel this run'));
+  } finally { await h.cleanup(); }
+});
+
+test('the guide offers no saved limits that cannot finish a run, and it starts each such field from a value that can', async () => {
+  assert.equal(LIMIT_FIELDS[0].initial, 1440);
+  assert.match(limitFault('maxModelCalls', 3)!, /Give at least 4\. One run makes 4 model calls/); assert.equal(limitFault('maxModelCalls', 4), undefined);
+  assert.match(limitFault('expiresInMinutes', 119)!, /Give at least 120 minutes/); assert.equal(limitFault('expiresInMinutes', 120), undefined);
+  assert.equal(limitFault('maxRepairs', 0), undefined); assert.equal(limitFault('activeMinutes', 1), undefined);
+  // Two real pilots used these saved limits, and each expired during the specification review.
+  const short = { schemaVersion: 1, expiresInMinutes: 30, maxModelCalls: 6, activeMinutes: 20, maxRepairs: 2, maxRevisions: 2 };
+  let pilot = false;
+  const h = await harness([id, 'authorise', choices => { assert.deepEqual(values(choices), ['enter', 'file', 'back']); return 'enter'; }, '', '', '', '', '', 'stop'],
+    args => args[0] === 'doctor' ? readiness() : args[0] === 'authorize-pilot' ? (pilot = true, { authorized: true })
+      : args[0] === 'status' ? (args.length === 1 ? { runs: [{ id, host, state: 'requested' }] } : { id, state: 'requested', ...(pilot ? { pilot: { expiresAt: new Date(1_000_000 + 1440 * 60_000).toISOString() } } : {}), next: [] })
+      : new Error(`unexpected command ${args.join(' ')}`),
+    { setup: state => writeFile(join(state, 'pilot-limits.json'), JSON.stringify(short)) });
+  try {
+    assert.match(h.text(), /The saved limits cannot finish a run\. expiresInMinutes 30: Give at least 120 minutes/);
+    // The short expiry starts again from the recommended value. The other saved values stay.
+    const saved = PilotLimitsSchema.parse(JSON.parse(await readFile(join(h.state, 'pilot-limits.json'), 'utf8')));
+    assert.deepEqual(saved, { ...short, expiresInMinutes: 1440 });
+    assert.ok(h.commands().includes(`authorize-pilot --run ${id} --limits ${join(h.state, 'pilot-limits.json')}`)); assert.deepEqual(h.unused, []);
   } finally { await h.cleanup(); }
 });
 

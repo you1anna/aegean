@@ -1,6 +1,6 @@
 import { readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ProjectSchema, assertSupportedImage } from '../domain/config.js';
+import { ProjectSchema, assertSupportedImage, assertVerifierEntryPoint } from '../domain/config.js';
 import { candidateGit, candidateGitChecked } from '../adapters/candidate-git.js';
 import { eligible } from './enrol.js';
 import { hostConfig } from './runtime.js';
@@ -15,7 +15,7 @@ export async function checkProject(repo: string, signal?: AbortSignal) {
   const project = parsed.data;
   if (!project.modelExecution) throw new Error('modelExecution requires an explicit token budget and task scope before start');
   if(project.modelExecution.budget.enforcement !== 'monitored') throw new Error('strict token caps are unsupported; review modelExecution.budget');
-  assertSupportedImage(project);
+  assertSupportedImage(project); assertVerifierEntryPoint(project);
   const opts = { cwd: repo, ...(signal ? {signal} : {}) };
   if (await candidateGitChecked(['rev-parse','--show-toplevel'],opts) !== repo) throw new Error('run from repository root');
   if (await candidateGitChecked(['status','--porcelain'],opts)) throw new Error('commit or preserve current work before starting an isolated run');

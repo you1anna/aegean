@@ -30,14 +30,29 @@ export const ENDED: readonly string[] = TERMINAL_STATES;
 export const SPEC_FILES = [REVIEW_NOTES, 'proposal.md', 'specs/contract/spec.md', ALLOWED_PATHS, 'design.md', 'tasks.md'] as const;
 export const REQUEST_TEMPLATE = '# Goal\n\n\n# Limits\n\n\n# Tests of success\n\n';
 
+/** The model calls of one run without a repair: the Scout, the test Auditor, the Builder and the review Auditor. A repair adds a Builder call and a review call. */
+export const RUN_MODEL_CALLS = 4;
+/** The shortest expiry that the guide accepts. The authorisation must last through the Scout draft, the human review and the build. */
+export const MIN_EXPIRY_MINUTES = 120;
+
 /** Start values for the limits questions. The policy owns each maximum; the operator reviews each value. */
 export const LIMIT_FIELDS = [
-  { key: 'expiresInMinutes', question: 'Minutes until the authorisation expires; include your review time (1 to 1440)', initial: 120 },
-  { key: 'maxModelCalls', question: `Model calls (1 to ${POLICY.maxModelCalls})`, initial: POLICY.maxModelCalls },
+  { key: 'expiresInMinutes', question: `Minutes until the authorisation expires; it must last through your specification review and the build (${MIN_EXPIRY_MINUTES} to 1440)`, initial: 1440 },
+  { key: 'maxModelCalls', question: `Model calls (${RUN_MODEL_CALLS} to ${POLICY.maxModelCalls})`, initial: POLICY.maxModelCalls },
   { key: 'activeMinutes', question: `Active minutes (1 to ${POLICY.activeTimeoutMs / 60_000})`, initial: POLICY.activeTimeoutMs / 60_000 },
   { key: 'maxRepairs', question: `Code repairs (0 to ${POLICY.maxRepairs})`, initial: POLICY.maxRepairs },
   { key: 'maxRevisions', question: `Human revisions (0 to ${POLICY.maxRevisions})`, initial: POLICY.maxRevisions },
 ] as const;
+
+/**
+ * Why a limit cannot take one run from the draft to publication, or undefined. The guide refuses such a limit;
+ * a limits file for aegean authorize-pilot keeps the schema bounds only.
+ */
+export function limitFault(key: typeof LIMIT_FIELDS[number]['key'], value: number): string | undefined {
+  if (key === 'expiresInMinutes' && value < MIN_EXPIRY_MINUTES) return `Give at least ${MIN_EXPIRY_MINUTES} minutes. The authorisation must last through the Scout draft, your specification review and the build; an expired run can only be cancelled.`;
+  if (key === 'maxModelCalls' && value < RUN_MODEL_CALLS) return `Give at least ${RUN_MODEL_CALLS}. One run makes ${RUN_MODEL_CALLS} model calls: the Scout, the test Auditor, the Builder and the review Auditor. Each repair adds 2.`;
+  return undefined;
+}
 
 /**
  * The meaning of one host check result. A release that is not accepted is information, not a host fault:

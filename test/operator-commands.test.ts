@@ -9,6 +9,16 @@ import {reserveHost,recoverHostActivities,hostActivities} from '../src/adapters/
 import {OperatorLog} from '../src/adapters/operator-log.js';
 import {fixture} from './helpers/coordinator.js';
 const limits={schemaVersion:1,expiresInMinutes:120,maxModelCalls:12,activeMinutes:60,maxRepairs:2,maxRevisions:2};
+test('project check refuses a verifier command that is also a project check, before a run or a model call', async () => {
+  const f = await fixture({ verifierCommand: ['node', '--check', 'app.cjs'] });
+  try {
+    const checked = await f.cli(['project', 'check']);
+    assert.notEqual(checked.code, 0); assert.match(checked.stderr, /verifier\.command is also a project check/);
+    const prepared = await f.start();
+    assert.notEqual(prepared.code, 0); assert.match(prepared.stderr, /verifier\.command is also a project check/);
+    assert.deepEqual(await f.runDirs().catch(() => []), []);
+  } finally { await f.cleanup(); }
+});
 test('limits enforce shared bounds and reject malformed input',()=>{
   const parsed=parsePilotLimits(limits,1000);assert.equal(parsed.expiresAt,7201000);assert.equal(parsed.budget.activeTimeoutMs,3600000);assert.match(parsed.limitsDigest,/^[a-f0-9]{64}$/);
   for(const extra of [{schemaVersion:2},{expiresInMinutes:1441},{activeMinutes:61},{activeMinutes:NaN},{maxModelCalls:1.5},{maxRepairs:3},{secret:'no'}])assert.throws(()=>parsePilotLimits({...limits,...extra}));
