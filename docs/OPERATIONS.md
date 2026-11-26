@@ -325,6 +325,7 @@ The guide does these steps in sequence:
 2. It reads the runs. If this host has an unfinished run, you can continue that run.
 3. It checks the project and lists the committed files that the Scout reads.
 4. It takes the request from a file, or it opens your editor (`VISUAL` or `EDITOR`) on a new private request file.
+   It lists the five newest requests in its `requests/` folder, by their first heading. To use another file, give its path.
 5. It prepares the run. If the release has no full acceptance, it asks for the pilot limits and starts the authorisation.
    It refuses limits that cannot finish a run, as [configuration files](#configuration-files) describes. It does not offer saved limits of that kind.
 6. It starts the Scout draft. Then it shows the review summary and the specification folder.

@@ -29,6 +29,15 @@ export class GuideStop extends Error { constructor(readonly interrupted = false)
 export const ENDED: readonly string[] = TERMINAL_STATES;
 export const SPEC_FILES = [REVIEW_NOTES, 'proposal.md', 'specs/contract/spec.md', ALLOWED_PATHS, 'design.md', 'tasks.md'] as const;
 export const REQUEST_TEMPLATE = '# Goal\n\n\n# Limits\n\n\n# Tests of success\n\n';
+/** The most saved requests that the guide offers. Older requests stay available by path. */
+export const SAVED_REQUEST_CHOICES = 5;
+
+/** The title of a request: its first heading, unless that heading is a template section. */
+export function requestTitle(text: string): string | undefined {
+  const heading = /^#\s+(.+?)\s*$/m.exec(text)?.[1]?.replace(/^request:\s*/i, '');
+  if (!heading || /^(goal|limits|tests of success)$/i.test(heading)) return undefined;
+  return heading.length > 60 ? `${heading.slice(0, 59)}…` : heading;
+}
 
 /** The model calls of one run without a repair: the Scout, the test Auditor, the Builder and the review Auditor. A repair adds a Builder call and a review call. */
 export const RUN_MODEL_CALLS = 4;

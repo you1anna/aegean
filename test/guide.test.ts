@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile, realpath } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, utimes, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guide, type Guide } from '../src/application/guide.js';
-import { GuideStop, runChoices, checkFix, limitFault, LIMIT_FIELDS, REQUEST_TEMPLATE, type Choice, type GuideUi } from '../src/domain/guide.js';
+import { GuideStop, runChoices, checkFix, limitFault, LIMIT_FIELDS, REQUEST_TEMPLATE, requestTitle, type Choice, type GuideUi } from '../src/domain/guide.js';
 import { terminalUi, completePath, fileLink, openEditor, openPager, wrap } from '../src/adapters/terminal.js';
 import { brandLines, colourDepth, MARK_WIDTH, WORDMARK } from '../src/adapters/brand.js';
 import { validateArguments } from '../src/application/cli-arguments.js';
@@ -232,6 +232,41 @@ test('a written request stays private; an unchanged template prepares nothing', 
     assert.equal((await stat(edited)).mode & 0o077, 0); assert.equal((await stat(join(written.state, 'requests'))).mode & 0o077, 0);
     assert.ok(written.commands().includes(`prepare --request ${edited}`)); assert.match(written.text(), /is the existing run for this request/);
   } finally { await written.cleanup(); }
+});
+
+test('the guide offers saved requests, newest first, by their title', async () => {
+  const respond = (args: string[]) => args[0] === 'doctor' ? readiness() : args[0] === 'status' ? (args.length > 1 ? { id, state: 'requested', next: [] } : { runs: [] }) : args[0] === 'project' ? projectCheck : args[0] === 'prepare' ? { id, reused: false } : new Error('unexpected');
+  const setup = async (state: string) => {
+    const folder = join(state, 'requests'); await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, 'old.md'), '# Request: the old slice\n\n# Goal\nOld.\n'); await utimes(join(folder, 'old.md'), 1000, 1000);
+    await writeFile(join(folder, 'new.md'), '# Goal\nNew.\n'); await utimes(join(folder, 'new.md'), 2000, 2000);
+    await writeFile(join(folder, 'empty.md'), REQUEST_TEMPLATE);
+    await writeFile(join(folder, 'notes.txt'), 'not a request');
+    await symlink(join(folder, 'old.md'), join(folder, 'link.md'));
+  };
+  let offered: Choice<string>[] = [];
+  const h = await harness(['yes', choices => { offered = choices; return choices[1]!.value; }, 'stop'], respond, { setup });
+  try {
+    const folder = join(h.state, 'requests');
+    assert.deepEqual(values(offered), [join(folder, 'new.md'), join(folder, 'old.md'), 'file', 'write', 'stop']);
+    assert.deepEqual(offered.slice(0, 2).map(choice => choice.label), ['Use new.md', 'Use the old slice']);
+    assert.deepEqual(offered.find(choice => choice.value === 'file')?.label, 'Use another request file');
+    assert.ok(h.commands().includes(`prepare --request ${join(folder, 'old.md')}`));
+    assert.ok(!h.questions.includes('Path of the request file'));
+  } finally { await h.cleanup(); }
+});
+
+test('a request title is its first heading, not a template section', () => {
+  assert.equal(requestTitle('# Request: one evidence item\n# Goal\n'), 'one evidence item');
+  assert.equal(requestTitle('\n# Goal\nPrint ok.\n'), undefined);
+  assert.equal(requestTitle('No heading.'), undefined);
+  assert.equal(requestTitle(`# ${'a'.repeat(80)}`)?.length, 60);
+});
+
+test('without saved requests the guide asks for a path', async () => {
+  let offered: Choice<string>[] = [];
+  const h = await harness(['yes', choices => { offered = choices; return 'stop'; }], args => args[0] === 'doctor' ? readiness() : args[0] === 'status' ? { runs: [] } : projectCheck);
+  try { assert.deepEqual(values(offered), ['file', 'write', 'stop']); assert.equal(offered[0]!.label, 'Use a request file'); } finally { await h.cleanup(); }
 });
 
 function terminal(pager: (text: string) => Promise<boolean> = async () => false, env: NodeJS.ProcessEnv = {}) {
