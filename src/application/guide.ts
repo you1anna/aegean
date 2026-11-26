@@ -1,11 +1,11 @@
-import { join, resolve } from 'node:path';
-import { lstat, mkdir, writeFile } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
+import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { ZodError } from 'zod';
 import { readBoundedEvidenceFile } from '../adapters/acceptance-evidence.js';
 import { atomicJson } from '../adapters/files.js';
 import { expandHome } from '../adapters/terminal.js';
 import { PilotLimitsSchema, parsePilotLimits } from '../domain/pilot-limits.js';
-import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, LIMIT_FIELDS, checkFix, checkLevel, limitFault, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
+import { GuideStop, ENDED, SPEC_FILES, REQUEST_TEMPLATE, SAVED_REQUEST_CHOICES, LIMIT_FIELDS, requestTitle, checkFix, checkLevel, limitFault, runChoices, type Choice, type GuideUi, type RunFacts } from '../domain/guide.js';
 import { reviewFlags, type ReviewSummary } from '../domain/scout.js';
 import type { State } from '../domain/run.js';
 import { recoveryHint } from './cli-arguments.js';
@@ -136,15 +136,41 @@ async function writeRequest(g: Guide): Promise<string | undefined> {
   return undefined;
 }
 
+/** Requests that the guide saved, newest first. Links, empty requests and unreadable files are left out. */
+async function savedRequests(g: Guide): Promise<Choice<string>[]> {
+  const folder = join(g.state, 'requests');
+  const names = await readdir(folder).catch(() => [] as string[]);
+  const found: { path: string; title: string; modified: number }[] = [];
+  for (const name of names.filter(name => name.endsWith('.md'))) {
+    const path = join(folder, name);
+    try {
+      const info = await lstat(path);
+      if (!info.isFile()) continue;
+      const text = (await readBoundedEvidenceFile(path, 60_000)).toString('utf8');
+      if (!text.trim() || text.trim() === REQUEST_TEMPLATE.trim()) continue;
+      found.push({ path, title: requestTitle(text) ?? name, modified: info.mtimeMs });
+    } catch { continue; }
+  }
+  return found.sort((a, b) => b.modified - a.modified).slice(0, SAVED_REQUEST_CHOICES).map(request => ({
+    value: request.path, label: `Use ${request.title}`,
+    hint: `${basename(request.path)}, ${new Date(request.modified).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+  }));
+}
+
 async function request(g: Guide): Promise<string> {
   g.ui.step('Request');
   g.ui.say('Write the goal, the limits and the tests of success. The Scout proposes the design.');
   for (;;) {
-    const source = await g.ui.select('Where is the request?', [{ value: 'file', label: 'Use a request file' }, { value: 'write', label: 'Write the request now', hint: 'opens your editor' }, stop]);
+    const saved = await savedRequests(g);
+    const source = await g.ui.select<string>('Where is the request?', [
+      ...saved,
+      { value: 'file', label: saved.length ? 'Use another request file' : 'Use a request file', hint: 'type its path' },
+      { value: 'write', label: 'Write the request now', hint: 'opens your editor' }, stop,
+    ]);
     if (source === 'stop') throw new GuideStop();
     const path = source === 'file'
       ? resolve(expandHome(await g.ui.text('Path of the request file', { paths: true, validate: value => value ? undefined : 'Give a path.' })))
-      : await writeRequest(g);
+      : source === 'write' ? await writeRequest(g) : source;
     if (!path) continue;
     const prepared = await command<Prepared>(g, ['prepare', '--request', path], { label: 'Prepare the run' });
     if (!prepared) continue;
