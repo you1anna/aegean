@@ -38,6 +38,7 @@ These records retain their original dates and approval status. A proposal does n
 | [Bounded CLI progress](BOUNDED-CLI-PROGRESS.md) | Approval record, source evidence and open release gates. |
 | [Model selection and token budgets](../openspec/changes/task-model-selection-and-token-budgets/proposal.md) | Approved scope and implementation plan. |
 | [Local operator commands](../openspec/changes/local-operator-commands/proposal.md) | Approved scope for source, host and pilot commands. |
+| [Guided specification](../openspec/changes/guided-specification/proposal.md) | Proposed scope: a one-page review, guided questions and plain technical English. Not approved. |
 | [Operator command review](OPERATOR-COMMANDS-REVIEW.md) | Findings, fixes and verification limits. |
 | [Model policy review](MODEL-POLICY-REVIEW.md) | Findings, fixes and verification limits. |
 | [Test report](TEST-REPORT-2026-11-13.md) | Recorded local and hosted checks. |

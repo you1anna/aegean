@@ -25,6 +25,14 @@ Expand the record for the result under review. Older installation and branch not
 <details>
 <summary>Source checks, host observations and trial history</summary>
 
+## 25 November 2026: Guided specification proposal
+
+The [guided specification proposal](../openspec/changes/guided-specification/proposal.md) is a plan only. It is not approved, and no source changed.
+It plans a one-page review, plain technical English in the Scout prompt, a guided request, Scout questions before the draft and answers at the review.
+Basis: the `trial-05` contract had 5,024 words, and the authorisation expired 19 minutes into the review.
+On 26 November 2026 the operator answered the [open decisions](../openspec/changes/guided-specification/design.md#open-decisions-for-the-operator).
+The canary below runs first, to give a baseline. The summary page will give the first sentence of each requirement.
+
 ## 25 November 2026: Protected-case rules, Builder file writes and pilot limits
 
 No real run has passed the specification approval. `trial-05` expired during the review; [pilot notes](PILOT-NOTES.md) record it.
