@@ -26,6 +26,18 @@ here is fixed through the normal branch and PR, then linked from its entry.
 - Follow-up: <issue, commit or PR>
 ```
 
+## canary-01 — pilot project — 26 November 2026
+
+- Host and release: primary host, `0.1.0-d89f10e1d2a2` (source `edb8bac`, policy 0.8.0); `aegean guide`
+- Request: the saved canary request in the guide's private `requests/` folder
+- Reached: the request step of the guide. Host, runs and project checks passed. No run was created.
+- Outcome: blocked. `aegean prepare` failed twice with "ENOENT: no such file or directory, lstat"
+- Usage: none. No model call, no authorisation and no run directory
+- Records: console capture and two diagnostic logs retained locally outside Git.
+- Findings: "Use a request file" asked for a typed path. The guide resolved a relative path against the project folder,
+  not against its own `requests/` folder, so the saved request was not found. The baseline measures were not collected.
+- Follow-up: PR #3 (the guide lists the saved requests). Not installed at the time of this note.
+
 ## trial-05 — pilot project — 25 November 2026
 
 - Host and release: primary host, `0.1.0-2511305b1adf` (source `8401e10` in the archive, `2d6937d` here, policy 0.7.0); `aegean guide`

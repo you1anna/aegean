@@ -25,6 +25,17 @@ Expand the record for the result under review. Older installation and branch not
 <details>
 <summary>Source checks, host observations and trial history</summary>
 
+## 26 November 2026: Canary stopped at the request step
+
+The canary did not create a run. [Pilot notes](PILOT-NOTES.md) record it as `canary-01`.
+The guide asked for a typed path to the request. A relative path resolved against the project folder, and `prepare` failed with ENOENT.
+PR #3 (merged as `2ba7a2d`) lists the five newest saved requests by their first heading. "Use another request file" keeps the path prompt.
+Checks: CI passed on PR #3.
+Not established: the installed release is still `0.1.0-d89f10e1d2a2` (source `edb8bac`). No live guide used the fix.
+
+Next step: with the operator's approval, run `aegean upgrade --source PATH` from the source checkout, then `aegean qualify`.
+Then the operator runs the canary again, with the limits of the 25 November entry. The baseline in task 0.2 is still open.
+
 ## 25 November 2026: Guided specification proposal
 
 The [guided specification proposal](../openspec/changes/guided-specification/proposal.md) is a plan only. It is not approved, and no source changed.
